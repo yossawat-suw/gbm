@@ -1,0 +1,275 @@
+---
+title: "sctype"
+output: html_document
+date: '2023-06-07'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(SeuratDisk)
+library(ggplot2)
+
+```
+
+```{r}
+#set up configuration
+experiment <- c("control","radiated")
+donor.group <- experiment[1]
+```
+
+
+```{r}
+#Load dataset
+gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_scale_cluster")) 
+```
+
+
+```{r}
+#Load package
+
+lapply(c("dplyr","Seurat","HGNChelper"), library, character.only = T)
+
+
+# load gene set preparation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
+# load cell type annotation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
+```
+
+
+```{r}
+#Load genelist
+
+# DB file
+db_ = "./../data/gbm_subtype_genelist_sctype_4equal.xlsx"
+tissue = "gbm"
+
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+gs_list
+```
+
+
+```{r}
+#Run sc-type (copied code from)
+
+# get cell-type by cell matrix
+es.max = sctype_score(scRNAseqData = gbm[["RNA"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+
+# NOTE: scRNAseqData parameter should correspond to your input scRNA-seq matrix. 
+# In case Seurat is used, it is either gbm[["RNA"]]@scale.data (default), gbm[["SCT"]]@scale.data, in case sctransform is used for normalization,
+# or gbm[["integrated"]]@scale.data, in case a joint analysis of multiple single-cell datasets is performed.
+
+# merge by cluster
+cL_resutls = do.call("rbind", lapply(unique(gbm@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm@meta.data[gbm@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+
+# set low-confident (low ScType score) clusters to "unknown"
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+print(sctype_scores[,1:3])
+
+```
+
+```{r}
+#Visualization
+gbm@meta.data$customclassif = ""
+
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm@meta.data$customclassif[gbm@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+DimPlot(gbm, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'customclassif')  + labs(title = "Control", subtitle = "sc-type", caption = "nieghbor 1:20; resolution 0.5")
+```
+
+
+```{r}
+# Check E35N >> NPC2? 
+# E56N >> AC
+# E62 >> NPC1 
+# E24 >> MES1 
+```
+
+```{r}
+gbm <- LoadH5Seurat("./../output/control.pp.h5Seurat")
+```
+
+#E35N
+```{r}
+Idents(gbm) <- "donor_id"
+E35N.control <- subset(gbm, idents = "E35N")
+
+DimPlot(E35N.control, reduction = "pca")
+```
+```{r}
+DimPlot(E35N.control, reduction = "umap")
+```
+```{r}
+E35N.control <- FindNeighbors(E35N.control,dims = 1:20)
+E35N.control <- FindClusters(E35N.control, resolution = 0.5)
+RunUMAP(E35N.control, dims = 1:20)
+```
+```{r}
+DimPlot(E35N.control, reduction = "umap")
+```
+#sc-type on E35N
+```{r}
+# get cell-type by cell matrix
+es.max = sctype_score(scRNAseqData = E35N.control[["RNA"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+
+# NOTE: scRNAseqData parameter should correspond to your input scRNA-seq matrix. 
+# In case Seurat is used, it is either E35N.control[["RNA"]]@scale.data (default), E35N.control[["SCT"]]@scale.data, in case sctransform is used for normalization,
+# or E35N.control[["integrated"]]@scale.data, in case a joint analysis of multiple single-cell datasets is performed.
+
+# merge by cluster
+cL_resutls = do.call("rbind", lapply(unique(E35N.control@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(E35N.control@meta.data[E35N.control@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(E35N.control@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+
+# set low-confident (low ScType score) clusters to "unknown"
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+print(sctype_scores[,1:3])
+
+```
+
+```{r}
+#Visualization
+E35N.control@meta.data$customclassif = ""
+
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  E35N.control@meta.data$customclassif[E35N.control@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+DimPlot(E35N.control, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'customclassif')  + labs(title = "E35N.control", subtitle = "sc-type", caption = "nieghbor 1:20; resolution 0.5")
+
+```
+
+#E56###########
+
+
+```{r}
+Idents(gbm) <- "donor_id"
+E56N.control <- subset(gbm, idents = "E56N")
+```
+
+```{r}
+E56N.control <- FindNeighbors(E56N.control,dims = 1:20)
+E56N.control <- FindClusters(E56N.control, resolution = 0.5)
+RunUMAP(E56N.control, dims = 1:20)
+```
+```{r}
+DimPlot(E56N.control, reduction = "umap") + labs(title="E56N")
+```
+#sc-type on E56N
+```{r}
+# get cell-type by cell matrix
+es.max = sctype_score(scRNAseqData = E56N.control[["RNA"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+
+# merge by cluster
+cL_resutls = do.call("rbind", lapply(unique(E56N.control@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(E56N.control@meta.data[E56N.control@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(E56N.control@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+
+# set low-confident (low ScType score) clusters to "unknown"
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+
+#print(sctype_scores[,1:3])
+
+```
+
+```{r}
+#Visualization
+E56N.control@meta.data$customclassif = ""
+
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  E56N.control@meta.data$customclassif[E56N.control@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+DimPlot(E56N.control, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'customclassif')  + labs(title = "E56N.control", subtitle = "sc-type", caption = "nieghbor 1:20; resolution 0.5")
+
+```
+
+
+#E62N###########
+
+
+```{r}
+Idents(gbm) <- "donor_id"
+E62N.control <- subset(gbm, idents = "E62N")
+```
+
+```{r}
+E62N.control <- FindNeighbors(E62N.control,dims = 1:20)
+E62N.control <- FindClusters(E62N.control, resolution = 0.5)
+RunUMAP(E62N.control, dims = 1:20)
+```
+```{r}
+DimPlot(E62N.control, reduction = "umap") + labs(title="E62N")
+```
+#sc-type on E62N
+```{r}
+# get cell-type by cell matrix
+es.max = sctype_score(scRNAseqData = E62N.control[["RNA"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+
+# merge by cluster
+cL_resutls = do.call("rbind", lapply(unique(E62N.control@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(E62N.control@meta.data[E62N.control@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(E62N.control@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+
+# set low-confident (low ScType score) clusters to "unknown"
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+
+#print(sctype_scores[,1:3])
+
+```
+
+```{r}
+#Visualization
+E62N.control@meta.data$customclassif = ""
+
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  E62N.control@meta.data$customclassif[E62N.control@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+DimPlot(E62N.control, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'customclassif')  + labs(title = "E62N.control", subtitle = "sc-type", caption = "nieghbor 1:20; resolution 0.5")
+
+```
+
+
+
+# Test on the packgage database
+
+```{r}
+gbm <- LoadH5Seurat("./../output/control.pp.h5Seurat")
+E37N.control <- readRDS("./../output/e37n_control")
+```
+
+#Test on CCA 
+```{r}
+#Load dataset
+gbm <- readRDS(paste0("./../output/")) 
+```
+
+
+

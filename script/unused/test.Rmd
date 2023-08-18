@@ -1,0 +1,181 @@
+
+```{r}
+library(scibet)
+library(SeuratDisk)
+```
+
+```{r}
+reference <- readRDS("./../output/smrt_mal")
+reference.exp <- reference@assays$norm@data
+reference.exp <- t(as.matrix(reference.exp))
+reference.exp <- as.data.frame(reference.exp)
+
+str(reference.exp)
+reference.exp[1:10,1:10]
+
+#Check whether after transpose the cell is in the same position
+table(rownames(reference@meta.data) == rownames(reference.exp))
+
+#Add label to last column (as instructed by scibet http://scibet.cancer-pku.cn/document.html)
+reference.exp$label <-  reference$celltype 
+```
+
+
+
+```{r}
+prediction <- data.frame()
+for (i in 1:length(gbm.list)) {
+#for (i in 1:2) {
+  gbm.each <- gbm.list[[i]] 
+  gbm.each <- gbm.each@assays$RNA@data
+  gbm.each <- t(as.matrix(gbm.each))
+  gbm.each <- as.data.frame(gbm.each)
+  
+  pred <- SciBet(reference.exp,gbm.each)
+  
+  prediction <- rbind(prediction,data.frame(cell_id = rownames(gbm.each),scibet = pred))
+}
+```
+
+```{r}
+rownames(prediction) <- prediction$cell_id
+prediction <- prediction["scibet"]
+```
+
+
+```{r}
+write.csv(prediction,paste0("./../output/scibet_",object,"_",file.sig.subtype,".csv"),row.names = TRUE)
+```
+#CHETAH
+```{r}
+# Load the package
+library(CHETAH)
+library(Seurat)
+```
+
+```{r}
+neftel.smt <- readRDS("./../output/smrt_mal") 
+
+#from tutorial it use log-normalization so use the default from seurat
+neftel.smt <- DietSeurat(neftel.smt, assays = "RNA")
+neftel.smt <- DietSeurat(neftel.smt,data = TRUE, counts = FALSE,scale.data = FALSE)
+
+neftel.smt.sce <- as.SingleCellExperiment(neftel.smt)
+```
+
+```{r}
+neftel.smt.sce@colData <- neftel.smt.sce@colData["celltype"] 
+
+#Change name because input need this
+colnames(neftel.smt.sce@colData) <- "celltypes"
+neftel.smt.sce
+```
+```{r}
+#QC
+ribo <- read.table("./../data/ribosomal.txt", header = FALSE, sep = '\t')
+neftel.smt.sce <- neftel.smt.sce[!rownames(neftel.smt.sce) %in% ribo[,1], ]
+```
+```{r}
+CorrelateReference(ref_cells = neftel.smt.sce)
+```
+
+```{r}
+ClassifyReference(ref_cells = neftel.smt.sce,ref_c = "logcounts")
+```
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+
+```{r}
+gbm.list <- lapply(X = gbm.list, FUN = function(x)  {
+  x <- NormalizeData(x,verbose= FALSE)
+  x <- FindVariableFeatures(x, verbose= FALSE)
+  x <- ScaleData(x,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+  x <- RunUMAP(x, dims = 1:20, verbose =FALSE)
+})
+```
+
+```{r}
+res.df <- DataFrame()
+for (i in 1:length(gbm.list)) {
+  gbm.each <- gbm.list[[i]]
+  gbm.each <- DietSeurat(gbm.each,counts = FALSE,data = TRUE,scale.data = FALSE, dimreducs = "umap")
+  gbm.each <- as.SingleCellExperiment(gbm.each)
+  gbm.each@colData <- gbm.each@colData[c("orig.ident")]
+  
+  gbm.each <- CHETAHclassifier(input = gbm.each,
+                              ref_cells = neftel.smt.sce,print_steps = FALSE)
+  gbm.each <- Classify(gbm.each, 0)
+  res.df <- rbind(res.df,gbm.each@colData["celltype_CHETAH"])
+
+}
+```
+```{r}
+table(res.df$celltype_CHETAH)
+colnames(res.df)[1] <- "CHETAH"
+```
+
+```{r}
+write.csv(res.df,paste0("./../output/CHETAH_",object,"_",file.sig.subtype,".csv"),row.names = TRUE)
+```
+
+
+```{r}
+signature <- read.csv("./../output/signature_subtype_new_50.csv")
+```
+```{r}
+test <- apply(signature,1,as.character)
+test <- as.vector(signature)
+str(test[[1]])
+test2 <- unlist(test)
+names(test2) <- NULL
+test2
+```
+
+```{r}
+Idents(gbm) <- "orig.ident"
+FeaturePlot(gbm,test[[1]])
+str(VariableFeatures(object = gbm))
+```
+
+```{r}
+library(ggvenn)
+test3 <- VariableFeatures(object = gbm)
+x = list(new = test2,var = test3)
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "")
+vein
+```
+
+```{r}
+intersect(test2,test3)
+```
+
+
+
+```{r}
+DoHeatmap()
+```
+
+
+```{r}
+test <- rowSums(gbm@assays$RNA@counts !=0)
+gbm[["RNA"]] <- AddMetaData(gbm[["RNA"]],metadata = test, col.name = "nCell_RNA")
+
+gbm <- readRDS("./../output/seurat_gbm_qc")
+```
+

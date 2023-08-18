@@ -1,0 +1,1159 @@
+
+
+---
+title: "All"
+output: html_document
+date: '2023-06-08'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(scSorter)
+library(ggplot2)
+library(Seurat)
+library(SeuratDisk)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(UCell)
+library(HGNChelper)
+library(scCustomize)
+library(scPred)
+library(ggsankey)
+library(patchwork)
+library(parallel)
+# load gene set preparation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
+# load cell type annotation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
+
+```
+
+
+
+
+
+
+##Marker based##
+#scSorter
+```{r}
+#Load annotation
+anno <- as.data.frame(read_xlsx("./../data/gbm_subtype_genelist_scsorter.xlsx",sheet = subsheet ))
+anno <- as.data.frame(read_xlsx("./../data/MESImm_scsorter.xlsx",sheet = 1))
+
+# make sure that anno is dataframe not the tibble bc it wil cause problem in rts function later if it is tibble
+anno
+```
+```{r}
+#Load dataset
+gbm <- readRDS("./../output/seurat_gbm_qc")
+
+
+```
+
+```{r}
+#Load dataset
+gbm <- readRDS("./../output/seurat_gbm_qc")
+
+gbm.list <- SplitObject(gbm,split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+
+```
+
+```{r}
+library(scSorter)
+library(dplyr)
+library(parallel)
+
+n.cores <- parallel::detectCores() - 1
+
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x,verbose = FALSE)
+  x <- FindVariableFeatures(x,verbose = FALSE)
+
+  topgenes <- head(VariableFeatures(x), 2000)
+  # gene expression need to be library normalized and log tranform first! #
+  expr = GetAssayData(x, assay = "RNA", slot = "data")
+  topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+  topgenes = topgenes[topgene_filter]
+  picked_genes = unique(c(anno$Marker, topgenes))
+  expr = expr[rownames(expr) %in% picked_genes, ]
+
+  rts <- scSorter(expr, anno)
+  
+  x <- AddMetaData(x,rts$Pred_Type, col.name = "scSorter")
+  each.meta <- x@meta.data[c("scSorter")]
+  each.meta <- rownames_to_column(each.meta)
+
+  return(list(rts=rts,each.meta=each.meta))
+}))
+```
+
+```{r}
+gbm.list.res
+```
+
+```{r}
+rts.list <- lapply(gbm.list.res, "[[", 1)
+
+
+#Keep rts results of all
+saveRDS(rts.list,paste0("./../output/scsorter_rts_",object,"_",sig), compress = TRUE)
+```
+
+
+```{r}
+gbm.list.res <- lapply(gbm.list.res, "[[", 2)
+```
+
+```{r}
+#Demultiplex list
+each.meta.df <- data.frame()
+
+for (i in 1:length(gbm.list.res)) {
+  each.meta.df <- rbind(each.meta.df,data.frame(gbm.list.res[[i]]))
+}
+
+colnames(each.meta.df)[1] <- "cell_id"
+```
+
+```{r}
+table(each.meta.df$scSorter)
+```
+
+```{r}
+write.csv(each.meta.df,paste0("./../output/scsorter_",object,"_",sig,".csv"),row.names = FALSE)
+```
+
+
+
+
+
+
+#Sc-type
+```{r}
+#Load genelist
+
+# DB file
+#db_ = "./../data/gbm_subtype_genelist_sctype_4equal.xlsx"
+db_ = "./../data/gbm_subtype_genelist_sctype.xlsx"
+
+db_ = "./../data/MESImm_sctype.xlsx"
+
+tissue = "gbm"
+
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+gs_list
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+
+```{r}
+library(dplyr)
+library(parallel)
+score.list <- list()
+n.cores <- parallel::detectCores() - 1
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x, verbose = FALSE)
+  x <- FindVariableFeatures(x, verbose = FALSE)
+  x <- ScaleData(x,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+  es.max <- sctype_score(scRNAseqData = x[["RNA"]]@scale.data, scaled = TRUE, 
+                    gs = gs_list$gs_positive, gs2 = NULL) 
+
+  cL_resutls = do.call("rbind", lapply(unique(x@meta.data$seurat_clusters), function(cl){
+      es.max.cl = sort(rowSums(es.max[ ,rownames(x@meta.data[x@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+      head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(x@meta.data$seurat_clusters==cl)), 10)
+  }))
+  sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+  score.list <- append(score.list,sctype_scores)
+  x@meta.data$scType = ""
+  for(j in unique(sctype_scores$cluster)){
+    cl_type <- sctype_scores[sctype_scores$cluster==j,]
+  x@meta.data$scType[x@meta.data$seurat_clusters == j] <-  as.character(cl_type$type[1])
+  }
+  return(list(sctype_scores=sctype_scores,x=x))
+}))
+```
+```{r}
+gbm.list.res
+```
+
+```{r}
+score.list <- lapply(gbm.list.res, "[[", 1)
+gbm.list.res <- lapply(gbm.list.res, "[[", 2)
+```
+
+```{r}
+each.meta.all <- list()
+for (i in gbm.list.res) {
+  each.meta <- i@meta.data[c("scType")]
+  each.meta.all <- rbind(each.meta.all,each.meta)
+}
+```
+
+```{r}
+table(each.meta.all$scType)
+```
+
+```{r}
+write.csv(each.meta.all,paste0("./../output/scType_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+
+
+#scPred
+```{r}
+library(scPred)
+reference <- readRDS("./../output/smrt_mal")
+```
+
+```{r}
+reference <- FindVariableFeatures(reference,verbose = FALSE)
+reference <- ScaleData(reference,verbose = FALSE)
+reference <- RunPCA(reference, verbose = FALSE)
+```
+
+
+```{r}
+DimPlot(reference, group.by = "celltype", label = TRUE, repel = TRUE)
+```
+
+```{r}
+reference <- getFeatureSpace(reference, "celltype",correction = "fdr", sig = 1, reduction = "pca")
+reference <- trainModel(reference)
+```
+
+```{r}
+get_probabilities(reference) %>% head()
+```
+
+```{r}
+get_scpred(reference)
+```
+
+
+```{r}
+plot_probabilities(reference)
+```
+```{r}
+reference <- trainModel(reference, model = "mda")
+get_scpred(reference)
+```
+
+```{r}
+reference <- trainModel(reference, model = "glm")
+get_scpred(reference)
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+```{r}
+gbm.list <- lapply(X = gbm.list, FUN = function(x)  {
+  x <- NormalizeData(x,verbose= FALSE)
+  x <- FindVariableFeatures(x, verbose= FALSE)
+  x <- ScaleData(x,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+})
+```
+
+```{r}
+for (i in 1:length(gbm.list)) {
+  query <- gbm.list[[i]]
+  gbm.list[[i]]  <- scPredict(query, reference)
+}
+```
+
+```{r}
+gbm.list[[1]]
+```
+
+
+```{r}
+each.meta.all <- data.frame()
+for (i in 1:length(gbm.list)) {
+  each.meta <- gbm.list[[i]]@meta.data
+  each.meta <- each.meta[tail(names(each.meta),9)]
+  each.meta <- each.meta %>% relocate(c("scpred_no_rejection","scpred_prediction","scpred_max"),.before = 1)
+  each.meta.all <- rbind(each.meta.all,each.meta)
+}
+each.meta.all <- rownames_to_column(each.meta.all)
+colnames(each.meta.all)[1] <- "cell_id"
+
+each.meta.all
+```
+
+```{r}
+write.csv(each.meta.all,paste0("./../output/scpred_",object,"_",sig,".csv"),row.names = FALSE)
+```
+
+
+
+#scPred
+```{r}
+library(scPred)
+reference <- readRDS("./../output/smrt_mal")
+```
+
+```{r}
+reference <- FindVariableFeatures(reference,verbose = FALSE)
+reference <- ScaleData(reference,verbose = FALSE)
+reference <- RunPCA(reference, verbose = FALSE)
+```
+
+
+```{r}
+DimPlot(reference, group.by = "celltype_merge", label = TRUE, repel = TRUE)
+```
+
+```{r}
+reference <- getFeatureSpace(reference, "celltype_merge",correction = "fdr", sig = 1, reduction = "pca")
+reference <- trainModel(reference)
+```
+
+```{r}
+get_probabilities(reference) %>% head()
+```
+
+```{r}
+get_scpred(reference)
+```
+
+
+```{r}
+plot_probabilities(reference)
+```
+```{r}
+reference <- trainModel(reference, model = "mda")
+get_scpred(reference)
+```
+
+```{r}
+reference <- trainModel(reference, model = "glm")
+get_scpred(reference)
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+```{r}
+library(parallel)
+
+n.cores <- parallel::detectCores() - 1
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x,verbose= FALSE)
+  x <- FindVariableFeatures(x, verbose= FALSE)
+  x <- ScaleData(x,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+  x <- scPredict(x, reference)
+}))
+```
+
+```{r}
+each.meta.all <- data.frame()
+for (i in 1:length(gbm.list.res)) {
+  each.meta <- gbm.list.res[[i]]@meta.data
+  each.meta <- each.meta[tail(names(each.meta),9)]
+  each.meta <- each.meta %>% relocate(c("scpred_no_rejection","scpred_prediction","scpred_max"),.before = 1)
+  each.meta.all <- rbind(each.meta.all,each.meta)
+}
+each.meta.all <- rownames_to_column(each.meta.all)
+colnames(each.meta.all)[1] <- "cell_id"
+
+each.meta.all
+```
+
+```{r}
+table(each.meta.all$scpred_no_rejection)
+table(each.meta.all$scpred_prediction)
+```
+
+```{r}
+write.csv(each.meta.all,paste0("./../output/scpred_",object,"_",sig,".csv"),row.names = FALSE)
+```
+
+#MarkerCount
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+
+
+SaveH5Seurat(gbm, filename = paste0("./../output/gbm_qc.h5Seurat"), overwrite = TRUE) 
+
+Convert(paste0("./../output/gbm_qc.h5Seurat"), dest = "h5ad",overwrite = TRUE)
+```
+
+#UCell
+```{r}
+#load subtpye signature
+#signatures <- read_xlsx("./../data/gbm_subtype_genelist.xlsx",sheet = 2)
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 2)
+
+
+signatures <- as.list(signatures) 
+signatures <- lapply(signatures, na.omit)
+
+
+
+signatures
+```
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm <- NormalizeData(gbm,verbose = FALSE)
+```
+
+
+```{r}
+gbm <- AddModuleScore_UCell(gbm, features =signatures)
+```
+
+```{r}
+gbm.meta <- gbm@meta.data
+phenotype <- c("MES2_UCell","MES1_UCell","OPC_UCell","AC_UCell","NPC2_UCell","NPC1_UCell")
+score <- gbm@meta.data[,phenotype]
+score <- transform(score, MES2_UCell = as.numeric(MES2_UCell),
+          MES1_UCell = as.numeric(MES1_UCell),
+          OPC_UCell = as.numeric(OPC_UCell),
+          AC_UCell = as.numeric(AC_UCell),
+          NPC2_UCell = as.numeric(NPC2_UCell),
+          NPC1_UCell = as.numeric(NPC1_UCell)
+          )
+
+q10 <- apply(score,2,function(x) {
+  quantile(x,probs = c(0.10))
+})
+
+celltype.all <- c()
+for (i in 1:nrow(score)) {
+  
+  score_cell <- sort(unlist((score[i,])),decreasing = TRUE)
+  score_cell 
+  MES <- c(score_cell["MES2_UCell"],score_cell["MES1_UCell"])
+  min <- names(MES[which.min(MES)])
+  min %in% score_cell
+  score_cell <- score_cell[!names(score_cell) %in% min]
+  
+  NPC <- c(score_cell["NPC2_UCell"],score_cell["NPC1_UCell"])
+  min <- names(NPC[which.min(NPC)])
+  min %in% score_cell
+  score_cell <- score_cell[!names(score_cell) %in% min]
+  score_cell
+  
+  first <- score_cell[1]
+  second <- score_cell[2]
+  third <- score_cell[3]
+  
+  
+  if  ((second > 1) &
+      (second > q10[names(second)]) &
+      ((second-third) >= 0.3)) {
+    #celltype <- paste0("hybrid_",names(first),"_",names(second))
+    celltype <- "hybrid"
+  } else {
+    celltype <- names(score_cell[1])
+  }
+  celltype.all <- append(celltype.all,celltype)
+}
+```
+
+```{r}
+gbm$UCell <- celltype.all
+
+each.meta.df <- gbm@meta.data[c("UCell")]
+
+
+```
+
+
+```{r}
+write.csv(each.meta.df,paste0("./../output/UCell_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+## Ref based
+#SingleCellNet
+```{r}
+library(singleCellNet)
+
+neftel.smt.scn <- readRDS("./../output/smrt_mal")
+neftel.smt.scn <- extractSeurat(neftel.smt.scn, exp_slot_name = "data")
+stTM = neftel.smt.scn$sampTab
+expTMraw = neftel.smt.scn$expDat
+
+stTM<-droplevels(stTM)
+
+gbm.scn <- readRDS("./../output/seurat_gbm_qc")
+gbm.scn <- extractSeurat(gbm.scn, exp_slot_name = "data")
+stQuery = gbm.scn$sampTab
+expQuery = gbm.scn$expDat
+
+rm(neftel.smt.scn,gbm.scn)
+gc()
+
+commonGenes<-intersect(rownames(expTMraw), rownames(expQuery))
+expTMraw <- expTMraw[commonGenes, ]
+expQuery <- expQuery[commonGenes, ]
+```
+
+
+```{r}
+# So compare accuracy between celltype and celltype_merge it seem that celltype_merge perform better so we will use that instead
+```
+
+```{r}
+#Train
+set.seed(100)
+stList<-splitCommon(sampTab = stTM, ncells = as.integer(0.8*(min(table(stTM$celltype)))), dLevel = "celltype_merge")
+
+stTrain<-stList[[1]]
+expTrain <- expTMraw[,rownames(stTrain)]
+
+system.time(class_info<-scn_train(stTrain = stTrain, expTrain = expTrain, nTopGenes = 10, nRand = 70, nTrees = 1000, nTopGenePairs = 25, dLevel = "celltype_merge", colName_samp = "NAME"))
+```
+
+```{r}
+#Test/validate
+set.seed(2)
+stTestList = splitCommon(sampTab=stList[[2]], as.integer(0.2*(min(table(stTM$celltype_merge)))), dLevel="celltype_merge") 
+stTest = stTestList[[1]]
+expTest = expTMraw[commonGenes,rownames(stTest)]
+
+classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat=expTest, nrand = 50)
+
+tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "NAME", classTrain = "celltype_merge", classQuery = "celltype_merge", nRand = 50)
+
+plot_PRs(tm_heldoutassessment)
+
+plot_metrics(tm_heldoutassessment)
+
+nrand = 50
+sla = as.vector(stTest$celltype_merge)
+names(sla) = as.vector(stTest$NAME)
+slaRand = rep("rand", nrand) 
+names(slaRand) = paste("rand_", 1:nrand, sep='')
+sla = append(sla, slaRand) #include in the random cells profile created
+sc_hmClass(classMat = classRes_val_all,grps = sla, max=300, isBig=TRUE)
+
+plot_attr(classRes=classRes_val_all, sampTab=stTest, nrand=nrand, dLevel="celltype_merge", sid="NAME")
+```
+
+```{r}
+#Predict on our gbm dataset
+
+stQuery.list <- split(stQuery, f = stQuery$split)
+
+stQuery.all <- data.frame()
+
+for (i in 1:length(stQuery.list)) {
+stQuery.each <- stQuery.list[[i]]
+expQuery.each <- expQuery[, colnames(expQuery) %in% rownames(stQuery.each)]
+
+gbm.pre <- scn_predict(class_info[['cnProc']], expQuery.each, nrand = 0)
+stQuery.each <- assign_cate(classRes = gbm.pre, sampTab = stQuery.each, cThresh = 0.5)
+
+stQuery.all <- rbind(stQuery.all,stQuery.each)
+}
+```
+
+
+
+```{r}
+colnames(stQuery.all)[which(colnames(stQuery.all) == "category")] <-  "SingleCellNet"
+annotation <- stQuery.all["SingleCellNet"]
+
+annotation
+```
+
+```{r}
+#save result
+write.csv(annotation,paste0("./../output/singleCellNet_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+
+#clustifyr
+```{r}
+library(clustifyr)
+```
+
+```{r}
+neftel.smt <- readRDS("./../output/smrt_mal")
+```
+```{r}
+new_ref_matrix <- seurat_ref(
+  seurat_object = neftel.smt,        # SeuratV3 object
+  cluster_col = "celltype",    # name of column in meta.data containing cell identities
+)
+```
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+```
+
+
+```{r}
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+
+```{r}
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x,verbose = FALSE)
+  allgenes <- rownames(x)
+  x <- FindVariableFeatures(x,verbose = FALSE)
+  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+
+  print(paste("Analizing",names(gbm.list)[i]))
+  res <- clustify(
+          input = x,      
+          ref_mat = new_ref_matrix,    
+          cluster_col = "RNA_snn_res.1", 
+          obj_out = TRUE,threshold = 0,verbose = TRUE )     
+  return(res@meta.data[c("type","r")])
+}))
+```
+
+
+
+```{r}
+res.ref.df <- data.frame()
+res.ref.df <- do.call(rbind,gbm.list.res)
+colnames(res.ref.df) <- c("clustifyr_ref","r_ref")
+```
+
+```{r}
+table(res.ref.df$clustifyr_ref)
+```
+
+
+```{r}
+#try using marker based
+library(readxl)
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 2)
+
+
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x,verbose = FALSE)
+  allgenes <- rownames(x)
+  x <- FindVariableFeatures(x,verbose = FALSE)
+  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+
+  print(paste("Analizing",names(gbm.list)[i]))
+  res <- clustify_lists(
+    input = x,             
+    cluster_col = "RNA_snn_res.1",
+    marker = signatures,                
+    metric = "pct", 
+    threshold = 0,
+    verbose = FALSE)
+  return(res@meta.data[c("type","r")])
+}))  
+
+```
+
+```{r}
+res.marker.df <- data.frame()
+res.marker.df <- do.call(rbind,gbm.list.res)
+colnames(res.marker.df) <- c("clustifyr_marker","r_marker")
+```
+```{r}
+table(res.marker.df$clustifyr_marker)
+```
+
+
+```{r}
+all <- data.frame()
+all <- cbind(res.ref.df,res.marker.df)
+all
+```
+
+```{r}
+write.csv(all,paste0("./../output/clustifyr_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+
+
+
+
+#singleR
+```{r}
+library(SingleR)
+library(scran)
+```
+
+```{r}
+neftel.smt <- readRDS("./../output/smrt_mal")
+neftel.smt.sce <- as.SingleCellExperiment(DietSeurat(neftel.smt,data = TRUE, counts = FALSE,scale.data = FALSE))
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+```
+
+
+```{r}
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+```{r}
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x,verbose = FALSE)
+  x <- DietSeurat(x,data = TRUE, counts = FALSE,scale.data = FALSE)
+  x <- as.SingleCellExperiment(x)
+  pred.grun <- SingleR(test=x, ref=neftel.smt.sce, labels=neftel.smt.sce$celltype, de.method="wilcox")
+  return(pred.grun)
+}))  
+```
+```{r}
+res.df <- DataFrame()
+res.df <- do.call(rbind,gbm.list.res)
+```
+```{r}
+res.df 
+```
+
+```{r}
+saveRDS(res.df,file = paste0("./../output/singleR_",object,"_",sig))
+
+res.df <- readRDS(paste0("./../output/singleR_",object,"_",sig))
+```
+
+```{r}
+library(dplyr)
+res.df <- data.frame(res.df)
+res.df <- res.df %>% relocate(c("labels","pruned.labels"),.before = 1)
+colnames(res.df)[1] <- "singleR"
+res.df
+```
+
+```{r}
+write.csv(res.df,paste0("./../output/singleR_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+#scClasify
+
+```{r}
+library("scClassify")
+```
+
+
+```{r}
+neftel.smt <- readRDS("./../output/smrt_mal")
+exprsMat_neftel <- neftel.smt@assays$RNA@data
+
+neftel_cellType <- neftel.smt$celltype
+```
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+
+gbm.list <- lapply(X = gbm.list, FUN = function(x)  {
+  x <- NormalizeData(x,verbose = FALSE)
+})
+
+```
+
+```{r}
+res.df <- data.frame()
+#for (i in 1:length(gbm.list)) {
+for (i in 4:5) {
+  gbm.each <- gbm.list[[i]]
+  exprsMat_gbm <- gbm.each@assays$RNA@data
+  scClassify_res <- scClassify(exprsMat_train = exprsMat_neftel,
+                             cellTypes_train = neftel_cellType,
+                             exprsMat_test = list(gbm = exprsMat_gbm),
+                             tree = "HOPACH",
+                             algorithm = "WKNN",
+                             selectFeatures = c("limma"),
+                             similarity = c("pearson"),
+                             returnList = FALSE,
+                             verbose = TRUE)
+  # res.df.test <- append(res.df.test,list(pred.grun))
+  res.df <- rbind(res.df,as.data.frame(scClassify_res$testRes$gbm$pearson_WKNN_limma$predRes))
+}
+```
+
+
+```{r}
+colnames(res.df) <- paste0("scClasify_","pearson_WKNN_limma")
+res.df <- rownames_to_column(res.df)
+colnames(res.df)[1] <- "cell_id"
+head(res.df)
+```
+
+```{r}
+write.csv(res.df,paste0("./../output/scClassify_",object,"_",sig,".csv"),row.names = FALSE)
+```
+
+```{r}
+plotCellTypeTree(cellTypeTree(scClassify_res$trainRes))
+```
+
+#scID
+```{r}
+library(scID)
+
+target_gem <- readRDS(file="./../data/example/scID/target_gem.rds")
+reference_gem <- readRDS(file="./../data/example/scID/reference_gem.rds")
+reference_clusters <- readRDS(file="./../data/example/scID/reference_clusters.rds")
+```
+
+```{r}
+# Ref
+neftel.smt <- readRDS("./../output/smrt_mal")
+reference_gem <- as.matrix(neftel.smt@assays$norm@data)
+reference_clusters <- as.factor(neftel.smt$celltype)
+
+
+
+# Target
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+gbm.list <- lapply(X = gbm.list, FUN = function(x)  {
+  x <- NormalizeData(x,normalization.method = "RC",verbose = FALSE)
+})
+
+rm(gbm,neftel.smt)
+gc()
+```
+
+
+```{r}
+res <- list()
+
+for (i in 1:length(gbm.list)) {
+  target_gem  <- gbm.list[[i]]
+  target_gem <- as.matrix(target_gem@assays$RNA@data)
+  
+  # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
+  scID_output <- scid_multiclass(target_gem = target_gem, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE)
+  
+  res <- append(res,list(scID_output))
+  gc()
+}
+```
+
+```{r}
+saveRDS(res, file = "./../output/scID")
+```
+
+```{r}
+res.df <- data.frame()
+for (i in res) {
+  res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE),data.frame(t(i$scores)))
+  res.df <- rbind(res.df,res.each.df)
+}
+colnames(res.df)[1] <- "scID"
+res.df <- rownames_to_column(res.df)
+colnames(res.df)[1] <- "cell_id"
+head(res.df)
+```
+
+```{r}
+write.csv(res.df,paste0("./../output/scID_",object,"_",sig,".csv"),row.names = FALSE)
+```
+
+
+
+```{r}
+make_heatmap(gem = reference_gem, labels = reference_clusters, markers = scID_output$markers)
+```
+
+```{r}
+make_heatmap(gem = target_gem, labels = scID_output$labels, markers = scID_output$markers)
+```
+
+```{r}
+plot_score_2D(gem = target_gem, labels = scID_output$labels, markers = scID_output$markers, 
+              clusterID = "6", weights = scID_output$estimated_weights) 
+```
+
+#SCINA
+```{r}
+library(SCINA)
+library(Seurat)
+library(preprocessCore)
+library(tibble)
+#marker based
+#normalized by quantile + log1p
+#Expectation-maximization inference
+```
+
+```{r}
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 2)
+signatures <- as.data.frame(signatures)
+signatures[is.na.data.frame(signatures)] <- ""
+signatures  
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+```{r}
+res <- list()
+for (i in 1:length(gbm.list)) {
+  exp  <- gbm.list[[i]]
+  exp <- log(exp@assays$RNA@counts + 1)
+  exp[] = normalize.quantiles(as.matrix(exp))
+  results = SCINA(exp, signatures, rm_overlap=FALSE, allow_unknown=FALSE)
+
+  res <- append(res,list(results))
+  print(paste("finish",names(gbm.list)[i]))
+  
+}
+```
+
+```{r}
+names(res) <- names(gbm.list)
+```
+
+```{r}
+res.df <- data.frame()
+for (i in res) {
+  cell_labels <- data.frame(SCINA = i$cell_labels,stringsAsFactors = TRUE)
+  props <- data.frame(t(i$probabilities))
+  res.each.df <- add_column(props,cell_labels, .before = 1)
+  res.df <- rbind(res.df, res.each.df)
+}
+
+res.df
+```
+
+```{r}
+write.csv(res.df,paste0("./../output/SCINA_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+
+
+```{r}
+library(scibet)
+library(SeuratDisk)
+```
+
+```{r}
+reference <- readRDS("./../output/smrt_mal")
+reference.exp <- reference@assays$norm@data
+reference.exp <- t(as.matrix(reference.exp))
+reference.exp <- as.data.frame(reference.exp)
+
+str(reference.exp)
+reference.exp[1:10,1:10]
+
+#Check whether after transpose the cell is in the same position
+table(rownames(reference@meta.data) == rownames(reference.exp))
+
+#Add label to last column (as instructed by scibet http://scibet.cancer-pku.cn/document.html)
+reference.exp$label <-  reference$celltype 
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+
+gbm.list <- lapply(X = gbm.list, FUN = function(x)  {
+  x <- NormalizeData(x,verbose= FALSE,normalization.method = "RC")
+})
+```
+
+```{r}
+prediction <- data.frame()
+for (i in 1:length(gbm.list)) {
+  gbm.each <- gbm.list[[i]] 
+  gbm.each <- gbm.each@assays$RNA@data
+  gbm.each <- t(as.matrix(gbm.each))
+  gbm.each <- as.data.frame(gbm.each)
+  
+  pred <- SciBet(reference.exp,gbm.each)
+  
+  prediction <- rbind(prediction,data.frame(cell_id = rownames(gbm.each),scibet = pred))
+}
+```
+
+```{r}
+rownames(prediction) <- prediction$cell_id
+prediction <- prediction["scibet"]
+prediction
+```
+
+```{r}
+write.csv(prediction,paste0("./../output/scibet_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+#CHETAH
+```{r}
+# Load the package
+library(CHETAH)
+library(Seurat)
+```
+
+```{r}
+neftel.smt <- readRDS("./../output/smrt_mal") 
+
+#from tutorial it use log-normalization so use the default from seurat
+neftel.smt <- DietSeurat(neftel.smt, assays = "RNA")
+neftel.smt <- DietSeurat(neftel.smt,data = TRUE, counts = FALSE,scale.data = FALSE)
+
+neftel.smt.sce <- as.SingleCellExperiment(neftel.smt)
+```
+
+```{r}
+neftel.smt.sce@colData <- neftel.smt.sce@colData["celltype"] 
+
+#Change name because input need this
+colnames(neftel.smt.sce@colData) <- "celltypes"
+neftel.smt.sce
+```
+```{r}
+#QC
+ribo <- read.table("./../data/ribosomal.txt", header = FALSE, sep = '\t')
+neftel.smt.sce <- neftel.smt.sce[!rownames(neftel.smt.sce) %in% ribo[,1], ]
+```
+```{r}
+CorrelateReference(ref_cells = neftel.smt.sce)
+```
+
+```{r}
+ClassifyReference(ref_cells = neftel.smt.sce,ref_c = "logcounts")
+```
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+
+```{r}
+gbm.list <- lapply(X = gbm.list, FUN = function(x)  {
+  x <- NormalizeData(x,verbose= FALSE)
+  x <- FindVariableFeatures(x, verbose= FALSE)
+  x <- ScaleData(x,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+  x <- RunUMAP(x, dims = 1:20, verbose =FALSE)
+})
+```
+
+```{r}
+res.df <- DataFrame()
+for (i in 1:length(gbm.list)) {
+  gbm.each <- gbm.list[[i]]
+  gbm.each <- DietSeurat(gbm.each,counts = FALSE,data = TRUE,scale.data = FALSE, dimreducs = "umap")
+  gbm.each <- as.SingleCellExperiment(gbm.each)
+  gbm.each@colData <- gbm.each@colData[c("orig.ident")]
+  
+  gbm.each <- CHETAHclassifier(input = gbm.each,
+                              ref_cells = neftel.smt.sce,print_steps = FALSE)
+  gbm.each <- Classify(gbm.each, 0)
+  res.df <- rbind(res.df,gbm.each@colData["celltype_CHETAH"])
+
+}
+```
+```{r}
+table(res.df$celltype_CHETAH)
+colnames(res.df)[1] <- "CHETAH"
+```
+
+```{r}
+write.csv(res.df,paste0("./../output/CHETAH_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+

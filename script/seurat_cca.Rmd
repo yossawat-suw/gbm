@@ -1,0 +1,1198 @@
+---
+title: "seurat/cca"
+output: html_document
+date: "2023-06-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(SeuratDisk)
+library(Seurat)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(tibble)
+library(future)
+library(ggvenn)
+library(parallel)
+```
+
+```{r}
+install.packages("future")
+library(future)
+# check the current active plan
+plan()
+```
+
+
+```{r}
+set.seed(1)
+```
+
+```{r}
+
+# Load signatures
+#signatures <- read_xlsx("./../data/gbm_subtype_genelist.xlsx",sheet = 2)
+
+#This list is 4equal
+#signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 3)
+
+#This list is 4 without reducing
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 4)
+#th
+
+signatures <- read.csv("./../output/signature_subtype_4metamodules_new_50.csv")
+signatures
+
+colnames(signatures)[5] <- "G1_S"
+colnames(signatures)[6] <- "G2_M"
+
+signatures <- as.list(signatures) 
+signatures <- lapply(signatures, na.omit)
+
+signatures <- signatures[-c(5,6)]
+```
+
+
+#Try analyse without integration
+
+
+```{r}
+#Load data
+gbm <- readRDS("./../output/seurat_gbm_qc")
+```
+
+```{r}
+#Try analyse without integration 
+gbm <- NormalizeData(gbm, verbose = FALSE)
+gbm <- FindVariableFeatures(gbm, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+gbm <- ScaleData(gbm, verbose = FALSE)
+gbm <- RunPCA(gbm, npcs = 30, verbose = FALSE)
+gbm <- RunUMAP(gbm, reduction = "pca", dims = 1:30, verbose = FALSE)
+#gbm <- RunTSNE(gbm,reduction = "pca", dims = 1:30, verbose = FALSE)
+#gbm <- FindNeighbors(gbm, reduction = "pca", dims = 1:30, verbose = FALSE)
+#gbm <- FindClusters(gbm, resolution =0.4, verbose = FALSE)
+```
+
+<!-- ```{r} -->
+<!-- # Visualization -->
+<!-- p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE) -->
+<!-- # p0 <- p0 + labs(subtitle = "control + radiated; no integration") -->
+<!-- p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration") -->
+<!-- p0 -->
+<!-- ``` -->
+
+
+
+
+#Add labeling on GBM
+```{r}
+#metamodule_4 <- read.csv("./../output/consensus_all_4metamodules.csv",row.names = 1)
+#metamodule_4["consensus"]
+
+metamodule.4.new50.onlydiverge <- read.csv("./../output/consensus_all_4metamodules_new_50_only_diverge.csv",row.names = 1)
+
+
+metamodule.4.new50.byconsistency <- read.csv("./../output/consensus_all_4metamodules_new_50_by_consistency.csv",row.names = 1)
+
+```
+
+```{r}
+mes.imm <- read.csv("./../output/consensus_all_MESImm.csv",row.names = 1)
+mes.imm
+```
+
+```{r}
+gbm <- AddMetaData(gbm,metadata = metamodule.4.new50.onlydiverge["consensus"],col.name = "new50_onlydiverge")
+gbm <- AddMetaData(gbm,metadata = metamodule.4.new50.byconsistency["consensus"],col.name = "new50_byconsistency")
+gbm <- AddMetaData(gbm,metadata = mes.imm["consensus"],col.name = "mes_imm")
+```
+
+```{r}
+p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE, group.by = "runs")
+# p0 <- p0 + labs(subtitle = "control + radiated; no integration")
+p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration")
+p0
+```
+```{r}
+p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE, group.by = "batch",repel = TRUE)
+# p0 <- p0 + labs(subtitle = "control + radiated; no integration")
+p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration")
+p0
+```
+```{r}
+p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE, group.by = "donor_id",repel = TRUE)
+# p0 <- p0 + labs(subtitle = "control + radiated; no integration")
+p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration")
+p0
+```
+
+```{r}
+Idents(gbm) <- "donor_id"
+sub <- subset(gbm, idents = c("E31N","E24N","E26N"))
+```
+
+
+```{r}
+p0 <- DimPlot(sub, reduction = "umap",  group.by = "donor_id",split.by = "batch", ncol = 2)
+p0
+```
+
+
+
+```{r}
+Idents(gbm) <- "runs"
+gbm.run2 <- subset(gbm,idents = "run2")
+gbm.run2 <- NormalizeData(gbm.run2, verbose = FALSE)
+gbm.run2 <- FindVariableFeatures(gbm.run2, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+gbm.run2 <- ScaleData(gbm.run2, verbose = FALSE)
+gbm.run2 <- RunPCA(gbm.run2, npcs = 30, verbose = FALSE)
+gbm.run2 <- RunUMAP(gbm.run2, reduction = "pca", dims = 1:30, verbose = FALSE)
+```
+
+
+
+
+```{r}
+p0 <- DimPlot(gbm.run2, reduction = "umap" ,label = TRUE, group.by = "batch",repel = TRUE)
+p0 <- p0 + labs(subtitle = "control + radiated; run2 ; no integration")
+p0
+```
+
+
+```{r}
+p0 <- DimPlot(gbm.run2, reduction = "umap" ,label = TRUE, group.by = "donor_id",repel = TRUE)
+p0 <- p0 + labs(subtitle = "control + radiated; run2 ; no integration")
+p0
+```
+```{r}
+Idents(gbm.run2) <- "donor_id"
+gbm.run2.E37N <- subset(gbm.run2, idents = "E37N")
+gbm.run2.E37N
+```
+
+
+```{r}
+p0 <- DimPlot(gbm, reduction = "umap", group.by = "new50_byconsistency")
+p0 
+```
+
+
+```{r}
+p0 <- DimPlot(gbm, reduction = "umap", group.by = "new50_onlydiverge")
+p0 
+```
+
+
+
+```{r}
+p0 <- DimPlot(gbm.run2.E37N, reduction = "umap", group.by = "new50_onlydiverge",split.by = "radiation", ncol = 2)
+p0 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+# try integration runs on donor_run
+```{r}
+#Load data
+gbm.combined <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm.combined, split.by = "donor_run")
+
+#rm(gbm.combined)
+
+
+
+#  E26N_run1 E24N_run1 E31N_run1
+
+
+gbm.list[["E24N_run2"]] <- merge(gbm.list[["E24N_run2"]], y=gbm.list[["E24N_run1"]])
+gbm.list[["E26N_run2"]] <- merge(gbm.list[["E26N_run2"]], y=gbm.list[["E26N_run1"]])
+gbm.list[["E31N_run2"]] <- merge(gbm.list[["E31N_run2"]], y=gbm.list[["E31N_run1"]])
+gbm.list[c("E24N_run1","E26N_run1", "E31N_run1")] <- NULL
+
+m <- 0
+for (i in 1:length(gbm.list)) {
+  m <- m+ nrow(gbm.list[[i]][[]])
+}
+m
+
+# normalize and identify variable features for each dataset independently
+gbm.list <- mclapply(X = gbm.list, mc.cores = (parallel::detectCores() - 2),FUN = function(x) {
+    x <- NormalizeData(x,verbose = FALSE)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000,verbose = FALSE)
+    # VariableFeatures(x) <- union(VariableFeatures(x), unlist(signatures))
+})
+
+
+
+#Add sub-type into variable 
+# for (i in 1:length(gbm.list)) {
+#   VariableFeatures(gbm.list[[i]]) <- union(VariableFeatures(gbm.list[[i]]), unlist(signatures))
+# }
+
+
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = gbm.list,verbose = FALSE, nfeatures = 2000)
+
+
+#plan("cluster", workers = 1)
+#plan("sequential")
+gc()
+
+gbm.list <- FindIntegrationAnchors(object.list = gbm.list, anchor.features = features, verbose = TRUE)
+
+gc()
+
+# this command creates an 'integrated' data assay
+
+gbm.list <- IntegrateData(anchorset = gbm.list,verbose = TRUE)
+
+gbm.combined.integrated  <- gbm.list
+rm(gbm.list)
+gc()
+```
+```{r}
+saveRDS(gbm.combined.integrated,file = "./../output/seurat_gbm_integrated_donor_run")
+```
+
+
+
+
+```{r}
+set.seed(1)
+# Run the standard workflow for visualization and clustering
+DefaultAssay(gbm.combined.integrated) <- "integrated"
+gbm.combined.integrated <- ScaleData(gbm.combined.integrated, verbose = FALSE)
+gbm.combined.integrated <- RunPCA(gbm.combined.integrated, npcs = 30, verbose = FALSE)
+gbm.combined.integrated <- RunUMAP(gbm.combined.integrated, reduction = "pca", dims = 1:30)
+
+#gbm.combined.integrated <- FindNeighbors(gbm.combined.integrated, reduction = "pca", dims = 1:30)
+#gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.13)
+```
+
+```{r}
+DimPlot(gbm.combined.integrated, group.by = "radiation")
+```
+```{r}
+DimPlot(gbm.combined.integrated, group.by = "batch",split.by = "batch", ncol = 2)
+```
+
+
+
+```{r}
+DimPlot(gbm.combined.integrated, group.by = "radiation",split.by = "donor_id",ncol = 5)
+```
+
+```{r}
+DimPlot(gbm.combined.integrated, group.by = "runs",split.by = "runs")
+```
+
+```{r}
+gbm.combined.integrated <- AddMetaData(gbm.combined.integrated,metadata = metamodule.4.new50.onlydiverge["consensus"],col.name = "new50_onlydiverge")
+gbm.combined.integrated <- AddMetaData(gbm.combined.integrated,metadata = metamodule.4.new50.byconsistency["consensus"],col.name = "new50_byconsistency")
+gbm.combined.integrated <- AddMetaData(gbm.combined.integrated,metadata = mes.imm["consensus"],col.name = "mes_imm")
+```
+
+```{r}
+DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge")
+```
+
+
+
+```{r}
+
+DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge",split.by = "split", ncol = 6) +
+  theme(strip.text.x = element_text(size = 6, face = "bold"),
+        axis.text = element_blank(),
+        legend.text = element_text(size = 5, face = "bold"))
+```
+
+```{r}
+#Check intersection with each other
+signatures <- read.csv("./../output/signature_subtype_new_50.csv")
+
+
+
+x = list(integrate.var = gbm.combined.integrated@assays$integrated@var.features, NPC = signatures$NPC.new, OPC=signatures$OPC.new, AC=signatures$AC.new, MES=signatures$MES.new)
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "integrate_donor_run")
+vein
+
+
+```
+
+```{r}
+signatures.unlist <- unlist(signatures)
+names(signatures.unlist) <- NULL
+
+x = list(integrate.var = gbm.combined.integrated@assays$integrated@var.features,  sig=signatures.unlist)
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "integrate_donor_run")
+vein
+
+```
+```{r}
+intersect.genes <- intersect(gbm.combined.integrated@assays$integrated@var.features,signatures.unlist)
+intersect.genes
+gbm.combined.integrated <- RunPCA(gbm.combined.integrated,features = intersect.genes)
+```
+
+```{r}
+ElbowPlot(gbm.combined.integrated,ndims = 30)
+```
+
+
+
+```{r}
+gbm.combined.integrated <- RunUMAP(gbm.combined.integrated,dims = 1:10)
+gbm.combined.integrated <- RunTSNE(gbm.combined.integrated,dims = 1:10)
+```
+
+```{r}
+DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge")
+```
+```{r}
+DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge", split.by = "donor_radiation", ncol = 6) + 
+    theme(strip.text.x = element_text(size = 6, face = "bold"),
+        axis.text = element_blank(),
+        legend.text = element_text(size = 5, face = "bold"))
+
+#gbm.combined.integrated$donor_radiation <- paste0(gbm.combined.integrated$donor_id,"_",gbm.combined.integrated$radiation)
+
+
+```
+
+```{r}
+DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge",split.by = "new50_onlydiverge", ncol = 3)
+```
+```{r}
+DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge",reduction)
+```
+
+# try integration runs on split
+```{r}
+#Load data
+gbm.combined <- readRDS("./../output/seurat_gbm_qc")
+```
+```{r}
+
+
+
+gbm.list <- SplitObject(gbm.combined, split.by = "split")
+
+"""gbm.anchors <- FindIntegrationAnchors(object.list = gbm.list, anchor.features = features, verbose = FALSE)
+Error in FindIntegrationAnchors(object.list = gbm.list, anchor.features = features, :
+Max dimension too large: objects 6, 12, 13, 14 contain fewer than 30 cells.
+Please specify a maximum dimensions that is less than the number of cells in any object (2)."""
+#So 6 12 13 14 are all from run1 >> I will merge cell into run2 
+
+# "control_run1_E31N"  "radiated_run1_E31N" "radiated_run1_E26N" "radiated_run1_E24N"
+
+gbm.list[["control_run2_E31N"]] <- merge(gbm.list[["control_run2_E31N"]], y=gbm.list[["control_run1_E31N"]])
+
+gbm.list[["radiated_run2_E31N"]] <- merge(gbm.list[["radiated_run2_E31N"]], y=gbm.list[["radiated_run1_E31N"]])
+
+gbm.list[["radiated_run2_E26N"]] <- merge(gbm.list[["radiated_run2_E26N"]], y=gbm.list[["radiated_run1_E26N"]])
+
+gbm.list[["radiated_run2_E24N"]] <- merge(gbm.list[["radiated_run2_E24N"]], y=gbm.list[["radiated_run1_E24N"]])
+
+
+gbm.list[c("control_run1_E31N", "radiated_run1_E31N" ,"radiated_run1_E26N" ,"radiated_run1_E24N")] <- NULL
+
+
+
+# normalize and identify variable features for each dataset independently
+gbm.list <- lapply(X = gbm.list, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 3000)
+    # VariableFeatures(x) <- union(VariableFeatures(x), unlist(signatures))
+})
+
+
+
+#Add sub-type into variable 
+for (i in 1:length(gbm.list)) {
+  VariableFeatures(gbm.list[[i]]) <- union(VariableFeatures(gbm.list[[i]]), unlist(signatures))
+}
+
+
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = gbm.list,verbose = FALSE, nfeatures = 3000)
+
+
+gbm.anchors <- FindIntegrationAnchors(object.list = gbm.list, anchor.features = features, verbose = FALSE)
+
+
+
+
+# this command creates an 'integrated' data assay
+gbm.combined <- IntegrateData(anchorset = gbm.anchors,verbose = FALSE)
+
+
+rm(gbm.anchors,gbm.list)
+gc()
+```
+
+
+```{r}
+#Split assay so that decrease memory space 
+gbm.combined.integrated <- DietSeurat(gbm.combined,assays = "integrated")
+gbm.combined.integrated <- gbm.combined
+
+rm(gbm.combined)
+gc()
+```
+
+
+
+
+
+
+
+```{r}
+# Run the standard workflow for visualization and clustering
+DefaultAssay(gbm.combined.integrated) <- "integrated"
+gbm.combined.integrated <- ScaleData(gbm.combined.integrated, verbose = FALSE)
+gbm.combined.integrated <- RunPCA(gbm.combined.integrated, npcs = 30, verbose = FALSE)
+gbm.combined.integrated <- RunUMAP(gbm.combined.integrated, reduction = "pca", dims = 1:30)
+# gbm.combined.integrated <- RunTSNE(gbm.combined.integrated,reduction = "pca", dims = 1:30)
+gbm.combined.integrated <- FindNeighbors(gbm.combined.integrated, reduction = "pca", dims = 1:30)
+gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.13)
+```
+
+```{r}
+# For each run
+saveRDS(gbm.combined.integrated, "./../output/cca_combined_integrated_run1", compress = TRUE)
+saveRDS(gbm.combined.integrated, "./../output/cca_combined_integrated_run2", compress = TRUE)
+
+# For 2 runs
+saveRDS(gbm.combined.integrated, "./../output/cca_combined_integrated_2runs", compress = TRUE)
+gbm.combined.integrated <- readRDS("./../output/cca_combined_integrated_2runs")
+
+gbm.combined.integrated <- readRDS("./../output/cca_combined_integrated")
+```
+
+
+```{r}
+# Visualization
+p0 <- DimPlot(gbm.combined.integrated, reduction = "umap",group.by = "orig.ident") 
+
+p0 <- p0 + labs(subtitle = "2 runs")
+
+p0
+
+```
+
+```{r}
+# Visualization
+p0 <- DimPlot(gbm.combined.integrated, reduction = "umap",group.by = "integrated_snn_res.0.5") 
+
+p0 <- p0 + labs(subtitle = "2 runs")
+
+p0
+```
+
+```{r}
+p0 <- DimPlot(gbm.combined.integrated, reduction = "tsne",group.by = "integrated_snn_res.0.5")
+p0
+```
+
+```{r}
+gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.13)
+```
+```{r}
+# Visualization
+p0 <- DimPlot(gbm.combined.integrated, reduction = "umap",group.by = "integrated_snn_res.0.13")
+
+p0 <- p0 + labs(subtitle = "2 runs")
+p0
+```
+
+
+```{r}
+# Visualization
+p0 <- DimPlot(gbm.combined.integrated, reduction = "umap", split.by = "radiation", group.by = "donor_id")
+p0
+```
+
+```{r}
+# Visualization
+p1 <- DimPlot(gbm.combined.integrated, reduction = "umap", group.by = "integrated_snn_res.0.5", split.by = "radiation")
+p1
+```
+
+
+```{r}
+p3 <- DimPlot(gbm.combined.integrated, reduction = "umap", split.by = "orig.ident",group.by = "integrated_snn_res.0.5", ncol = 5, pt.size = 0.001) 
+p3 <- p3 +  theme(strip.text.x = element_text(size=7),
+                  axis.text = element_blank(),
+                  axis.ticks = element_blank())
+
+# p3 <- p3 + labs(subtitle = "control")
+p3
+```
+
+```{r}
+p3 <- DimPlot(subset(x = gbm.combined.integrated, subset = radiation == "control"), reduction = "umap", split.by = "orig.ident",group.by = "integrated_snn_res.0.5", ncol = 4, pt.size = 0.001) 
+p3 <- p3 +  theme(strip.text.x = element_text(size=7),
+                  axis.text = element_blank(),
+                  axis.ticks = element_blank())
+
+p3 <- p3 + labs(subtitle = "control")
+
+#subset(x = gbm.combined.integrated, subset = radiation == "control"
+
+p3
+```
+
+```{r}
+p4 <- DimPlot(subset(x = gbm.combined.integrated, subset = radiation == "radiated"), reduction = "umap", split.by = "orig.ident",group.by = "integrated_snn_res.0.5", ncol = 4, pt.size = 0.001) 
+p4 <- p4 +  theme(strip.text.x = element_text(size=7),
+                  axis.text = element_blank(),
+                  axis.ticks = element_blank())
+
+p4 <- p4 + labs(subtitle = "radiated")
+
+#subset(x = gbm.combined.integrated, subset = radiation == "control"
+
+p4
+```
+
+
+
+
+
+
+
+
+
+
+#Test TITAN
+```{r}
+library(TITAN)
+LDA_model <- runLDA(gbm.combined, ntopics = 20, normalizationMethod = "CLR", seed.number = 8)
+```
+
+```{r}
+saveRDS(LDA_model, "./../output/LDA_20T_ctrl_CCA")
+
+LDA_model <- readRDS("./../output/LDA_20T_ctrl_CCA")
+```
+
+```{r}
+gbm.combined.integrated <- addTopicsToSeuratObject(model = LDA_model, Object = gbm.combined)
+```
+
+```{r}
+library(knitr)
+
+GeneDistrubition <- GeneScores(LDA_model)
+
+### head and sort the matrix by genes most contributing to Topic 1
+kable(head(GeneDistrubition[order(GeneDistrubition[,"Topic_1"], decreasing = T),],n = 10))
+```
+
+```{r}
+LDA_topics <- GetTopics(LDA_model, gbm.combined)
+
+HeatmapTopic(Object = gbm.combined,
+             topics =   LDA_topics, 
+             AnnoVector = gbm.combined$seurat_clusters, 
+             AnnoName = "Cluster")
+
+```
+
+```{r}
+FeaturePlot(gbm.combined, 
+            pt.size = 0.01, 
+            features  = paste("Topic", 1:4, sep = "_"), 
+            ncol = 2, 
+            min.cutoff = 'q1')
+```
+
+```{r}
+FeaturePlot(gbm.combined, 
+            pt.size = 0.01, 
+            features  = paste("Topic", 9:12, sep = "_"), 
+            ncol = 2, 
+            min.cutoff = 'q1')
+```
+
+#unused code
+```{r}
+# to pick the donor_id
+run1 <- gbm.combined.integrated@meta.data[gbm.combined.integrated$run == "run1",c(5,6)]
+run1.donor.id <- unique(run1$donor_id)
+
+run2 <- gbm.combined.integrated@meta.data[gbm.combined.integrated$run == "run2",c(5,6)]
+run2.donor.id <- unique(run2$donor_id)
+
+run1.donor.id.spec <- sort( setdiff(run1.donor.id,run2.donor.id))
+run1.donor.id.spec
+
+run2.donor.id.spec <- sort( setdiff(run2.donor.id,run1.donor.id))
+run2.donor.id.spec
+
+run.donor.common <- sort(intersect(run2.donor.id,run1.donor.id))
+run.donor.common
+```
+
+
+```{r}
+#test
+
+DefaultAssay(gbm.combined.integrated) <- "RNA"
+gbm.combined.integrated
+E37N.control <- subset(gbm.combined.integrated, idents = "control_run2_E37N")
+
+
+
+E37N.control <- ScaleData(E37N.control, verbose = FALSE)
+E37N.control <- FindVariableFeatures(E37N.control,nfeatures = 3000)
+E37N.control <- RunPCA(E37N.control, npcs = 30, verbose = FALSE)
+E37N.control <- RunUMAP(E37N.control, reduction = "pca", dims = 1:30)
+# E37N.control <- RunTSNE(E37N.control,reduction = "pca", dims = 1:30)
+E37N.control <- FindNeighbors(E37N.control, reduction = "pca", dims = 1:30)
+E37N.control <- FindClusters(E37N.control, resolution = 0.15)
+
+E37N.control <- AddModuleScore(E37N.control, features =signatures,ctrl = 80, name = names(signatures))
+
+```
+
+```{r}
+DimPlot(E37N.control, group.by = "seurat_clusters")
+```
+
+```{r}
+FeaturePlot(E37N.control, features = c("MES1","NPC4","OPC3","AC2"), label = TRUE, repel = FALSE)
+```
+```{r}
+VlnPlot(E37N.control, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2,)
+```
+```{r}
+#Test new signature
+
+
+E37N.control <- AddModuleScore(E37N.control, features =signatures.new,ctrl = 80, name = names(signatures.new))
+
+```
+```{r}
+p0 <- FeaturePlot(E37N.control, features = c("MES.new4","NPC.new1","OPC.new2","AC.new3"), label = TRUE, repel = TRUE) 
+p0
+```
+
+```{r}
+VlnPlot(E37N.control, features = c("MES.new4","NPC.new1","OPC.new2","AC.new3"), ncol = 2,)
+```
+
+```{r}
+#try look at annotation of each type to see scoring 
+Idents(gbm.combined.integrated) <- "run"
+Idents(gbm.combined.integrated)
+gbm.run2 <- subset(gbm.combined.integrated, idents = "run2")
+```
+
+```{r}
+unique(gbm.run2$radiation)
+gbm.run2 <- AddMetaData(gbm.run2,metadata = all)
+```
+
+```{r}
+gbm.run2@meta.data
+```
+```{r}
+gbm.run2 <- AddModuleScore(gbm.run2,assay = "integrated", features =signatures,ctrl = 80, name = names(signatures))
+gbm.run2 <- AddModuleScore(gbm.run2,assay = "integrated", features =signatures.new,ctrl = 80, name = names(signatures.new))
+```
+
+```{r}
+Idents(gbm.run2) <- "markercount"
+```
+```{r}
+
+VlnPlot(gbm.run2, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2,)
+
+```
+```{r}
+VlnPlot(gbm.run2, features = c("MES.new4","NPC.new1","OPC.new2","AC.new3"), ncol = 2,)
+```
+```{r}
+Idents(gbm.run2) <- "scSorter"
+```
+```{r}
+VlnPlot(gbm.run2, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2,)
+```
+```{r}
+VlnPlot(gbm.run2, features = c("MES.new4","NPC.new1","OPC.new2","AC.new3"), ncol = 2,)
+```
+
+```{r}
+Idents(gbm.run2) <- "UCell"
+```
+```{r}
+VlnPlot(gbm.run2, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2,)
+```
+```{r}
+VlnPlot(gbm.run2, features = c("MES.new4","NPC.new1","OPC.new2","AC.new3"), ncol = 2,)
+```
+
+```{r}
+Idents(gbm.run2) <- "sctype"
+```
+```{r}
+
+VlnPlot(gbm.run2, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2,)
+
+```
+```{r}
+VlnPlot(gbm.run2, features = c("MES.new4","NPC.new1","OPC.new2","AC.new3"), ncol = 2,)
+```
+
+```{r}
+#Check the gene signature level of in each sample
+gbm.combined.integrated <- readRDS("./../output/cca_combined_integrated_2runs")
+DefaultAssay(gbm.combined.integrated) <- "RNA"
+gbm.control.no.integration <- DietSeurat(gbm.combined.integrated, assays = "RNA")
+Idents(gbm.control.no.integration) <- "radiation"
+gbm.control.no.integration <- subset(gbm.control.no.integration, idents = "control")
+gbm.control.no.integration <- SplitObject(gbm.control.no.integration, split.by = "orig.ident")
+gbm.control.no.integration <- lapply(X = gbm.control.no.integration, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- ScaleData(x, verbose = FALSE)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+    x <- AddModuleScore(x,features =signatures,ctrl = 80, name = names(signatures))
+})
+```
+```{r}
+library(scCustomize)
+gbm.control.no.integration <- Merge_Seurat_List(gbm.control.no.integration)
+```
+
+```{r}
+VlnPlot(gbm.control.no.integration, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2, group.by = "")
+```
+
+```{r}
+#gbm.control.no.integration <- mer (unlist(gbm.control.no.integration))
+#x <- unlist(gbm.control.no.integration)
+meta <- data.frame()
+for (i in 1:length(gbm.control.no.integration)) {
+  meta <- rbind(meta,gbm.control.no.integration[[i]]@meta.data)
+}
+meta
+```
+
+```{r}
+library(ggpubr)
+ggviolin(meta,  y = c("MES1","NPC4","OPC3","AC2"),merge = TRUE) + facet_wrap("donor_id",ncol = 5) + theme(axis.text.x = element_blank(),axis.ticks.x = element_blank()) + labs(title = "cellular state signatures",subtitle = "control & 2 runs; signatures = 4 signatures (merge without filter)",caption = "AddModuleScore(seurat)")
+```
+
+
+```{r}
+#Try sc-type
+
+lapply(c("dplyr","Seurat","HGNChelper"), library, character.only = T)
+
+
+
+# load gene set preparation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
+# load cell type annotation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
+
+
+# DB file
+db_ = "./../data/gbm_subtype_genelist_sctype_4equal.xlsx"
+tissue = "gbm"
+
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+gs_list
+```
+
+
+
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /4 (default)")
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/8] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /8")
+```
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/12] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /12")
+```
+
+
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/16] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /16")
+```
+
+
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/20] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /20")
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/25] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /25")
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/50] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /50")
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/100] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /100")
+```
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/10000] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /10000")
+```
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/100000] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /100000")
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/1000000] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "unknown = /1000000")
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+#sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_4equal <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_4equal')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "no Unknown")
+```
+
+```{r}
+gbm.combined.integrated@meta.data
+gbm.meta <- gbm.combined.integrated@meta.data[c("orig.ident","radiation","donor_id","sctype_4equal")]
+
+gbm.meta <- rownames_to_column(gbm.meta)
+
+colnames(gbm.meta)[1] <- "cell_id"
+```
+
+```{r}
+write.csv(gbm.meta,"./../output/sctype_4equal.csv",row.names = FALSE)
+```
+
+
+
+```{r}
+#using sc-typ database
+
+# DB file
+db_ = "https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/ScTypeDB_full.xlsx";
+head(db_)
+tissue = "Brain" # e.g. Immune system,Pancreas,Liver,Eye,Kidney,Brain,Lung,Adrenal,Heart,Intestine,Muscle,Placenta,Spleen,Stomach,Thymus 
+
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+```
+
+```{r}
+gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.5)
+gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.13)
+```
+
+```{r}
+es.max = sctype_score(scRNAseqData = gbm.combined.integrated[["integrated"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm.combined.integrated@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm.combined.integrated@meta.data[gbm.combined.integrated@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm.combined.integrated@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+gbm.combined.integrated@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm.combined.integrated@meta.data$customclassif[gbm.combined.integrated@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm.combined.integrated$customclassif)
+gbm.combined.integrated$sctype_db <- sctype
+
+#Visualization
+DimPlot(gbm.combined.integrated, reduction = "umap", label = TRUE, repel = TRUE, group.by = 'sctype_db')  + labs(title = "gbm.combined", subtitle = "sc-type", caption = "Unknown /4") 
+```
+
+```{r}
+# load auto-detection function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/auto_detect_tissue_type.R")
+db_ = "https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/ScTypeDB_full.xlsx";
+
+# guess a tissue type
+tissue_guess = auto_detect_tissue_type(path_to_db_file = db_, seuratObject = gbm.combined.integrated, scaled = TRUE, assay = "integrated")  # if saled = TRUE, make sure the data is scaled, as seuratObject[[assay]]@scale.data is used. If you just created a Seurat object, without any scaling and normalization, set scaled = FALSE, seuratObject[[assay]]@counts will be used         
+```
+
+
+```{r}
+#map score subtype gene score onto
+
+# if use sd
+hvg <- rownames(gbm.combined.integrated@assays$integrated@meta.features)
+
+signatures_intersect = list()
+for (i in 1:length(signatures)) {
+  vec <- list(intersect(signatures[[i]],hvg))
+  signatures_intersect <- append(signatures_intersect,vec)
+}
+names(signatures_intersect) <- names(signatures)
+
+
+signatures_intersect
+
+saveRDS(signatures_intersect, file = "./../output/signature_subtype_intersect")
+```
+
+```{r}
+# Add module
+gbm.combined.integrated <- AddModuleScore(gbm.combined.integrated,assay = "integrated", features =signatures,ctrl = 80, name = names(signatures))
+
+#gbm.combined.integrated <- AddModuleScore(gbm.combined.integrated,assay = "integrated", features =signatures_intersect,ctrl = 80, name = names(signatures))
+
+```
+
+```{r}
+FeaturePlot(gbm.combined.integrated, features = c("MES1","NPC4","OPC3","AC2"), label = TRUE, repel = FALSE) 
+```
+
+```{r}
+Idents(gbm.combined.integrated) <- "integrated_snn_res.0.13"
+Idents(gbm.combined.integrated)
+VlnPlot(gbm.combined.integrated, features = c("MES1","NPC4","OPC3","AC2"), ncol = 2,)
+```
+

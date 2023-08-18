@@ -1,0 +1,597 @@
+---
+title: "scSorter"
+output: html_document
+date: '2023-06-08'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# use control dataset without integration
+
+
+#scSorter
+```{r}
+library(scSorter)
+library(ggplot2)
+library(Seurat)
+library(SeuratDisk)
+library(dplyr)
+library(readxl)
+library(tibble)
+```
+
+```{r}
+#Load annotation
+anno <- read_xlsx("./../data/gbm_subtype_genelist_scsorter.xlsx",sheet = 1)
+
+# make sure that anno is dataframe not the tibble bc it wil cause problem in rts function later if it is tibble
+
+anno
+```
+
+
+
+
+```{r}
+#set up configuration
+## use with parameter.Rmd
+
+donor.group <- experiment[1]
+run <- 
+```
+
+#Test 1 donor.group
+```{r}
+#Load dataset
+gbm <- readRDS("./../output/","seurat_gbm_",run,"_",donor.group,"_qc")
+
+### gene expression need to be library normalized and log tranform first! ####
+```
+
+
+```{r}
+#Filter in top variable gene
+topgenes <- head(VariableFeatures(gbm), 2000)
+
+#Use assay SCT as normalize by that way
+#expr = GetAssayData(gbm, assay = "SCT",slot = "data")
+
+# Alternatively use original method normalizatation
+expr = GetAssayData(gbm, slot = "data" )
+
+topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+topgenes = topgenes[topgene_filter]
+```
+
+```{r}
+picked_genes = unique(c(anno$Marker, topgenes))
+expr = expr[rownames(expr) %in% picked_genes, ]
+```
+
+```{r}
+rts <- scSorter(expr, anno)
+```
+
+```{r}
+saveRDS(rts,paste0("./../output/scsorter_rts_",donor.group), compress = TRUE)
+```
+
+```{r}
+table(rts$Pred_Type)
+```
+
+```{r}
+gbm <- AddMetaData(gbm,rts$Pred_Type, col.name = "scSorter")
+```
+
+
+```{r}
+#Plot multiple pile chart into one 
+
+gbm.meta <- gbm[[]][c("donor_id","scSorter")]
+head(gbm.meta)
+
+
+gbm.meta <- gbm.meta %>%
+  group_by(donor_id, scSorter) %>%
+  summarise(count = n()) %>%
+  group_by(donor_id) %>%
+  mutate(per=count/sum(count)) %>% 
+  ungroup()
+
+
+ggplot(gbm.meta, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~donor_id)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +theme_void() +
+  labs(title = donor.group)
+
+```
+
+```{r}
+gbm.meta <- gbm.meta %>% 
+  cbind(data.frame(radiation = rep(donor.group,length(gbm.meta$scSorter))))
+
+head(gbm.meta)
+
+```
+
+```{r}
+saveRDS(gbm.meta,paste0("./../output/scsorter_meta_",donor.group))
+```
+
+#Compaire gbm donor pairwise-manner
+```{r}
+
+#Combined first to easier analysis
+ctrl.meta <-readRDS(paste0("./../output/scsorter_meta_control"))
+radiated.meta <- readRDS(paste0("./../output/scsorter_meta_radiated"))
+
+gbm.meta <- rbind(ctrl.meta,radiated.meta)
+unique(gbm.meta$radiation)
+```
+
+```{r}
+#All donors in one pile
+ggplot(gbm.meta, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~radiation)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  labs(title="All donors")
+```
+
+```{r}
+ggplot(gbm.meta, aes(x= "", y = count, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~ donor_id + radiation)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  labs(title="All donors")
+
+```
+```{r}
+ggplot(gbm.meta, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~ donor_id + radiation)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  labs(title="All donors")
+
+```
+
+
+#Check whether individual the same results
+```{r}
+###Let works on E31N because (1) result is so weird####
+donor.id <- "E31N"
+
+#Pick donor or radiated
+donor.group <- "control"
+
+#Load to be subset
+gbm <- readRDS(paste0("./../output/",donor.group,"_pp"))
+
+
+Idents(gbm) <- "donor_id"
+each <- subset(gbm, idents = donor.id)
+```
+
+```{r}
+topgenes <- head(VariableFeatures(each), 2000)
+#expr = GetAssayData(each, assay = "SCT", slot = "data")
+expr = GetAssayData(each, assay = "RNA", slot = "data")
+topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+topgenes = topgenes[topgene_filter]
+```
+
+```{r}
+picked_genes = unique(c(anno$Marker, topgenes))
+expr = expr[rownames(expr) %in% picked_genes, ]
+```
+
+```{r}
+rts <- scSorter(expr, anno)
+```
+
+```{r}
+saveRDS(rts,paste0("./../output/scsorter_rts_",donor.id,"_",donor.group), compress = TRUE)
+```
+
+```{r}
+each <- AddMetaData(each,rts$Pred_Type, col.name = "scSorter")
+```
+
+```{r}
+each.meta <- each[[]][c("donor_id","scSorter")]
+
+each.meta <- each.meta %>%
+  group_by(donor_id, scSorter) %>%
+  summarise(count = n()) %>%
+  group_by(donor_id) %>%
+  mutate(per=count/sum(count)) %>% 
+  ungroup()
+
+```
+```{r}
+ggplot(each.meta, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~donor_id)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +theme_void() + 
+  labs(title = donor.id,subtitle = donor.group)
+
+
+#So definitely the proportion is different 
+# I suppose analyse seperately will give more intuitive results
+```
+
+
+
+#Now lets try to automate it all
+```{r}
+
+rts.list <- list()
+each.meta.list <- list()
+
+for (i in experiment) {
+
+donor.group <- i
+
+#gbm <- readRDS(paste0("./../output/",donor.group,"_pp"))
+gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_scale_cluster"))
+donor.id.list <- as.character(unique(gbm$donor_id))
+
+Idents(gbm) <- "donor_id"
+
+  for (i in 1:length(donor.id.list)) {
+    donor.id <- donor.id.list[i]
+    each <- subset(gbm, idents = donor.id)
+    print(1)
+    #Just copy the code to here
+    topgenes <- head(VariableFeatures(each), 2000)
+    #expr = GetAssayData(each, assay = "SCT", slot = "data")
+    print(2)
+    expr = GetAssayData(each, assay = "RNA", slot = "data")
+    print(3)
+    topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+    print(4)
+    topgenes = topgenes[topgene_filter]
+    print(5)
+    picked_genes = unique(c(anno$Marker, topgenes))
+    print(6)
+    expr = expr[rownames(expr) %in% picked_genes, ]
+    print(7)
+    rts <- scSorter(expr, anno)
+    print(8)
+    rts.list[[length(rts.list) + 1]] <- rts
+    print(4)
+    
+    each <- AddMetaData(each,rts$Pred_Type, col.name = "scSorter")
+    each.meta <- each[[]][c("donor_id","scSorter")]
+    each.meta <- each.meta %>%
+    group_by(donor_id, scSorter) %>%
+    summarise(count = n()) %>%
+    group_by(donor_id) %>%
+    mutate(per=count/sum(count)) %>% 
+    ungroup()
+    print(5)
+    each.meta <- each.meta %>% 
+    cbind(data.frame(radiation = rep(donor.group,length(each.meta$scSorter))))
+    print(6)
+    each.meta.list[[length(each.meta.list) + 1]] <- each.meta
+  }
+}
+
+
+```
+
+```{r}
+#Keep rts results of all
+
+saveRDS(rts.list,paste0("./../output/scsorter_rts_all"), compress = TRUE)
+saveRDS(each.meta.list,paste0("./../output/scsorter_meta_all"), compress = TRUE)
+```
+
+```{r}
+#each.meta.list <- readRDS("./../output/scsorter_meta_all")
+
+each.meta.df <- data_frame()
+for (i in 1:length(each.meta.list)) {
+  each.meta.df <- rbind(each.meta.df,(each.meta.list[[i]]))
+}
+```
+
+```{r}
+ggplot(each.meta.df, aes(x= "", y = count, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~ donor_id + radiation)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  labs(title="All donors")
+```
+
+```{r}
+each.meta.df <- each.meta.df %>% mutate(per_round = as.integer(per*100))
+
+head(each.meta.df)
+
+ggplot(each.meta.df, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~ donor_id + radiation)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  geom_text(aes(label = per_round),
+            position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors")
+```
+```{r}
+write.csv(each.meta.df,"./../output/scsorter_summary.csv",row.names = FALSE)
+```
+
+# Test on only 4 subtype
+```{r}
+anno <- as.data.frame(read_xlsx("./../data/gbm_subtype_genelist_scsorter.xlsx",sheet = 2))
+```
+
+
+```{r}
+#Copied code >> and modified so that the each meta data is not the summation yet
+rts.list.all <- list()
+each.meta.list.all <- list()
+experiment <- c("control","radiated")
+
+for (i in experiment) {
+  rts.list <- list()
+  each.meta.list <- list()
+  donor.group <- i
+  
+  #gbm <- readRDS(paste0("./../output/",donor.group,"_pp"))
+  gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_scale_cluster"))
+  donor.id.list <- as.character(unique(gbm$donor_id))
+  Idents(gbm) <- "donor_id"
+
+  for (i in 1:length(donor.id.list)) {
+    donor.id <- donor.id.list[i]
+    each <- subset(gbm, idents = donor.id)
+    #Just copy the code to here
+    topgenes <- head(VariableFeatures(each), 2000)
+    #expr = GetAssayData(each, assay = "SCT", slot = "data")
+    expr = GetAssayData(each, assay = "RNA", slot = "data")
+    topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+    topgenes = topgenes[topgene_filter]
+    picked_genes = unique(c(anno$Marker, topgenes))
+    expr = expr[rownames(expr) %in% picked_genes, ]
+    
+    rts <- scSorter(expr, anno)
+    
+    #rts.list[[length(rts.list) + 1]] <- rts
+    rts.list[[donor.id]] <- c(rts.list[[donor.id]], rts)
+    
+    each <- AddMetaData(each,rts$Pred_Type, col.name = "scSorter")
+    each.meta <- each@meta.data[c("radiation","donor_id","scSorter")]
+    each.meta <- rownames_to_column(each.meta)
+    # each.meta <- each[[]][c("donor_id","scSorter")]
+    # each.meta <- each.meta %>%
+    # group_by(donor_id, scSorter) %>%
+    # summarise(count = n()) %>%
+    # group_by(donor_id) %>%
+    # mutate(per=count/sum(count)) %>%
+    # ungroup()
+    # each.meta <- each.meta %>%
+    # cbind(data.frame(radiation = rep(donor.group,length(each.meta$scSorter))))
+    
+    #each.meta.list[[length(each.meta.list) + 1]] <- each.meta
+    
+    each.meta.list[[donor.id]] <- c(each.meta.list[[donor.id]], each.meta)
+  }
+  rts.list.all[[donor.group]] <- c(rts.list.all[[donor.group]], rts.list)
+  each.meta.list.all[[donor.group]] <- c(each.meta.list.all[[donor.group]], each.meta.list)
+}
+# (Warning: The following specified marker genes are not found from the expression data: PPAP2B, GPR17, LPPR1, TMEM206, HMP19.)
+```
+
+```{r}
+str(rts.list.all)
+str(each.meta.list.all)
+```
+
+```{r}
+#Keep rts results of all
+
+saveRDS(rts.list.all,paste0("./../output/scsorter_rts_all_4equal"), compress = TRUE)
+saveRDS(each.meta.list.all,paste0("./../output/scsorter_meta_all_4equal"), compress = TRUE)
+```
+
+
+```{r}
+each.meta.list.all <- readRDS(paste0("./../output/scsorter_meta_all_4equal"))
+
+str(each.meta.list.all)
+```
+
+
+```{r}
+#Demultiplex list
+each.meta.df <- data.frame()
+for (i in 1:length(each.meta.list.all)) {
+  
+  for (c in 1:length(each.meta.list.all[[i]])) {
+  each.meta.df <- rbind(each.meta.df,(each.meta.list.all[[i]][[c]]))
+  }
+}
+colnames(each.meta.df)[1] <- "cell_id"
+
+each.meta.df
+```
+
+```{r}
+write.csv(each.meta.df,"./../output/scsorter_4equal.csv",row.names = FALSE)
+```
+
+```{r}
+#Explore result
+## How many for each cell type
+each.meta.df
+```
+```{r}
+each.meta
+```
+
+```{r}
+#Visualisation
+each.meta.df <- each.meta.df %>% mutate(per_round = as.integer(per*100))
+
+head(each.meta.df)
+
+ggplot(each.meta.df, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~ radiation + donor_id, ncol = 8)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  geom_text(aes(label = per_round),
+            position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors")
+
+```
+
+#Test on newly 4 subtype without reduction; also on combined runs 1 + 2
+
+
+```{r}
+anno <- as.data.frame(read_xlsx("./../data/gbm_subtype_genelist_scsorter.xlsx",sheet = 3))
+anno
+```
+
+
+```{r}
+#Copied code >> and modified so that the each meta data is not the summation yet
+rts.list.all <- list()
+each.meta.list.all <- list()
+experiment <- c("control","radiated")
+
+for (i in experiment) {
+  rts.list <- list()
+  each.meta.list <- list()
+  donor.group <- i
+  
+  #gbm <- readRDS(paste0("./../output/",donor.group,"_pp"))
+  gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_scale_cluster"))
+  donor.id.list <- as.character(unique(gbm$donor_id))
+  Idents(gbm) <- "donor_id"
+
+  for (i in 1:length(donor.id.list)) {
+    donor.id <- donor.id.list[i]
+    each <- subset(gbm, idents = donor.id)
+    #Just copy the code to here
+    topgenes <- head(VariableFeatures(each), 2000)
+    #expr = GetAssayData(each, assay = "SCT", slot = "data")
+    expr = GetAssayData(each, assay = "RNA", slot = "data")
+    topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+    topgenes = topgenes[topgene_filter]
+    picked_genes = unique(c(anno$Marker, topgenes))
+    expr = expr[rownames(expr) %in% picked_genes, ]
+    
+    rts <- scSorter(expr, anno)
+    
+    #rts.list[[length(rts.list) + 1]] <- rts
+    rts.list[[donor.id]] <- c(rts.list[[donor.id]], rts)
+    
+    each <- AddMetaData(each,rts$Pred_Type, col.name = "scSorter")
+    each.meta <- each@meta.data[c("radiation","donor_id","scSorter")]
+    each.meta <- rownames_to_column(each.meta)
+    # each.meta <- each[[]][c("donor_id","scSorter")]
+    # each.meta <- each.meta %>%
+    # group_by(donor_id, scSorter) %>%
+    # summarise(count = n()) %>%
+    # group_by(donor_id) %>%
+    # mutate(per=count/sum(count)) %>%
+    # ungroup()
+    # each.meta <- each.meta %>%
+    # cbind(data.frame(radiation = rep(donor.group,length(each.meta$scSorter))))
+    
+    #each.meta.list[[length(each.meta.list) + 1]] <- each.meta
+    
+    each.meta.list[[donor.id]] <- c(each.meta.list[[donor.id]], each.meta)
+  }
+  rts.list.all[[donor.group]] <- c(rts.list.all[[donor.group]], rts.list)
+  each.meta.list.all[[donor.group]] <- c(each.meta.list.all[[donor.group]], each.meta.list)
+}
+# (Warning: The following specified marker genes are not found from the expression data: PPAP2B, GPR17, LPPR1, TMEM206, HMP19.)
+```
+
+```{r}
+str(rts.list.all)
+str(each.meta.list.all)
+```
+
+```{r}
+#Keep rts results of all
+
+saveRDS(rts.list.all,paste0("./../output/scsorter_rts_all_4equal"), compress = TRUE)
+saveRDS(each.meta.list.all,paste0("./../output/scsorter_meta_all_4equal"), compress = TRUE)
+```
+
+
+```{r}
+each.meta.list.all <- readRDS(paste0("./../output/scsorter_meta_all_4equal"))
+
+str(each.meta.list.all)
+```
+
+
+```{r}
+#Demultiplex list
+each.meta.df <- data.frame()
+for (i in 1:length(each.meta.list.all)) {
+  
+  for (c in 1:length(each.meta.list.all[[i]])) {
+  each.meta.df <- rbind(each.meta.df,(each.meta.list.all[[i]][[c]]))
+  }
+}
+colnames(each.meta.df)[1] <- "cell_id"
+
+each.meta.df
+```
+
+```{r}
+write.csv(each.meta.df,"./../output/scsorter_4equal.csv",row.names = FALSE)
+```
+
+```{r}
+#Explore result
+## How many for each cell type
+each.meta.df
+```
+```{r}
+each.meta
+```
+
+```{r}
+#Visualisation
+each.meta.df <- each.meta.df %>% mutate(per_round = as.integer(per*100))
+
+head(each.meta.df)
+
+ggplot(each.meta.df, aes(x= "", y = per, fill=scSorter)) + 
+  geom_col() +
+  facet_wrap(~ radiation + donor_id, ncol = 8)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  geom_text(aes(label = per_round),
+            position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors")
+
+
+```
+

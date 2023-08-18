@@ -1,0 +1,1030 @@
+```{r}
+library(Seurat)
+library(SeuratDisk)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(readxl)
+library(scSorter)
+library(patchwork)
+library(HGC)
+library(UCell)
+```
+```{r}
+set.seed(1)
+```
+
+```{r}
+#import smartseq
+smrt_mtx <- read.delim("./../data/neftel/IDHwtGBM.processed.SS2.logTPM.txt.gz")
+rownames(smrt_mtx) <- smrt_mtx[,1]
+smrt_mtx <- smrt_mtx[,-1]
+head(smrt_mtx)
+colnames(smrt_mtx) <- gsub("\\.","-",colnames(smrt_mtx))
+smrt_mtx <- smrt_mtx[,order(colnames(smrt_mtx))]
+head(smrt_mtx)
+
+meta <- read.delim("./../data/neftel/metadata.txt")
+meta <- meta[-1,]
+rownames(meta) <- meta$NAME
+meta <- meta[order(rownames(meta)),]
+
+library(Seurat)
+smrt <- CreateSeuratObject(smrt_mtx,meta.data = meta)
+
+rm(smrt_mtx)
+```
+
+
+
+#check data 
+```{r}
+#Check TPM
+#As whether it is TPM yet`  
+hist(smrt$nCount_RNA)
+```
+```{r}
+#Check non-malignant cell
+unique(smrt$CellAssignment)
+table(smrt$CellAssignment)
+```
+
+#Remove count and convert log2 to simple normalized
+```{r}
+smrt <- DietSeurat(smrt, counts = FALSE, data = TRUE)
+norm <-as((2^(smrt@assays$RNA@data)) -1,"CsparseMatrix")
+norm <- CreateAssayObject(data = norm)
+smrt[["norm"]] <- norm
+
+#Now if we want to analyse TPM >> use data slot in norm assay ; if want log2 + 1P use data slot in RNA assay
+
+```
+
+
+#QC, Normalization and scale
+```{r}
+library(tibble)
+# filter by MT, Count, feature
+Idents(smrt) <- "orig.ident"
+smrt[["percent.mt"]] <- PercentageFeatureSet(smrt, pattern = "^MT-")
+
+```
+
+```{r}
+VlnPlot(smrt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+#Percent.mt not found
+```
+#Subset only malignant cell assignment
+```{r}
+Idents(smrt) <- "CellAssignment"
+smrt.mal <- subset(smrt, idents = "Malignant")
+rm(smrt)
+```
+
+
+
+
+
+
+
+
+```{r}
+#Remove cell that have no score
+smrt.mal$isNA <- is.na(smrt.mal$NPClike1)
+Idents(smrt.mal) <- "isNA"
+smrt.mal <- subset(smrt.mal, idents = FALSE)
+```
+
+```{r}
+#Skip log normalize as it is logTPM
+smrt.mal <- ScaleData(smrt.mal)
+smrt.mal <- FindVariableFeatures(smrt.mal, selection.method = "vst", nfeatures = 2000)
+
+smrt.mal <- RunPCA(smrt.mal, features = VariableFeatures(object = smrt.mal))
+```
+
+```{r}
+ElbowPlot(smrt.mal)
+```
+
+
+```{r}
+smrt.mal <- RunUMAP(smrt.mal, dims = 1:15)
+# smrt.mal <- RunTSNE(smrt.mal, dims = 1:15)
+```
+
+```{r}
+p0 <- DimPlot(smrt.mal, reduction = "umap",group.by = "Sample",label = FALSE)
+p0
+```
+
+```{r}
+p0 <- DimPlot(smrt.mal, reduction = "tsne",group.by = "Sample")
+p0
+```
+
+
+#Label 
+```{r}
+smrt.mal.meta <- smrt.mal@meta.data
+
+phenotype <- c("MESlike2","MESlike1","AClike","OPClike","NPClike1","NPClike2")
+score <- smrt.mal@meta.data[,phenotype]
+score$MESlike2 <- as.numeric(score$MESlike2)
+score <- transform(score, MESlike2 = as.numeric(MESlike2),
+          MESlike1 = as.numeric(MESlike1),
+          AClike = as.numeric(AClike),
+          OPClike = as.numeric(OPClike),
+          NPClike1 = as.numeric(NPClike1),
+          NPClike2 = as.numeric(NPClike2)
+          )
+
+q10 <- apply(score,2,function(x) {
+  quantile(x,probs = c(0.10))
+})
+
+celltype_merge.all <- c()
+for (i in 1:nrow(score)) {
+  
+  score_cell <- sort(unlist((score[i,])),decreasing = TRUE)
+  score_cell 
+  MES <- c(score_cell["MESlike1"],score_cell["MESlike2"])
+  min <- names(MES[which.min(MES)])
+  min %in% score_cell
+  score_cell <- score_cell[!names(score_cell) %in% min]
+  
+  NPC <- c(score_cell["NPClike1"],score_cell["NPClike2"])
+  min <- names(NPC[which.min(NPC)])
+  min %in% score_cell
+  score_cell <- score_cell[!names(score_cell) %in% min]
+  score_cell
+  
+  first <- score_cell[1]
+  second <- score_cell[2]
+  third <- score_cell[3]
+  
+  
+  if  ((second > 1) &
+      (second > q10[names(second)]) &
+      ((second-third) >= 0.3)) {
+    #celltype <- paste0("hybrid_",names(first),"_",names(second))
+    celltype <- "hybrid"
+  } else {
+    celltype <- names(score_cell[1])
+  }
+  celltype.all <- append(celltype.all,celltype)
+}
+```
+
+```{r}
+smrt.mal$celltype <- celltype.all
+```
+
+
+```{r}
+p0 <- DimPlot(smrt.mal, reduction = "umap",group.by = "celltype",label = FALSE, split.by = "celltype",ncol = 4)
+p0
+```
+```{r}
+#Merge MES and NPC
+smrt.mal.meta <- smrt.mal@meta.data
+smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "MESlike1")] <- "MESlike"
+smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "MESlike2")] <- "MESlike"
+
+smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "NPClike1")] <- "NPClike"
+smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "NPClike2")] <- "NPClike"
+
+smrt.mal$celltype_merge <- smrt.mal.meta$celltype
+```
+
+```{r}
+p0 <- DimPlot(smrt.mal, reduction = "umap",group.by = "celltype_merge",label = FALSE, split.by = "celltype_merge",ncol = 4)
+p0
+```
+
+```{r}
+#remove hybrid
+Idents(smrt.mal) <- "celltype"
+smrt.mal <- subset(smrt.mal, idents = "hybrid", invert = TRUE)
+smrt.mal.no.hybrid@meta.data
+```
+```{r}
+p0 <- DimPlot(smrt.mal.no.hybrid, reduction = "umap",group.by = "celltype_merge",label = FALSE,ncol = 2,)
+p0
+```
+
+#feature plot sub-type signature and senescence
+```{r}
+#load subtpye signature
+#signatures <- read_xlsx("./../data/gbm_subtype_genelist.xlsx",sheet = 2)
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 3)
+
+colnames(signatures)[5] <- "G1_S"
+colnames(signatures)[6] <- "G2_M"
+
+signatures <- as.list(signatures) 
+signatures <- lapply(signatures, na.omit)
+
+signatures <- signatures[-c(5,6)]
+
+signatures
+```
+
+```{r}
+#smrt <- AddModuleScore(smrt, features =signatures,ctrl = 80, name = names(signatures))
+smrt.mal <- AddModuleScore_UCell(smrt.mal, features =signatures)
+
+
+```
+
+```{r}
+p0 <- DimPlot(smrt.mal, reduction = "umap",group.by = "celltype_merge",label = TRUE)
+p0
+```
+
+
+```{r}
+colnames(smrt.mal@meta.data) 
+```
+
+```{r}
+Idents(smrt.mal) <- "celltype_merge"
+p0 <- FeaturePlot(smrt.mal, features = c("MES_UCell" , "AC_UCell","OPC_UCell","NPC_UCell"), label = TRUE, repel = TRUE) 
+p0
+```
+
+```{r}
+VlnPlot(smrt.mal, features = c("MES_UCell" , "AC_UCell","OPC_UCell","NPC_UCell" ), ncol = 2,)
+```
+
+
+
+#Senescence Lucy
+```{r}
+#create senescence score
+signatures_sen <- list( senescence = scan("./../data/lucy_senesence_genes.txt",character(), sep = ",", strip.white = TRUE)) 
+signatures_sen
+```
+```{r}
+smrt.mal <- AddModuleScore(smrt.mal, features =signatures_sen,ctrl = 80, name = names(signatures_sen),search = TRUE)
+```
+
+```{r}
+Idents(smrt.mal) <- "celltype_merge"
+p0 <- FeaturePlot(smrt.mal, features = c("senescence1"), label = TRUE, repel = TRUE) 
+p0
+```
+
+```{r}
+p0 <- VlnPlot(
+  smrt.mal,
+  features = "senescence1",
+  group.by = "Sample",
+  )
+
+p0 <- p0 + theme(axis.text.x.bottom = element_text(angle = 90, size = 5))
+p0
+
+```
+
+
+```{r}
+p0 <- VlnPlot(
+  smrt.mal,
+  features = "senescence1",
+  group.by = "celltype_merge"
+  )
+
+p0
+```
+
+
+```{r}
+library(ggplot2)
+# Basic box plot
+p <- ggplot(smrt.mal@meta.data, aes(x=celltype_merge, y=senescence1, fill=celltype_merge)) + 
+  geom_boxplot()
+p <- p + theme(
+  axis.text.x.bottom = element_text(angle = 90, size = 5)
+)
+p
+
+```
+
+
+```{r}
+library(ggplot2)
+# Basic box plot
+p <- ggplot(smrt.mal@meta.data, aes(x=celltype_merge, y=senescence1, fill=celltype_merge)) + 
+  geom_boxplot(outlier.shape = NA)
+p <- p + facet_wrap(~ Sample)
+p <- p + theme(
+  axis.text.x.bottom = element_text(angle = 90, size = 5)
+)
+p
+
+```
+
+```{r}
+#Check whether it is statistically different
+## Do ANOVA
+aov.model <- aov(senescence1 ~ celltype_merge, data = smrt.mal@meta.data)
+summary(aov.model)
+```
+
+```{r}
+#create Q-Q plot to compare this dataset to a theoretical normal distribution 
+qqnorm(smrt.mal$senescence1, pch = 1, frame = FALSE)
+```
+
+```{r}
+hist(smrt.mal$senescence1)
+#Seem to have normal dis
+```
+
+```{r}
+ks.test(smrt.mal$senescence1, "pnorm")
+#No >>  distribution is not the same
+```
+
+
+```{r}
+bartlett.test(senescence1 ~ celltype_merge, data = smrt.mal@meta.data)
+#So there is heteroscedasticity
+```
+
+
+```{r}
+# Kruskal-Wallis H test 
+krustal.model <- kruskal.test(senescence1 ~ celltype_merge, data = smrt.mal@meta.data)
+krustal.model
+```
+
+```{r}
+# pairwise.wilcox
+pairwise.wilcox.test(smrt.mal$senescence1, smrt.mal$celltype_merge,
+                 p.adjust.method = "BH")
+```
+```{r}
+unique(smrt.mal$celltype_merge)
+```
+
+```{r}
+# Compare MES to the rest
+MES <- data.frame(matrix(nrow = nrow(smrt.mal@meta.data), ncol = 1))
+colnames(MES) <- "MESlike"
+smrt.mal$MES <- MES
+smrt.mal$MES[smrt.mal$celltype_merge == "MESlike"] <- "MESlike"
+smrt.mal$MES[!smrt.mal$celltype_merge == "MESlike"] <- "others"
+
+smrt.mal$MES  <- as.factor(smrt.mal$MES)
+
+
+```
+```{r}
+library(ggplot2)
+# Basic box plot
+p <- ggplot(smrt.mal@meta.data, aes(x=MES, y=senescence1, fill=MES)) + 
+  geom_boxplot()
+p
+```
+
+
+
+
+
+```{r}
+bartlett.test(senescence1 ~ MES, data = smrt.mal@meta.data)
+#So there is heteroscedasticity
+```
+```{r}
+ks.test(smrt.mal$senescence1, "pnorm")
+
+#No >>  distribution is not the same
+```
+
+
+
+```{r}
+model.wilcox <- wilcox.test(senescence1 ~ MES, data = smrt.mal@meta.data,
+                   exact = FALSE)
+
+str(model.wilcox)
+```
+
+```{r}
+smrt.mal$Sample <- as.factor(smrt.mal$Sample)
+levels(smrt.mal$Sample)
+
+smrt.mal.meta <- smrt.mal@meta.data
+
+# in smrt.mal.meta.list[[7]] it is all NA celltype_merge so we have to remove it
+smrt.mal.meta <- smrt.mal.meta[!smrt.mal.meta$Sample == "BT85",]
+smrt.mal.meta$Sample <- droplevels(smrt.mal.meta$Sample)
+
+smrt.mal.meta[smrt.mal.meta$Sample == "BT85",]
+
+levels(smrt.mal.meta$Sample)
+
+smrt.mal.meta.list <- split(smrt.mal.meta, f = smrt.mal.meta$Sample)
+
+wilcox.list <- list()
+for (i in 1:length(smrt.mal.meta.list)) {
+  print(i)
+  wilcox.each <- wilcox.test(senescence1 ~ MES, data = smrt.mal.meta.list[[i]], exact = FALSE)
+  wilcox.list <- append(wilcox.list, list(wilcox.each))
+}
+
+
+
+str(wilcox.list)
+
+wilcox.list
+
+for (i in 1:length(wilcox.list)) {
+
+  print(wilcox.list[[i]]$p.value < 0.05)
+
+}
+```
+
+
+
+```{r}
+library(ggplot2)
+# Basic box plot
+p <- ggplot(smrt.mal@meta.data, aes(x=MES, y=senescence1, fill=MES)) + 
+  geom_boxplot(outlier.shape = NA)
+p <- p + facet_wrap(~ Sample)
+p <- p + theme(
+  axis.text.x.bottom = element_text(angle = 90, size = 5)
+)
+p
+```
+
+#Try annotation in several tools
+```{r}
+gbm <- readRDS(paste0("./../output/temp"))
+
+library(scSorter)
+#Scsorter
+anno <- as.data.frame(read_xlsx("./../data/gbm_subtype_genelist_scsorter.xlsx",sheet = 2))
+
+#Copied code >> and modified so that the each meta data is not the summation yet
+rts.list <- list()
+each.meta.list <- list()
+
+gbm <- readRDS(paste0("./../output/temp"))
+donor.id.list <- as.character(unique(gbm$Sample))
+Idents(gbm) <- "Sample"
+  
+levels(Idents(gbm))
+
+for (i in 1:length(donor.id.list)) {
+    donor.id <- donor.id.list[i]
+    each <- subset(gbm, idents = donor.id)
+    #Just copy the code to here
+    topgenes <- head(VariableFeatures(each), 2000)
+    #expr = GetAssayData(each, assay = "SCT", slot = "data")
+    expr = GetAssayData(each, assay = "RNA", slot = "data")
+    topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+    topgenes = topgenes[topgene_filter]
+    picked_genes = unique(c(anno$Marker, topgenes))
+    expr = expr[rownames(expr) %in% picked_genes, ]
+    
+    rts <- scSorter(expr, anno)
+    
+    #rts.list[[length(rts.list) + 1]] <- rts
+    rts.list[[donor.id]] <- c(rts.list[[donor.id]], rts)
+    
+    each <- AddMetaData(each,rts$Pred_Type, col.name = "scSorter")
+    each.meta <- each@meta.data[c("NAME","Sample","scSorter")]
+    each.meta <- rownames_to_column(each.meta)
+    each.meta.list[[donor.id]] <- c(each.meta.list[[donor.id]], each.meta)
+}
+
+
+str(each.meta.list)
+
+
+#Demultiplex list
+each.meta.df <- data.frame()
+for (i in 1:length(each.meta.list)) {
+  
+  each.meta.df <- rbind(each.meta.df,(each.meta.list[[i]]))
+}
+colnames(each.meta.df)[1] <- "cell_id"
+
+rownames(each.meta.df) <- each.meta.df$cell_id
+each.meta.df
+gbm <- AddMetaData(gbm,each.meta.df[4])
+gbm@meta.data
+DimPlot(gbm, group.by = "seurat_clusters")
+```
+```{r}
+DimPlot(gbm, group.by = "scSorter")
+```
+
+```{r}
+DimPlot(gbm, group.by = "celltype_merge")
+DimPlot(gbm, group.by = "Sample")
+```
+```{r}
+#try scSorter without splitting the cell
+#Just copy the code to here
+topgenes <- head(VariableFeatures(gbm), 2000)
+#expr = GetAssayData(gbm, assay = "SCT", slot = "data")
+expr = GetAssayData(gbm, assay = "RNA", slot = "data")
+topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
+topgenes = topgenes[topgene_filter]
+picked_genes = unique(c(anno$Marker, topgenes))
+expr = expr[rownames(expr) %in% picked_genes, ]
+
+rts <- scSorter(expr, anno)
+
+gbm <- AddMetaData(gbm,rts$Pred_Type, col.name = "scSorter_all")
+```
+```{r}
+p0 <- DimPlot(gbm, group.by = "scSorter_all",cols = c('AC' = 'red', 'MES' = 'lightblue', 'NPC' = 'green', 'OPC' = 'orange','Unknown' = 'black')) + theme(legend.text = element_blank())
+p1 <- DimPlot(gbm, group.by = "scSorter",cols = c('AC' = 'red', 'MES' = 'lightblue', 'NPC' = 'green', 'OPC' = 'orange','Unknown' = 'black')) + labs(title = "scSorter_each")
+p0 + p1
+```
+
+#markercount 
+```{r}
+#cannot done because no raw_count
+```
+
+
+```{r}
+#sctype
+lapply(c("dplyr","Seurat","HGNChelper"), library, character.only = T)
+
+
+# load gene set preparation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
+# load cell type annotation function
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
+
+
+# DB file
+db_ = "./../data/gbm_subtype_genelist_sctype_4equal.xlsx"
+tissue = "gbm"
+
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+gs_list
+
+es.max = sctype_score(scRNAseqData = gbm[["RNA"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = NULL) 
+cL_resutls = do.call("rbind", lapply(unique(gbm@meta.data$seurat_clusters), function(cl){
+    es.max.cl = sort(rowSums(es.max[ ,rownames(gbm@meta.data[gbm@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(gbm@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)
+
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+gbm@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  gbm@meta.data$customclassif[gbm@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+sctype <- as.data.frame(gbm$customclassif)
+gbm$sctype_4equal <- sctype
+```
+```{r}
+DimPlot(gbm, reduction = "umap",  group.by = 'sctype_4equal')
+```
+```{r}
+Idents(gbm) <- "celltype_merge"
+DimPlot(subset(gbm,idents = levels(gbm$celltype_merge)), reduction = "umap",  group.by = 'sctype_4equal',split.by = "celltype_merge", ncol = 2)  + labs(subtitle = "sc-type; split by neftel_celltype_merge; group by sctype", caption = "unknown = /4 (default)") + theme(legend.title = element_text()) 
+```
+
+#Build new geneset
+```{r}
+library(ggvenn)
+
+if (!require(devtools)) install.packages("devtools")
+devtools::install_github("yanlinlin82/ggvenn")
+
+#Load Dataset
+smrt.mal <- readRDS("./../output/smrt_mal")
+```
+```{r}
+smrt.mal@meta.data
+```
+
+
+```{r}
+smrt.mal$celltype_merge <- as.factor(smrt.mal$celltype_merge)
+Idents(smrt.mal) <- "celltype_merge"
+```
+
+
+
+
+
+
+```{r}
+# npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+
+npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike",only.pos = TRUE)
+opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike",only.pos = TRUE)
+ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike",only.pos = TRUE)
+mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike",only.pos = TRUE)
+
+
+npc.de.other.markers <- npc.de.other.markers[order(npc.de.other.markers$avg_log2FC,decreasing = TRUE),]
+npc.de.other.markers <- npc.de.other.markers[1:50,]
+
+opc.de.other.markers <- opc.de.other.markers[order(opc.de.other.markers$avg_log2FC,decreasing = TRUE),]
+opc.de.other.markers <- opc.de.other.markers[1:50,]
+
+ac.de.other.markers <- ac.de.other.markers[order(ac.de.other.markers$avg_log2FC,decreasing = TRUE),]
+ac.de.other.markers <- ac.de.other.markers[1:50,]
+
+mes.de.other.markers <- mes.de.other.markers[order(mes.de.other.markers$avg_log2FC,decreasing = TRUE),]
+mes.de.other.markers <- mes.de.other.markers[1:50,]
+#logfc.threshold and min.diff.pct are very arbitrary 
+```
+
+
+
+```{r}
+x = list(NPC = rownames(npc.de.other.markers), AC = rownames(ac.de.other.markers),MES = rownames(mes.de.other.markers), OPC = rownames(opc.de.other.markers))
+
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "New")
+vein
+```
+```{r}
+#compare with original
+library(readxl)
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 4)
+signatures
+```
+
+```{r}
+#Check intersection with each other
+x = list(NPC = signatures$NPC, AC = signatures$AC,MES = signatures$MES, OPC = signatures$OPC)
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "original")
+vein
+```
+
+
+```{r}
+mes <- ggvenn(list(orig = signatures$MES, new = rownames(mes.de.other.markers)),auto_scale = FALSE,set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "MESlike")
+mes 
+
+opc <- ggvenn(list(orig = signatures$OPC, new = rownames(opc.de.other.markers)),auto_scale = FALSE,set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "OPClike")
+opc
+
+npc <- ggvenn(list(orig = signatures$NPC, new = rownames(npc.de.other.markers)),auto_scale = FALSE,set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "NPClike")
+npc
+
+ac <- ggvenn(list(orig = signatures$AC, new = rownames(ac.de.other.markers)),auto_scale = FALSE,set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "AClike")
+ac
+
+library(patchwork)
+(mes | opc) / (npc | ac)
+```
+
+
+```{r}
+# Also compare to database
+markers.db <-read_excel("./../data/Cell_marker_Human.xlsx")
+
+
+markers.db.ac <- subset(markers.db, grepl("Astrocyte", cell_name, ignore.case = TRUE))[,c(7,9,10)]
+unique(markers.db.ac$cell_name)
+markers.db.ac <- subset(markers.db, cell_name == "Astrocyte")[,c(7,9,10)]
+
+
+
+
+markers.db.mes <- subset(markers.db, grepl("Mesenchy", cell_name, ignore.case = TRUE))[,c(7,9,10)]
+unique(markers.db.mes$cell_name)
+markers.db.mes <- subset(markers.db, cell_name == "Mesenchymal cell")[,c(7,9,10)]
+
+markers.db.npc <- rbind(subset(markers.db, grepl("neura", cell_name, ignore.case = TRUE))[,c(7,9,10)],subset(markers.db, grepl("neuro", cell_name, ignore.case = TRUE))[,c(7,9,10)])
+markers.db.npc <- subset(markers.db.npc,!grepl("non", cell_name, ignore.case = TRUE))
+unique(markers.db.npc$cell_name)
+markers.db.npc <- subset(markers.db, cell_name == "Neural progenitor cell")[,c(7,9,10)]
+
+
+markers.db.opc <- subset(markers.db, grepl("oligodendro", cell_name, ignore.case = TRUE))[,c(7,9,10)]
+unique(markers.db.opc$cell_name)
+markers.db.opc <- subset(markers.db, cell_name == "Oligodendrocyte progenitor cell")[,c(7,9,10)]
+
+
+markers.db.gbm <- subset(markers.db, grepl("glioblasto", cell_name, ignore.case = TRUE))[,c(7,9,10)]
+unique(markers.db.gbm$cell_name)
+
+marker.all <- list()
+marker.all <- append(marker.all,list(ac = unique(markers.db.ac$cell_name)))
+marker.all <- append(marker.all,list(mes = unique(markers.db.mes$cell_name)))
+marker.all <- append(marker.all,list(npc = unique(markers.db.npc$cell_name)))
+marker.all <- append(marker.all,list(opc = unique(markers.db.opc$cell_name)))
+#marker.all <- append(marker.all,list(gbm = unique(markers.db.gbm$cell_name)))
+marker.all
+```
+```{r}
+signatures$NPC
+rownames(npc.de.other.markers)
+unique(markers.db.npc$Symbol)
+
+intersect(unique(markers.db.npc$Symbol),signatures$NPC)
+Reduce(intersect,list(signatures$NPC,rownames(npc.de.other.markers),unique(markers.db.npc$Symbol)))
+```
+
+
+
+
+```{r}
+mes <- ggvenn(list(orig = signatures$MES, new = rownames(mes.de.other.markers), db = unique(markers.db.mes$Symbol), gbm = unique(markers.db.gbm$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "MESlike")
+mes 
+
+opc <- ggvenn(list(orig = signatures$OPC, new = rownames(opc.de.other.markers), db = unique(markers.db.opc$Symbol), gbm = unique(markers.db.gbm$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "OPClike")
+opc
+
+npc <- ggvenn(list(orig = signatures$NPC, new = rownames(npc.de.other.markers), db = unique(markers.db.npc$Symbol), gbm = unique(markers.db.gbm$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "NPClike")
+npc
+
+ac <- ggvenn(list(orig = signatures$AC, new = rownames(ac.de.other.markers), db = unique(markers.db.ac$Symbol), gbm = unique(markers.db.gbm$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "AClike")
+ac
+
+(mes + opc) / (npc +ac)
+```
+
+```{r}
+mes <- ggvenn(list(orig = signatures$MES, new = rownames(mes.de.other.markers), db = unique(markers.db.mes$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "MESlike")
+mes 
+
+opc <- ggvenn(list(orig = signatures$OPC, new = rownames(opc.de.other.markers), db = unique(markers.db.opc$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "OPClike")
+opc
+
+npc <- ggvenn(list(orig = signatures$NPC, new = rownames(npc.de.other.markers), db = unique(markers.db.npc$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "NPClike")
+npc
+
+ac <- ggvenn(list(orig = signatures$AC, new = rownames(ac.de.other.markers), db = unique(markers.db.ac$Symbol)),set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "AClike")
+ac
+
+(mes + opc) / (npc +ac)
+```
+
+```{r}
+#Add metamodule based on new score 
+signatures.new <- list()
+signatures.new <- append(signatures.new,list(NPC.new = rownames(npc.de.other.markers)))
+signatures.new <- append(signatures.new,list(OPC.new = rownames(opc.de.other.markers)))
+signatures.new <- append(signatures.new,list(AC.new = rownames(ac.de.other.markers)))
+signatures.new <- append(signatures.new,list(MES.new = rownames(mes.de.other.markers)))
+signatures.new
+```
+
+```{r}
+saveRDS(signatures.new, file = "./../output/signature_subtype_new")
+```
+
+```{r}
+library(stringi)
+data.frame(stri_list2matrix(signatures.new))
+
+signatures.new.df <- data.frame(stri_list2matrix(signatures.new))
+colnames(signatures.new.df) <- names(signatures.new)
+
+signatures.new.df
+```
+```{r}
+write.csv(signatures.new.df, file = paste0("./../output/signature_subtype_",sig,".csv"), col.names = TRUE, row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+#Add metamodule based on new score
+smrt.mal <- AddModuleScore_UCell(smrt.mal, features =signatures.new)
+
+```
+
+```{r}
+smrt.mal@meta.data
+```
+
+```{r}
+Idents(smrt.mal) <- "celltype_merge"
+p0 <- FeaturePlot(smrt.mal, features = c("NPC.new_UCell","OPC.new_UCell","MES.new_UCell","AC.new_UCell")) 
+p0
+```
+
+
+```{r}
+VlnPlot(smrt.mal, features = c("NPC.new_UCell","OPC.new_UCell","MES.new_UCell","AC.new_UCell"), ncol = 2)
+```
+
+
+```{r}
+#Try nebula
+# install.packages("devtools")
+# library(devtools)
+# install_github("lhe17/nebula")
+
+library(nebula)
+
+```
+
+
+
+#Save
+```{r}
+saveRDS(smrt.mal,"./../output/smrt_mal", compress = TRUE)
+```
+
+
+#10X of Neftel
+```{r}
+data.dir <- "./../data/neftel/" 
+
+
+neftel.10x.1 <- Read10X(data.dir = paste0(data.dir,"1/"))
+neftel.10x.1  = CreateSeuratObject(neftel.10x.1)
+unique(neftel.10x.1$orig.ident)
+
+neftel.10x.2 <- Read10X(data.dir = paste0(data.dir,"2/"))
+neftel.10x.2  = CreateSeuratObject(neftel.10x.2)
+unique(neftel.10x.2$orig.ident)
+
+neftel.10x <- merge(neftel.10x.1, y = neftel.10x.2)
+
+```
+```{r}
+neftel.10x@meta.data
+```
+
+```{r}
+# filter by MT, Count, feature
+Idents(neftel.10x) <- "orig.ident"
+
+neftel.10x[["percent.mt"]] <- PercentageFeatureSet(neftel.10x, pattern = "^MT-")
+```
+
+```{r}
+VlnPlot(neftel.10x, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+```{r}
+Idents(neftel.10x) <- "orig.ident"
+plot2 <- FeatureScatter(neftel.10x, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot3 <- FeatureScatter(neftel.10x, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot2 +plot3
+```
+
+```{r}
+library(scales)
+ggplot(neftel.10x@meta.data, aes(x=nCount_RNA,y= percent.mt)) +
+  geom_point(size = 0.2) +
+  facet_wrap(~orig.ident, ncol = 4) +
+  theme(axis.text.x = element_text( 
+                           size=5, angle=90),
+        axis.text.y = element_text( 
+                           size= 6)) +
+  scale_y_continuous(breaks=seq(0,70,10)) +
+  scale_x_continuous(breaks=c(10000,50000,100000,200000)) +
+  geom_hline(yintercept=15, linetype="dashed", color = "red") +
+  geom_vline(xintercept=5e+04, linetype="dashed", color = "red") +
+  labs(title = "orig.ident")
+```
+
+```{r}
+ggplot(neftel.10x@meta.data, aes(x=nCount_RNA,y= nFeature_RNA)) +
+  geom_point(size = 0.2) +
+  facet_wrap(~donor_id, ncol = 4) +
+  theme(axis.text.x = element_text( 
+                           size=5, angle=90),
+        axis.text.y = element_text( 
+                           size= 5)) +
+  scale_y_continuous(breaks=seq(0,12500,1000)) +
+  #scale_x_continuous(breaks=c(10000,50000,100000,200000)) 
+  geom_hline(yintercept=200, linetype="dashed", color = "red") +
+  geom_hline(yintercept= 12000, linetype="dashed", color = "red") +
+  geom_vline(xintercept=10000, linetype="dashed", color = "red") +
+  labs(title = donor.group)
+```
+
+```{r}
+# Filter the same way as neftel
+neftel.10x.list <- SplitObject(neftel.10x, split.by = "orig.ident")
+
+neftel.10x.list <- lapply(X = neftel.10x.list, FUN = function(x) {
+    mean.feature <- mean(x$nFeature_RNA)
+    x <- subset(x, subset = nFeature_RNA > (0.5*mean.feature) & nFeature_RNA < (2*mean.feature) & percent.mt < 15)
+
+})
+
+```
+```{r}
+x = 0
+for (i in neftel.10x.list) {
+    x <- x+ nrow(i@meta.data)  
+}
+x
+nrow(neftel.10x@meta.data)
+1 - x/nrow(neftel.10x@meta.data)
+```
+```{r}
+library(scCustomize)
+neftel.10x <- Merge_Seurat_List(
+  neftel.10x.list,
+  add.cell.ids = NULL,
+  merge.data = TRUE)
+```
+```{r}
+VlnPlot(neftel.10x, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+```{r}
+non.malig <- list(mac = c("CD14", "AIF1", "FCER1G", "FCGR3A", "TYROBP", "CSF1R"),
+                  tcell = c("CD2", "CD3D", "CD3E", "CD3G"),
+                  oli = c("MBP", "TF", "PLP1", "MAG", "MOG", "CLDN11"))
+names(non.malig)
+```
+
+```{r}
+neftel.10x <- AddModuleScore(neftel.10x,features = non.malig,name = names(non.malig), nbin = 30,ctrl = 100)
+```
+
+```{r}
+neftel.10x@meta.data
+neftel.10x.mal <- !neftel.10x$mac1 >= 0.5
+table(neftel.10x)
+hist(neftel.10x$tcell2)
+hist(neftel.10x$oli3)
+```
+
+
+```{r}
+neftel.10x.mal <- subset(x = neftel.10x, subset = oli3 < 3 & mac1 < 0.5)
+```
+
+```{r}
+
+neftel.10x.mal <- NormalizeData(neftel.10x.mal, normalization.method = "LogNormalize", scale.factor = 10000)
+all.genes <- rownames(neftel.10x.mal)
+neftel.10x.mal <- ScaleData(neftel.10x.mal, features = all.genes)
+neftel.10x.mal <- FindVariableFeatures(neftel.10x.mal, selection.method = "vst", nfeatures = 2000)
+
+neftel.10x.mal <- RunPCA(neftel.10x.mal, features = VariableFeatures(object = neftel.10x.mal))
+neftel.10x.mal <- FindNeighbors(neftel.10x.mal, dims = 1:10)
+neftel.10x.mal <- FindClusters(neftel.10x.mal, resolution = 0.5)
+
+neftel.10x.mal <- RunUMAP(neftel.10x.mal, dims = 1:10)
+
+DimPlot(neftel.10x.mal, reduction = "umap",group.by = "orig.ident")
+```
+
+```{r}
+#Add score for subtype
+library(UCell)
+
+#This list is 4 without reducing
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 4)
+
+colnames(signatures)[5] <- "G1_S"
+colnames(signatures)[6] <- "G2_M"
+
+signatures <- as.list(signatures) 
+signatures <- lapply(signatures, na.omit)
+signatures <- signatures[-c(5,6)]
+
+neftel.10x.mal <- AddModuleScore_UCell(neftel.10x.mal, features = signatures)
+neftel.10x.mal <- AddModuleScore(neftel.10x.mal, features = signatures, name = names(signatures))
+```
+
+```{r}
+FeaturePlot(neftel.10x.mal, features = c("MES_UCell","NPC_UCell","OPC_UCell","AC_UCell"), label = FALSE)
+```
+```{r}
+FeaturePlot(neftel.10x.mal, features = c("MES1","NPC4","OPC3","AC2"))
+```
+```{r}
+library(ggpubr)
+ggviolin(neftel.10x.mal@meta.data,  y = c("MES_UCell","NPC_UCell","OPC_UCell","AC_UCell"),merge = TRUE) + facet_wrap("orig.ident",ncol = 5) + theme(axis.text.x = element_blank(),axis.ticks.x = element_blank()) + labs(title = "cellular state signatures",subtitle = "control & 2 runs; signatures = 4 signatures (merge without filter)",caption = "AddModuleScore(seurat)")
+```
+
+```{r}
+library(ggpubr)
+ggviolin(neftel.10x.mal@meta.data,   y= c("MES1","NPC4","OPC3","AC2"),merge = TRUE) + facet_wrap("orig.ident",ncol = 5) + theme(axis.text.x = element_blank(),axis.ticks.x = element_blank()) + labs(title = "cellular state signatures",subtitle = "control & 2 runs; signatures = 4 signatures (merge without filter)",caption = "AddModuleScore(seurat)")
+```
+
+

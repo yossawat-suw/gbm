@@ -1,0 +1,74 @@
+
+```{r}
+#Train
+set.seed(100)
+stList<-splitCommon(sampTab = stTM, ncells = as.integer(0.8*(min(table(stTM$celltype)))), dLevel = "celltype")
+
+stTrain<-stList[[1]]
+expTrain <- expTMraw[,rownames(stTrain)]
+
+system.time(class_info<-scn_train(stTrain = stTrain, expTrain = expTrain, nTopGenes = 10, nRand = 70, nTrees = 1000, nTopGenePairs = 25, dLevel = "celltype", colName_samp = "NAME"))
+```
+```{r}
+#Test/validate
+set.seed(2)
+stTestList = splitCommon(sampTab=stList[[2]], as.integer(0.2*(min(table(stTM$celltype)))), dLevel="celltype") 
+stTest = stTestList[[1]]
+expTest = expTMraw[commonGenes,rownames(stTest)]
+
+classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat=expTest, nrand = 50)
+
+tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "NAME", classTrain = "celltype", classQuery = "celltype", nRand = 50)
+
+plot_PRs(tm_heldoutassessment)
+
+plot_metrics(tm_heldoutassessment)
+
+nrand = 50
+sla = as.vector(stTest$celltype)
+names(sla) = as.vector(stTest$NAME)
+slaRand = rep("rand", nrand) 
+names(slaRand) = paste("rand_", 1:nrand, sep='')
+sla = append(sla, slaRand) #include in the random cells profile created
+sc_hmClass(classMat = classRes_val_all,grps = sla, max=300, isBig=TRUE)
+
+plot_attr(classRes=classRes_val_all, sampTab=stTest, nrand=nrand, dLevel="celltype", sid="NAME")
+```
+
+```{r}
+#Train
+set.seed(100)
+stList<-splitCommon(sampTab = stTM, ncells = as.integer(0.8*(min(table(stTM$celltype)))), dLevel = "celltype_merge")
+
+stTrain<-stList[[1]]
+expTrain <- expTMraw[,rownames(stTrain)]
+
+system.time(class_info<-scn_train(stTrain = stTrain, expTrain = expTrain, nTopGenes = 10, nRand = 70, nTrees = 1000, nTopGenePairs = 25, dLevel = "celltype_merge", colName_samp = "NAME"))
+```
+```{r}
+#Test/validate
+set.seed(2)
+stTestList = splitCommon(sampTab=stList[[2]], as.integer(0.2*(min(table(stTM$celltype_merge)))), dLevel="celltype_merge") 
+stTest = stTestList[[1]]
+expTest = expTMraw[commonGenes,rownames(stTest)]
+
+classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat=expTest, nrand = 50)
+
+tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "NAME", classTrain = "celltype_merge", classQuery = "celltype_merge", nRand = 50)
+
+plot_PRs(tm_heldoutassessment)
+
+plot_metrics(tm_heldoutassessment)
+
+nrand = 50
+sla = as.vector(stTest$celltype_merge)
+names(sla) = as.vector(stTest$NAME)
+slaRand = rep("rand", nrand) 
+names(slaRand) = paste("rand_", 1:nrand, sep='')
+sla = append(sla, slaRand) #include in the random cells profile created
+sc_hmClass(classMat = classRes_val_all,grps = sla, max=300, isBig=TRUE)
+
+plot_attr(classRes=classRes_val_all, sampTab=stTest, nrand=nrand, dLevel="celltype_merge", sid="NAME")
+```
+
+

@@ -1,0 +1,24 @@
+```{r}
+install.packages("tensorflow")
+tensorflow::install_tensorflow(extra_packages='tensorflow-probability')
+```
+
+```{r}
+tensorflow::tf_config()
+```
+
+```{r}
+install.packages("devtools") # If not already installed
+devtools::install_github("Irrationone/cellassign")
+```
+
+```{r}
+tensorflow::tf_config()
+sess = tf$Session()
+hello <- tf$constant('Hello, TensorFlow!')
+sess$run(hello)
+```
+```{r}
+tensorflow::install_tensorflow()
+```
+

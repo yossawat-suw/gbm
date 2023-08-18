@@ -1,0 +1,411 @@
+
+```{r}
+library(UCell)
+library(Seurat)
+library(readxl)
+library(dplyr)
+library(tibble)
+```
+
+```{r}
+#Set commmon parameter
+experiment <- c("control","radiated")
+donor.group <- experiment[1]
+```
+
+```{r}
+#Load senescence score
+signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx",sheet = 3)
+
+colnames(signatures)[5] <- "G1_S"
+colnames(signatures)[6] <- "G2_M"
+
+#Try subset signatures
+#signatures <- signatures[1:10,]
+#signatures
+
+signatures <- as.list(signatures) 
+signatures <- lapply(signatures, na.omit)
+signatures
+```
+#Analyze on subset
+```{r}
+# Load dataset
+gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_scale_cluster"))
+
+#subset
+table(gbm$donor_id)
+#so E31N seems ok (25% of all dataset) 
+
+donor.id = "E37N"
+each <- subset(gbm,donor_id == donor.id)
+
+# run UCell
+each <- AddModuleScore_UCell(each, features=signatures)
+
+
+```
+
+```{r}
+#Check how many genes absent
+
+absent_genes <- c("ERO1L","C8orf4","PPAP2B","GPR17","LPPR1","TMEM206","HRASLS","GPR56","HMP19","HN1","SEPT3","LOC150568","KIAA0101","MLF1")
+
+absent_genes <- c("PPAP2B","GPR17","LPPR1","TMEM206","HMP19","KIAA0101","MLF1")
+
+library(misty)
+replace_NA <- function(ori,minus) {
+  as.na(ori,na = intersect(ori,minus))
+}
+
+signatures_filtered <- lapply(signatures,replace_NA,absent_genes)
+signatures_filtered
+
+signatures_na <- lapply(signatures_filtered,is.na)
+signatures_na_sum <- lapply(signatures_na,sum)
+
+
+signatures_filtered
+signatures_na_sum
+```
+```{r}
+each@meta.data
+```
+
+```{r}
+signature.names <- paste0(names(signatures), "_UCell")
+FeaturePlot(each, reduction = "umap", features = signature.names[1:4])
+```
+
+```{r}
+FeaturePlot(each, reduction = "umap", features = signature.names[5:6])
+```
+
+```{r}
+#Try to visualize more of the results
+meta <- each@meta.data
+
+ggplot(meta,aes(alpha = 0.2)) + 
+  geom_histogram(aes(x=AC_UCell,fill="AC"),bins = 50) +
+  geom_histogram(aes(x=MES_UCell,fill="MES"),bins = 50) +
+  geom_histogram(aes(x=NPC_UCell,fill="NES"),bins = 50) +
+  geom_histogram(aes(x=OPC_UCell,fill="OPC"),bins = 50)
+
+#So we can see that 
+```
+
+```{r}
+# plt <- each@meta.data %>%
+#   select("radiation", "donor_id","MES_UCell","AC_UCell","OPC_UCell","NPC_UCell") %>%
+#   rownames_to_column() %>%
+#   group_by(rowname) %>%
+#   mutate(y_axis = (max(NPC_UCell,OPC_UCell) - max(MES_UCell,AC_UCell))) %>%
+#   group_by(rowname) %>%
+#   mutate(x_axis =
+#            if (y_axis > 0) {
+#              log2(abs(NPC_UCell - OPC_UCell))
+#            } else {
+#              log2(abs(MES_UCell - AC_UCell))
+#            }
+#          ) %>%
+#   select("y_axis","x_axis")
+# 
+# plt
+
+
+#I dont think log should be taken so try without log
+plt <- meta %>% 
+  select("radiation", "donor_id","MES_UCell","AC_UCell","OPC_UCell","NPC_UCell") %>%
+  rownames_to_column() %>%
+  group_by(rowname) %>% 
+  mutate(y_axis = (max(NPC_UCell,OPC_UCell) - max(MES_UCell,AC_UCell))) %>% 
+  group_by(rowname) %>% 
+  mutate(x_axis = 
+           if (y_axis > 0) {
+             (NPC_UCell - OPC_UCell)
+           } else {
+             (MES_UCell - AC_UCell)
+           }
+         ) %>%
+  select("y_axis","x_axis")
+
+
+# lets orientate!
+# x_pos & y_pos (upper-right): NPC 
+# x_neg & y_pos (upper-left): OPC 
+# x_pos & y_neg (lower-right): MES
+# x_neg & y_neg (lower-left): AC
+```
+
+
+```{r}
+library(ggplot2)
+library(ggpmisc)
+
+ggplot(plt, aes(x = x_axis, y = y_axis)) +
+  geom_point() +
+  geom_quadrant_lines(linetype = "solid") +
+  scale_x_continuous(limits = symmetric_limits) +
+  scale_y_continuous(limits = symmetric_limits) +
+  theme(aspect.ratio=1) 
+
+
+```
+```{r}
+# So how to we design axis to be relatively on same scale
+#first idea is to scale  the scores for each into 0,1 by min-max scaling 
+#Define min-max function
+norm_minmax <- function(x){
+                           (x- min(x)) /(max(x)-min(x))
+}
+
+
+
+selected_meta <- c("MES_UCell","AC_UCell","OPC_UCell","NPC_UCell")
+test <- meta  %>%
+  select(selected_meta) %>%
+
+test <- as.data.frame(lapply(test, norm_minmax))
+test <- cbind(meta[,c("radiation","donor_id")],test)
+test <- rownames_to_column(test)
+
+test
+
+#Let visualize (by the similar code)
+plt <- test %>% 
+  group_by(rowname) %>% 
+  mutate(y_axis = (max(NPC_UCell,OPC_UCell) - max(MES_UCell,AC_UCell))) %>% 
+  group_by(rowname) %>% 
+  mutate(x_axis = 
+           if (y_axis > 0) {
+             (NPC_UCell - OPC_UCell)
+           } else {
+             (MES_UCell - AC_UCell)
+           }
+         ) %>%
+  select("y_axis","x_axis")
+```
+
+
+```{r}
+library(ggplot2)
+library(ggpmisc)
+ggplot(plt, aes(x = x_axis, y = y_axis)) +
+  geom_point() +
+  geom_quadrant_lines(linetype = "solid") +
+  scale_x_continuous(limits = symmetric_limits) +
+  scale_y_continuous(limits = symmetric_limits) +
+  theme(aspect.ratio=1) +
+  labs(subtitle = donor.id)
+
+```
+
+#Now try to automate run it all in all dataset 
+```{r}
+#Utilized autmate code from 2.scsorter
+each.meta.list.all <- list()
+
+for (i in experiment) {
+
+  each.meta.list <- list()
+  donor.group <- i
+  
+  #gbm <- readRDS(paste0("./../output/",donor.group,"_pp"))
+  #gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_scale_cluster"))
+  gbm <- readRDS(paste0("./../output/",donor.group,"_filter_norm_nolog"))
+  
+  donor.id.list <- as.character(unique(gbm$donor_id))
+  
+  Idents(gbm) <- "donor_id"
+
+  for (i in 1:length(donor.id.list)) {
+    donor.id <- donor.id.list[i]
+    each <- subset(gbm, idents = donor.id)
+    
+    # run UCell
+    each <- AddModuleScore_UCell(each, features=signatures)
+
+    signature.names <- paste0(names(signatures), "_UCell")
+    each.meta <- each@meta.data[c("radiation","donor_id",signature.names)]
+    each.meta <- rownames_to_column(each.meta, var = "cell_id")
+    
+    each.meta.list[[donor.id]] <- c(each.meta.list[[donor.id]], each.meta)
+  }
+  each.meta.list.all[[donor.group]] <- c(each.meta.list.all[[donor.group]], each.meta.list)
+}
+```
+
+
+```{r}
+saveRDS(each.meta.list.all,paste0("./../output/neftel_meta_all_4equal"), compress = TRUE)
+
+
+each.meta.list.all <- readRDS("./../output/neftel_meta_all_4equal")
+
+```
+
+```{r}
+# rbind all into one 
+meta.all <- data.frame()
+for ( group in each.meta.list.all) {
+  for (id in group) {
+    meta.all <- rbind(meta.all,as.data.frame(id))
+  }
+}
+```
+
+```{r}
+#first idea is to scale  the scores for each into 0,1 by min-max scaling 
+##Define min-max function
+norm_minmax <- function(x){
+                           (x- min(x)) /(max(x)-min(x))
+}
+
+
+
+selected_meta <- c("MES_UCell","AC_UCell","OPC_UCell","NPC_UCell")
+meta.all.scaled <- meta.all  %>%
+  select(selected_meta)
+
+meta.all.scaled <- as.data.frame(lapply(meta.all.scaled, norm_minmax))
+meta.all.scaled <- cbind(meta.all[,c("cell_id","radiation","donor_id")],meta.all.scaled)
+
+meta.all.scaled
+
+#Calculate for x,y coordinate
+## The below  code does not work because there mutate function found replicated cell_id and had problem with if else function. So skip to the next one
+
+# meta.all.scaled <- meta.all.scaled %>% 
+#   group_by(cell_id) %>% 
+#   mutate(y_axis = (max(NPC_UCell,OPC_UCell) - max(MES_UCell,AC_UCell))) %>% 
+#   group_by(cell_id) %>% 
+#   mutate(x_axis = 
+#            if (y_axis > 0) {
+#              (NPC_UCell - OPC_UCell)
+#            } else {
+#              (MES_UCell - AC_UCell)
+#            }
+#          )
+
+#This one is the correct one. so add index first and group by that
+library(tibble)
+meta.all.scaled <- rowid_to_column(meta.all.scaled, "index")
+meta.all.scaled <- meta.all.scaled %>% 
+  group_by(index) %>% 
+  mutate(y_axis = (max(NPC_UCell,OPC_UCell) - max(MES_UCell,AC_UCell))) %>% 
+  group_by(index) %>% 
+  mutate(x_axis = 
+           if (y_axis > 0) {
+             (NPC_UCell - OPC_UCell)
+           } else {
+             (MES_UCell - AC_UCell)
+           }
+         )
+
+
+#annotate each cell into quadrant
+meta.all.scaled <- meta.all.scaled %>% 
+  group_by(index) %>%
+  mutate(sub_type_point =
+           if (y_axis > 0 & x_axis > 0) {
+             "NPC"
+           } else if (y_axis > 0 & x_axis < 0) {
+             "OPC"
+           } else if (y_axis < 0 & x_axis > 0) {
+             "MES"
+           } else if (y_axis < 0 & x_axis < 0) {
+             "AC"
+           } else {
+             "unknown"
+           }
+        )
+meta.all.scaled$sub_type_point <- as.factor(meta.all.scaled$sub_type_point)
+meta.all.scaled
+```
+
+```{r}
+library(ggplot2)
+library(ggpmisc)
+signature.names <- paste0(names(signatures), "_UCell")
+signature.names
+
+#Change order of factor to make plot more nice
+meta.all.scaled$sub_type_point <- factor(meta.all.scaled$sub_type_point, levels = c("NPC", "OPC", "AC","MES"))
+
+ggplot(meta.all.scaled, aes(x = x_axis, y = y_axis)) +
+  # annotate("rect", xmin = Inf, xmax = 0, ymin = Inf, ymax = 0, fill= "red",alpha =.1)  + 
+  # annotate("rect", xmin = -Inf, xmax = 0, ymin = -Inf, ymax = 0 , fill= "blue",alpha =.1) + 
+  # annotate("rect", xmin = 0, xmax = Inf, ymin = 0, ymax = -Inf, fill= "yellow",alpha =.1) + 
+  # annotate("rect", xmin = 0, xmax = -Inf, ymin = Inf, ymax = 0, fill= "green",alpha =.1) +
+  geom_point(aes(color = sub_type_point),size = 0.05) +
+  geom_quadrant_lines(linetype = "solid") +
+  scale_x_continuous(limits = symmetric_limits) +
+  scale_y_continuous(limits = symmetric_limits) +
+  theme(aspect.ratio=1,plot.title = 
+          element_text(hjust = 0.5,margin = margin(0,0,.2,0, unit = "cm")),
+        strip.text.x.top = element_text(size = 5,margin = margin(0,0,0,0, unit = "cm")),
+        strip.background = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank()) +
+  guides(colour = guide_legend(override.aes = list(size=5))) +
+  facet_wrap(~ radiation + donor_id, ncol = 8) +
+  labs(title="All donors", subtitle = "Neftel",fill= "legend") +
+  scale_color_manual(breaks = c("NPC", "OPC", "AC","MES"),
+                        values=c("springgreen3", "dodgerblue", "lightcoral","yellowgreen"))
+
+
+    #geom_rect(data = signature.names, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = as.factor(med))) 
+
+
+```
+```{r}
+#Plot senescence score onto Neftel plot 
+dim(meta.all.scaled)
+```
+
+
+```{r}
+library(dplyr)
+each.meta.list.all <- readRDS("./../output/neftel_meta_all_4equal")
+meta.all <- data.frame()
+for ( group in each.meta.list.all) {
+  for (id in group) {
+    meta.all <- rbind(meta.all,as.data.frame(id))
+  }
+}
+meta.all
+
+#fix assign each cell type by highest score
+#Use variable meta.all from above 
+phenotype <- c("MES","AC","OPC","NPC")
+test <- meta.all %>% select(-c("G1_S_UCell","G2_M_UCell")) %>% apply(1,which.max)
+test
+test <- test -3
+test <- as.data.frame(phenotype[test])
+colnames(test) <- "UCell"
+
+meta.all <- cbind(meta.all,test)
+rm(test)
+meta.all
+
+meta.all <- meta.all %>% select(cell_id,radiation,donor_id,UCell)
+
+table(meta.all$UCell)
+```
+
+```{r}
+write.csv(meta.all,"./../output/neftel_4equal.csv",row.names = FALSE)
+
+```
+
+#Test code ba ba ba
+```{r}
+a <- c("1","2")
+b <- c(a,"3")
+b
+```
+
+
+
+

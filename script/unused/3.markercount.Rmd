@@ -1,0 +1,204 @@
+```{r}
+library(dplyr)
+library(SeuratDisk)
+library(ggplot2)
+```
+
+```{r}
+#set up configuration
+experiment <- c("control","radiated")
+```
+
+#For convert to anndata
+```{r}
+#Firstly convert factor back to charecter bc anndata interplete it strangely
+donor.group = "radiated"
+
+file <- readRDS(paste0("./../output/",donor.group,"_raw_filtered"))
+
+file$donor_id <- as.character(file$donor_id)
+
+
+SaveH5Seurat(file, filename = paste0("./../output/",donor.group,"_raw_filtered.h5Seurat"), overwrite = TRUE) 
+
+Convert(paste0("./../output/",donor.group,"_raw_filtered.h5Seurat"), dest = "h5ad",overwrite = TRUE)
+```
+
+#Then this part is analysized in this in jupyter notebook
+
+#Analyse result form jupytere notebook
+```{r}
+#Import
+each.meta.all <- read.csv("./../output/markercount.csv")
+
+```
+
+```{r}
+
+###Preprocessing 
+# (similar to scSorte with minor code adjustment)
+each.meta.list <- list()
+for (i in experiment){
+  donor.group <- i
+  each.meta <- subset(each.meta.all,radiation == donor.group)
+  
+  each.meta <- each.meta %>%
+  group_by(donor_id, markercount) %>%
+  summarise(count = n()) %>%
+  group_by(donor_id) %>%
+  mutate(per=count/sum(count)) %>% 
+  ungroup()
+  
+  each.meta <- each.meta %>% 
+  cbind(data.frame(radiation = rep(donor.group,length(each.meta$markercount))))
+  each.meta.list[[length(each.meta.list) + 1]] <- each.meta
+}
+
+each.meta.df <- data_frame()
+for (i in 1:length(each.meta.list)) {
+  each.meta.df <- rbind(each.meta.df,(each.meta.list[[i]]))
+}
+
+each.meta.df
+
+```
+
+```{r}
+
+each.meta.df <- each.meta.df %>% mutate(per_round = as.integer(per*100))
+
+ggplot(each.meta.df, aes(x= "", y = per, fill=markercount)) + 
+  geom_col() +
+  facet_wrap(~ donor_id + radiation)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  #geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors", subtitle = "markercount")
+```
+
+
+```{r}
+write.csv(each.meta.df,"./../output/markercount_summary.csv",row.names = FALSE)
+```
+
+
+# Compare to other methods
+```{r}
+#to scsorter
+mkc <- read.csv("./../output/markercount_summary.csv")
+
+scs <- read.csv("./../output/scsorter_summary.csv")
+```
+
+```{r}
+mkc
+```
+
+
+```{r}
+scs <- scs %>% 
+  cbind(data.frame(anno_tool = rep("scsorter",nrow(scs))))
+colnames(scs)[2] <- "cell_type"
+
+mkc <- mkc %>% 
+  cbind(data.frame(anno_tool = rep("markercount",nrow(mkc))))
+colnames(mkc)[2] <- "cell_type"
+
+
+anno_all <- rbind(mkc,scs)
+
+anno_all <- scs
+```
+
+
+```{r}
+ggplot(anno_all, aes(x= "", y = per,fill = cell_type)) + 
+  geom_col() +
+  facet_wrap(~anno_tool + radiation +  donor_id, ncol = 8)+
+  coord_polar("y", start=0) +
+  theme_void() +
+  #geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors") +
+  theme(plot.title = element_text(hjust = 0.5,margin = margin(0,0,.2,0, unit = "cm")),
+        strip.text.x = element_text(size = 5),
+        legend.title = element_text(size = 10, margin = margin(0,0.5,0.4,0, unit = "cm")),
+        legend.text = element_text(size = 7, margin = margin(0,0,0.2,0, unit = "cm")),
+        legend.position="bottom",
+        
+        legend.key.size = unit(0.2, "cm"),
+        legend.key.width = unit(0.2,"cm")) +
+  guides(fill = guide_legend(title.position = "left",label.position = "bottom", nrow = 1,
+    override.aes=list(shape = 16, size =0.1))) +
+  scale_fill_manual(values = c("darkorange", "red","firebrick", "darkblue","skyblue","purple","black"))
+
+```
+
+```{r}
+ggplot(anno_all, aes(x= "", y = per,fill = cell_type)) + 
+  geom_col() +
+  facet_wrap(~anno_tool + radiation +  donor_id, ncol = 8)+
+  coord_polar("y", start=0) +
+  theme_void() +
+  #geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors") +
+  theme(plot.title = element_text(hjust = 0.5,margin = margin(0,0,.2,0, unit = "cm")),
+        strip.text.x = element_text(size = 5),
+        legend.title = element_text(size = 10, margin = margin(0,0.5,0.4,0, unit = "cm")),
+        legend.text = element_text(size = 7, margin = margin(0,0,0.2,0, unit = "cm")),
+        legend.position="bottom",
+        
+        legend.key.size = unit(0.2, "cm"),
+        legend.key.width = unit(0.2,"cm")) +
+  guides(fill = guide_legend(title.position = "left",label.position = "bottom", nrow = 1,
+    override.aes=list(shape = 16, size =0.1))) +
+  scale_fill_manual(values = c("darkorange", "red","firebrick", "darkblue","skyblue","purple","black"))
+```
+
+#Try 4equal group
+```{r}
+each.meta.all <- read.csv("./../output/markercount_4equal.csv")
+
+###Preprocessing 
+# (similar to scSorte with minor code adjustment)
+each.meta.list <- list()
+for (i in experiment){
+  donor.group <- i
+  each.meta <- subset(each.meta.all,radiation == donor.group)
+  
+  each.meta <- each.meta %>%
+  group_by(donor_id, markercount) %>%
+  summarise(count = n()) %>%
+  group_by(donor_id) %>%
+  mutate(per=count/sum(count)) %>% 
+  ungroup()
+  
+  each.meta <- each.meta %>% 
+  cbind(data.frame(radiation = rep(donor.group,length(each.meta$markercount))))
+  each.meta.list[[length(each.meta.list) + 1]] <- each.meta
+}
+
+each.meta.df <- data_frame()
+for (i in 1:length(each.meta.list)) {
+  each.meta.df <- rbind(each.meta.df,(each.meta.list[[i]]))
+}
+
+each.meta.df <- each.meta.df %>% mutate(per_round = as.integer(per*100))
+```
+
+
+```{r}
+ggplot(each.meta.df, aes(x= "", y = per, fill=markercount)) + 
+  geom_col() +
+  facet_wrap(~ radiation +  donor_id, ncol = 8)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  #geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors", subtitle = "markercount")
+```
+```{r}
+each.meta.all <- read.csv("./../output/markercount_4equal.csv")
+each.meta.all
+```
+

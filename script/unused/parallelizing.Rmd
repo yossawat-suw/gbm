@@ -1,0 +1,91 @@
+#Try running in parallel
+```{r}
+#automatic install of packages if they are not installed already
+list.of.packages <- c(
+  "foreach",
+  "doParallel",
+  "ranger",
+  "palmerpenguins",
+  "tidyverse",
+  "kableExtra"
+  )
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+
+if(length(new.packages) > 0){
+  install.packages(new.packages, dep=TRUE)
+}
+
+#loading packages
+for(package.i in list.of.packages){
+  suppressPackageStartupMessages(
+    library(
+      package.i, 
+      character.only = TRUE
+      )
+    )
+}
+
+#loading example data
+#data("penguins")
+```
+
+
+```{r}
+library(foreach)
+library(doParallel)
+library(parallel)
+```
+
+```{r}
+parallel::detectCores()
+```
+
+```{r}
+n.cores <- parallel::detectCores() - 1
+```
+
+
+
+
+```{r}
+#create the cluster
+my.cluster <- parallel::makeCluster(
+  n.cores, 
+  type = "PSOCK"
+  )
+
+#check cluster definition (optional)
+print(my.cluster)
+```
+```{r}
+doParallel::registerDoParallel(cl = my.cluster)
+```
+```{r}
+foreach::getDoParRegistered()
+```
+```{r}
+foreach::getDoParWorkers()
+```
+
+
+
+
+```{r}
+x <- foreach(
+  i = 1:10, 
+  .combine = 'c'
+) %dopar% {
+    sqrt(i)
+  }
+x
+```
+```{r}
+clusterEvalQ(my.cluster, library(doParallel))
+```
+
+
+```{r}
+parallel::stopCluster(cl = my.cluster)
+```
+

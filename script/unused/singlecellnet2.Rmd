@@ -1,0 +1,97 @@
+
+
+```{r}
+library(singleCellNet)
+
+neftel.smt.scn <- readRDS("./../output/smrt_mal")
+neftel.smt.scn <- extractSeurat(neftel.smt.scn, exp_slot_name = "data")
+stTM = neftel.smt.scn$sampTab
+expTMraw = neftel.smt.scn$expDat
+
+stTM<-droplevels(stTM)
+
+gbm.scn <- readRDS("./../output/seurat_gbm_qc")
+gbm.scn <- extractSeurat(gbm.scn, exp_slot_name = "data")
+stQuery = gbm.scn$sampTab
+expQuery = gbm.scn$expDat
+
+rm(neftel.smt.scn,gbm.scn)
+gc()
+```
+
+
+
+```{r}
+commonGenes<-intersect(rownames(expTMraw), rownames(expQuery))
+expTMraw <- expTMraw[commonGenes, ]
+expQuery <- expQuery[commonGenes, ]
+```
+
+
+```{r}
+set.seed(100)
+stList<-splitCommon(sampTab = stTM, ncells = as.integer(0.8*(min(table(stTM$celltype)))), dLevel = "celltype")
+
+```
+
+
+```{r}
+(table(stTM$celltype))
+as.integer(0.8*(min(table(stTM$celltype))))
+table(stList$train$celltype)
+table(stList$val$celltype)
+```
+
+```{r}
+stTrain<-stList[[1]]
+expTrain <- expTMraw[,rownames(stTrain)]
+```
+
+
+```{r}
+system.time(class_info<-scn_train(stTrain = stTrain, expTrain = expTrain, nTopGenes = 10, nRand = 70, nTrees = 1000, nTopGenePairs = 25, dLevel = "celltype", colName_samp = "NAME"))
+```
+```{r}
+stTestList = splitCommon(sampTab=stList[[2]], as.integer(0.2*(min(table(stTM$celltype)))), dLevel="celltype") 
+stTest = stTestList[[1]]
+expTest = expTMraw[commonGenes,rownames(stTest)]
+
+#predict
+classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat=expTest, nrand = 50)
+```
+```{r}
+tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "NAME", classTrain = "celltype", classQuery = "celltype", nRand = 50)
+```
+
+
+```{r}
+plot_PRs(tm_heldoutassessment)
+```
+```{r}
+plot_metrics(tm_heldoutassessment)
+```
+```{r}
+nrand = 50
+sla = as.vector(stTest$celltype)
+names(sla) = as.vector(stTest$NAME)
+slaRand = rep("rand", nrand) 
+names(slaRand) = paste("rand_", 1:nrand, sep='')
+sla = append(sla, slaRand) #include in the random cells profile created
+
+sc_hmClass(classMat = classRes_val_all,grps = sla, max=300, isBig=TRUE)
+```
+```{r}
+plot_attr(classRes=classRes_val_all, sampTab=stTest, nrand=nrand, dLevel="celltype", sid="NAME")
+```
+```{r}
+system.time(gbm.pre <- scn_predict(class_info[['cnProc']], expQuery, nrand = 50))
+ncol(expQuery)
+```
+
+```{r}
+stQuery <- assign_cate(classRes = gbm.pre[,1:20043], sampTab = stQuery, cThresh = 0.5) 
+stQuery
+```
+
+
+

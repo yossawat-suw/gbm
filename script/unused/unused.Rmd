@@ -1,0 +1,110 @@
+
+
+#Sankey
+```{r}
+unique(unlist(test3[-1]))
+```
+
+
+```{r}
+unique(sc.sorter$scSorter)
+unique(marker.count$markercount)
+unique(u.cell$cell_id)
+unique(sc.type$scType)
+unique(sc.pred$scpred_no_rejection)
+```
+```{r}
+sc.sorter$scSorter[sc.sorter["scSorter"] == "MES1"] <- "MES"
+sc.sorter$scSorter[sc.sorter["scSorter"] == "MES2"] <- "MES"
+sc.sorter$scSorter[sc.sorter["scSorter"] == "NPC1"] <- "NPC"
+sc.sorter$scSorter[sc.sorter["scSorter"] == "NPC2"] <- "NPC"
+
+unique(sc.sorter$scSorter)
+
+# change "unassigned in markercount to "unknown"
+marker.count$markercount[marker.count["markercount"] == "unassigned"] <- "Unknown"
+
+marker.count$markercount[marker.count["markercount"] == "MES1"] <- "MES"
+marker.count$markercount[marker.count["markercount"] == "MES2"] <- "MES"
+marker.count$markercount[marker.count["markercount"] == "NPC1"] <- "NPC"
+marker.count$markercount[marker.count["markercount"] == "NPC2"] <- "NPC"
+
+unique(marker.count$markercount)
+
+# change "unassigned in markercount to "unknown"
+u.cell
+u.cell$UCell[u.cell["UCell"] == "MES1_UCell"] <- "MES"
+u.cell$UCell[u.cell["UCell"] == "MES2_UCell"] <- "MES"
+u.cell$UCell[u.cell["UCell"] == "NPC1_UCell"] <- "NPC"
+u.cell$UCell[u.cell["UCell"] == "NPC2_UCell"] <- "NPC"
+u.cell$UCell[u.cell["UCell"] == "OPC_UCell"] <- "OPC"
+u.cell$UCell[u.cell["UCell"] == "AC_UCell"] <- "AC"
+
+unique(u.cell$UCell)
+```
+
+```{r}
+# change "unassigned in markercount to "unknown"
+
+sc.type$scType[sc.type["scType"] == "MES1"] <- "MES"
+sc.type$scType[sc.type["scType"] == "MES2"] <- "MES"
+sc.type$scType[sc.type["scType"] == "NPC1"] <- "NPC"
+sc.type$scType[sc.type["scType"] == "NPC2"] <- "NPC"
+
+table(sc.type$scType)
+```
+
+```{r}
+
+# change "unassigned in markercount to "unknown"
+
+sc.pred$scpred_no_rejection[sc.pred["scpred_no_rejection"] == "MESlike"] <- "MES"
+sc.pred$scpred_no_rejection[sc.pred["scpred_no_rejection"] == "NPClike"] <- "NPC"
+sc.pred$scpred_no_rejection[sc.pred["scpred_no_rejection"] == "OPClike"] <- "OPC"
+sc.pred$scpred_no_rejection[sc.pred["scpred_no_rejection"] == "AClike"] <- "AC"
+
+
+```
+
+
+```{r}
+#convert all anno into factor
+
+
+sc.sorter$scSorter <- as.factor(sc.sorter$scSorter)
+marker.count$markercount <- as.factor(marker.count$markercount)
+u.cell$UCell <- as.factor(u.cell$UCell)
+sc.type$scType <- as.factor(sc.type$scType)
+sc.pred$scpred_no_rejection <- as.factor(sc.pred$scpred_no_rejection)
+```
+
+
+```{r}
+nrow(sc.sorter)
+nrow(marker.count)
+nrow(u.cell)
+nrow(sc.type)
+nrow(sc.pred)
+
+sc.sorter <- sc.sorter[sc.sorter$cell_id %in% marker.count$cell_id,]
+nrow(sc.sorter)
+```
+
+
+
+```{r}
+# combine all
+
+# Check if sorted equal
+sc.sorter <- sc.sorter[with(sc.sorter, order(cell_id)),]
+marker.count <- marker.count[with(marker.count, order(cell_id)),]
+u.cell <- u.cell[with(u.cell, order(cell_id)),]
+sc.type <- sc.type[with(sc.type, order(cell_id)),]
+sc.pred <- sc.pred[with(sc.pred, order(cell_id)),]
+
+
+all <- data.frame()
+all <- cbind(marker.count,scSorter= sc.sorter[,"scSorter"], UCell = u.cell[,"UCell"], scType = sc.type[,"scType"], scPred = sc.pred[,"scpred_no_rejection"])
+
+all.concensus <- all
+```
