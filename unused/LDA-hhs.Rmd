@@ -1,0 +1,93 @@
+```{r}
+https://github.com/mamouzgar/hsslda
+remotes::install_github("mamouzgar/hsslda", build_vignettes = FALSE)
+
+```
+
+```{r}
+library(hsslda)
+library(Seurat)
+library(dplyr)
+```
+
+```{r}
+data(TcellHartmann2020_sampleData)
+
+str(TcellHartmann2020_sampleData)
+head(TcellHartmann2020_sampleData)
+
+channels = c('GLUT1', 'HK2', 'GAPDH', 'LDHA', 'MCT1', 'PFKFB4', 'IDH2', 'CyclinB1', 'GLUD12', 'CS', 'OGDH', 'CytC', 'ATP5A', 'S6_p', 'HIF1A')
+train.x = TcellHartmann2020_sampleData[channels]
+train.y = TcellHartmann2020_sampleData[['labels']]
+
+train.x
+train.y
+
+#hss.result = runHSS(x = train.x, y = train.y, score.method = 'euclidean', downsample = FALSE)
+#hss.result$`HSS-LDA-result`
+
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_integrated_batch_plus_subtype")
+DefaultAssay(gbm) <- "integrated"
+gbm <- ScaleData(gbm, verbose = FALSE)
+all.features <- rownames(gbm@assays$integrated@meta.features)
+
+gbm <- RunPCA(gbm, npcs = 15, verbose = FALSE, features = all.features)
+```
+
+```{r}
+#create df with row as cell column as gene
+train.x <- gbm@reductions$pca@cell.embeddings
+train.x.df <- data.frame(train.x)
+
+#train.x.df <- train.x.df[1:100,1:10]
+train.x.df
+
+#table(rownames(train.x) == rownames(meta.data))
+
+metamodule.4.new50.onlydiverge <- read.csv("./../output/consensus_all_4metamodules_new_50_only_diverge.csv",row.names = 1)
+gbm <- AddMetaData(gbm,metadata = metamodule.4.new50.onlydiverge["consensus"],col.name = "new50_onlydiverge")
+train.y <- gbm@meta.data$new50_onlydiverge
+train.y
+
+#train.y <- gbm@meta.data$new50_onlydiverge[1:100]
+
+
+
+hss.result = runHSS(x = train.x.df, y = train.y, score.method = 'euclidean', downsample = TRUE)
+```
+
+```{r}
+hss.result
+```
+```{r}
+saveRDS(hss.result,file="./../output/ldl_gbm_integrate_batch_plus_subtype_pca15", compress = FALSE)
+```
+
+```{r}
+hhs.ld <- hss.result$`HSS-LDA-result` %>% select(c("HSS_LD1","HSS_LD2","HSS_LD3","HSS_LD4"))
+hhs.ld
+```
+
+```{r}
+colnames(hhs.ld) <- paste0("HHSLD_", 1:ncol(hhs.ld))
+head(hhs.ld)
+```
+
+```{r}
+hhs.ld <- as.matrix(hhs.ld)
+gbm[["hhs_ld"]] <- CreateDimReducObject(embeddings = hhs.ld, key = "HSSLD_", assay = DefaultAssay(gbm))
+```
+
+```{r}
+DimPlot(gbm, reduction = "hhs_ld", pt.size = 0.5 , group.by = "new50_onlydiverge")
+```
+```{r}
+DimPlot(gbm, reduction = "hhs_ld", pt.size = 0.5, group.by = "new50_onlydiverge", split.by = "new50_onlydiverge", ncol = 3)
+```
+
+
+
+#Test on real gene value, not the pca

@@ -1,0 +1,64 @@
+```{r}
+library(Seurat)
+```
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_integrated_batch_plus_subtype")
+DefaultAssay(gbm) <- "integrated"
+gbm <- ScaleData(gbm, verbose = FALSE)
+all.features <- rownames(gbm@assays$integrated@meta.features)
+
+gbm <- RunPCA(gbm, npcs = 15, verbose = FALSE, features = all.features)
+```
+
+
+```{r}
+library(TITAN)
+LDA_model <- runLDA(gbm, ntopics = 20, normalizationMethod = "CLR", seed.number = 8)
+```
+
+```{r}
+saveRDS(LDA_model, "./../output/LDA_20T_ctrl_CCA")
+
+LDA_model <- readRDS("./../output/LDA_20T_ctrl_CCA")
+```
+
+```{r}
+gbm <- addTopicsToSeuratObject(model = LDA_model, Object = gbm)
+```
+
+```{r}
+library(knitr)
+
+GeneDistrubition <- GeneScores(LDA_model)
+
+### head and sort the matrix by genes most contributing to Topic 1
+kable(head(GeneDistrubition[order(GeneDistrubition[,"Topic_1"], decreasing = T),],n = 10))
+```
+
+```{r}
+LDA_topics <- GetTopics(LDA_model, gbm)
+
+HeatmapTopic(Object = gbm,
+             topics =   LDA_topics, 
+             AnnoVector = gbm$seurat_clusters, 
+             AnnoName = "Cluster")
+
+```
+
+```{r}
+FeaturePlot(gbm, 
+            pt.size = 0.01, 
+            features  = paste("Topic", 1:4, sep = "_"), 
+            ncol = 2, 
+            min.cutoff = 'q1')
+```
+
+```{r}
+FeaturePlot(gbm, 
+            pt.size = 0.01, 
+            features  = paste("Topic", 9:12, sep = "_"), 
+            ncol = 2, 
+            min.cutoff = 'q1')
+```

@@ -1,0 +1,1976 @@
+```{r}
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+```
+
+```{r}
+source_rmd <- function(rmd_file){
+  knitr::knit(rmd_file, output = tempfile())
+}
+
+source_rmd("./../script/parameter.Rmd")
+
+```
+
+
+#Combine
+```{r}
+#Import metadata
+gbm.meta <- read.csv("./../output/gbm_meta.csv",row.names = 1)
+
+
+#import all data 
+#marker.based
+sc.sorter <- read.csv(paste0("./../output/scsorter_",object,"_",sig,".csv"),row.names = 1)
+marker.count <- read.csv(paste0("./../output/markercount_",object,"_",sig,".csv"),row.names = 1)
+u.cell <- read.csv(paste0("./../output/UCell_",object,"_",sig,".csv"),row.names = 1)
+sc.type <- read.csv(paste0("./../output/scType_",object,"_",sig,".csv"),row.names = 1)
+#scid.marker <- read.csv(paste0("./../output/scID_markers_",object,"_",sig,".csv"),row.names = 1)
+scina <- read.csv(paste0("./../output/SCINA_",object,"_",sig,".csv"),row.names = 1)
+
+#ref-based
+sc.pred <- read.csv(paste0("./../output/scpred_",object,"_",merge,".csv"),row.names = 1)
+clustify.r <- read.csv(paste0("./../output/clustifyr_",object,"_",merge,".csv"),row.names = 1)
+single.r <- read.csv(paste0("./../output/singleR_",object,"_",merge,".csv"),row.names = 1)
+#scid <- read.csv(paste0("./../output/scID_",object,"_",merge,".csv"),row.names = 1)
+scid <- read.csv(paste0("./../output/scID_",object,"_",merge,"_allassigned",".csv"),row.names = 1)
+scid <- scid[,"scID_edited",drop=FALSE]
+scibet <- read.csv(paste0("./../output/scibet_",object,"_",merge,".csv"),row.names = 1)
+chetah <- read.csv(paste0("./../output/CHETAH_",object,"_",merge,".csv"),row.names = 1)
+
+scmap_cluster <- read.csv(paste0("./../output/scmap_cluster_",object,"_",merge,".csv"),row.names = 1)
+
+scmap_cell <- read.csv(paste0("./../output/scmap_cell_",object,"_",merge,".csv"),row.names = 1)
+#Remove singlecellnet as it requires ref as count matrix only
+#single.cell.net <- read.csv("./../output/singleCellNet_all_4metamodules.csv",row.names = 1)
+
+#Remove scClassify as it results in intermediate hiera and cannot adjust to give only final celltype
+#sc.classify <- read.csv("./../output/scClassify_all_6metamodules.csv",row.names = 1)
+
+```
+
+```{r}
+head(clustify.r)
+head(single.r)
+#head(sc.classify)
+head(scid)
+head(scina)
+head(sc.sorter)
+head(marker.count)
+head(u.cell)
+head(sc.type)
+head(sc.pred)
+head(chetah)
+head(scibet)
+head(scmap_cluster)
+```
+
+```{r}
+library(tibble)
+celltype.list <- list()
+
+
+
+#Only diverse cell
+celltype.list <- list(scid,sc.type,scina,clustify.r)
+
+```
+
+
+
+```{r}
+
+celltype.list <- lapply(X=celltype.list, FUN = function(x) {
+  x <- rownames_to_column(x,var = "cell_id")
+  x <- x[1:2]
+})
+
+library(tidyverse)
+celltype.df <- celltype.list %>% reduce(inner_join, by='cell_id')
+
+celltype.df
+```
+
+```{r}
+#set name to be the same
+all <- celltype.df
+all <- data.frame(lapply(all, function (x) {gsub("MES.*1", "MES1",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("MES.*2", "MES2",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("NPC.*1", "NPC1",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("NPC.*2", "NPC2",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("like", "",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("_UCell", "",x)}))
+all <- data.frame(lapply(all, function (x) {gsub(".new", "",x)}))
+
+all <- data.frame(lapply(all, function (x) {gsub(c("Unknown"), "unknown",x)}))
+all <- data.frame(lapply(all, function (x) {gsub(c("unassigned"), "unknown",x)}))
+all <- data.frame(lapply(all, function (x) {gsub(c("unknown"), "unknown",x)}))
+
+
+
+#If wanna merge all 
+all <- data.frame(lapply(all, function (x) {gsub("MES.*1", "MES",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("MES.*2", "MES",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("NPC.*1", "NPC",x)}))
+all <- data.frame(lapply(all, function (x) {gsub("NPC.*2", "NPC",x)}))
+
+
+#Change 1 column back to row_names
+rownames(all) <- all[,1]
+all <- all[-1]
+
+head(all)
+```
+
+
+```{r}
+#shorten colname of some tools
+colnames(all)
+colnames(all)[which(colnames(all) == "scpred_no_rejection")] <- "scpred"
+colnames(all)[which(colnames(all) == "clustifyr_ref")] <- "clustifyr"
+```
+
+
+
+```{r}
+#Test varying consesus
+all.consensus<- all[,0]
+tools.total <- ncol(all)
+resolution <- seq(0, 1, by=0.25)
+#resolution <- 0.6
+for (n in resolution) {
+  cut.off <- n
+  keeps <- c()
+  print(n)
+  for (i in 1:nrow(all)) {
+    if (max(table(unlist(all[i,])))/tools.total >= cut.off) {
+      keep <- TRUE
+    } else {
+      keep <- FALSE
+    }
+  keeps <- append(keeps,keep)
+  }
+  all.consensus<- cbind(all.consensus,keeps)
+  print("finish")
+}
+
+colnames(all.consensus) <- paste0("res_",as.character(resolution))
+all.consensus
+```
+
+
+
+
+```{r}
+resolution.vary <- rep(colnames(all.consensus),2)
+filter <- c(rep("pass",ncol(all.consensus)),rep("fail",ncol(all.consensus)))
+#Counts 
+counts <- c()
+for (i in 1:ncol(all.consensus)) {
+  counts <- c(counts,sum(all.consensus[,i]))
+}
+counts <- append(counts, ((nrow(all.consensus))-counts))
+
+all.consensus.vary <- data.frame(resolution.vary,filter,counts)
+all.consensus.vary
+```
+
+
+```{r}
+# Stacked + percent
+ggplot(all.consensus.vary, aes(x=resolution.vary, fill=filter, y=counts)) + geom_bar(position="fill", stat="identity") + 
+  theme(
+    axis.text.x = element_text(angle = 90)
+  )
+```
+
+<!-- #Try IQV -->
+<!-- ```{r} -->
+<!-- #install.packages('qualvar') -->
+<!-- library(qualvar) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- #Calculate frequency for each -->
+<!-- for (i in 1:ncol(all)) { -->
+<!--   all[,i] <- as.factor(all[,i]) -->
+<!--   levels(all[,i]) <- c(levels(all[,i]), "AC","MES","NPC","OPC") -->
+<!-- }  -->
+
+<!-- all.freq <- data.frame() -->
+<!-- i <- 1 -->
+<!-- while (i  <= nrow(all)) { -->
+<!--   all.freq <- rbind(all.freq, table(unlist(all[i,]))) -->
+<!--   i <- i+1 -->
+<!-- } -->
+<!-- #set colname and rowname -->
+<!-- colnames(all.freq) <- levels(all[,1])  -->
+<!-- rownames(all.freq)  <- rownames(all) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- all.iqv <- all.freq[,0] -->
+
+<!-- all.iqv$DM <- apply(all.freq, 1, DM) -->
+<!-- all.iqv$MDA <- apply(all.freq, 1, MDA) -->
+<!-- all.iqv$ADA <- apply(all.freq, 1, ADA) -->
+<!-- all.iqv$VA <- apply(all.freq, 1, VA) -->
+<!-- all.iqv$HREL <- apply(all.freq, 1, HREL) -->
+<!-- all.iqv$B <- apply(all.freq, 1, B) -->
+
+
+<!-- # 0 mean more consistence; 1 mean zero agreement -->
+
+<!-- all.iqv <- format(round(all.iqv, 3), nsmall = 3) -->
+
+<!-- for (i in 1:ncol(all.iqv)) { -->
+<!--   all.iqv[,i] <- as.numeric(all.iqv[,i]) -->
+<!-- } -->
+
+
+<!-- all.iqv -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #Check the range of  -->
+<!-- unique(all.iqv[,1]) -->
+<!-- test <- list() -->
+<!-- for (i in 1:ncol(all.iqv)) { -->
+<!--   test <- append(test,list(unique(all.iqv[,i]))) -->
+<!-- } -->
+<!-- test -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- library(GGally) -->
+<!-- all.iqv %>% -->
+<!--   ggpairs(progress = FALSE) + -->
+<!--   theme_bw() -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- #calculate bin width  -->
+
+
+<!-- bin_num <- 10 -->
+
+<!-- p1 <- ggplot(all.iqv, aes(x=DM)) + geom_histogram(bins =  bin_num) -->
+<!-- p2 <- ggplot(all.iqv, aes(x=MDA)) + geom_histogram(bins =  bin_num) -->
+<!-- p3 <- ggplot(all.iqv, aes(x=ADA)) + geom_histogram(bins =  bin_num) -->
+<!-- p4 <- ggplot(all.iqv, aes(x=VA)) + geom_histogram(bins =  bin_num) -->
+<!-- p5 <- ggplot(all.iqv, aes(x=HREL)) + geom_histogram(bins =  bin_num)  -->
+<!-- p6 <- ggplot(all.iqv, aes(x=B)) + geom_histogram(bins =  bin_num) -->
+
+<!-- (p1 + p2 + p3) / (p4 + p5 + p6) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #color_by resolution -->
+<!-- all.iqv.con <- data.frame() -->
+<!-- all.iqv.con <- cbind(all.iqv,all.consensus) -->
+
+<!-- p1 <- ggplot(all.iqv.con, aes(x=DM, fill = res_0.6)) + geom_histogram(bins = bin_num) -->
+<!-- p1 -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- #Plot lolipop -->
+<!-- all.iqv.freq <- data.frame() -->
+<!-- for (i in 1:ncol(all.iqv)){ -->
+<!--   all.iqv.freq.each <- data.frame(table(all.iqv[,i])) -->
+<!--   all.iqv.freq.each <- cbind(all.iqv.freq.each, data.frame(method = rep(colnames(all.iqv)[i],nrow(all.iqv.freq.each)))) -->
+<!--   all.iqv.freq <- rbind(all.iqv.freq,all.iqv.freq.each) -->
+<!-- } -->
+
+<!-- colnames(all.iqv.freq)[1] <- "score" -->
+
+<!-- all.iqv.freq$score <- as.numeric(as.character(all.iqv.freq$score)) -->
+
+<!-- all.iqv.freq -->
+
+<!-- #also for log scale -->
+<!-- all.iqv.freq <- all.iqv.freq %>%  -->
+<!--   mutate(logFreq = log(Freq)) -->
+
+<!-- all.iqv.freq -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- ggplot(all.iqv.freq, aes(x=score, y=Freq)) + -->
+<!-- #ggplot(all.iqv.freq, aes(x=score, y=logFreq)) + -->
+<!--   geom_point(size=0.2) +  -->
+<!--   geom_segment( aes(x=score, xend=score, y=0, yend=Freq)) +  -->
+<!--   facet_wrap(~ method) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #ggplot(all.iqv.freq, aes(x=score, y=Freq)) + -->
+<!-- ggplot(all.iqv.freq, aes(x=score, y=logFreq)) + -->
+<!--   geom_point(size=0.2) +  -->
+<!--   geom_segment( aes(x=score, xend=score, y=0, yend=logFreq)) +  -->
+<!--   facet_wrap(~ method) -->
+<!-- ``` -->
+
+
+#Choose 1 concescus cut off
+```{r}
+# Stacked + percent
+ggplot(all.consensus.vary, aes(x=resolution.vary, fill=filter, y=counts)) + geom_bar(position="fill", stat="identity") + 
+  theme(
+    axis.text.x = element_text(angle = 90)
+  )
+```
+
+```{r}
+#Assign cell_type by mode
+pick.choice <- 0.5
+
+tools.total <- ncol(all)
+cut.off <- pick.choice
+vals <- c()
+
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+for (i in 1:nrow(all)) {
+val <- getmode(unlist(all[i,]))
+vals <- append(vals,val)
+}
+
+# all.consensus.pick <- all.consensus[paste0("res_",as.character(pick.choice))]
+all.consensus$consensus <- vals
+```
+
+
+```{r}
+table(all.consensus$consensus)
+```
+
+
+```{r}
+library(DescTools)
+
+
+vals <- c()
+ties <- c()
+freqs <- c()
+
+set.seed(7)
+
+for (i in 1:nrow(all)) {
+  anno.row <- unlist(all[i,])
+  
+  val <- Mode(anno.row)
+  
+
+  
+  freq <- attr(x= val, which = "freq")
+  #freq <- (freq/ncol(all))*100
+  
+  if (sum(is.na(val))==1) { # no same assignment at all 
+    val <- unique(anno.row)
+    val.pick <- sample(val,size = 1)
+    vals <- append(vals,val.pick)
+    tie <- length(unique(anno.row))
+    
+  } else {
+      tie <- length(val)
+      if (tie == 1) {
+       vals <- append(vals,as.character(val))
+    } else {
+      val.pick <- sample(val,size = 1)
+      vals <- append(vals,val.pick)
+    }
+  }
+  
+  
+  ties <- append(ties,tie)
+  freqs <- append(freqs,freq)
+  
+}
+
+
+test <- data.frame(consensus = vals, frequency_of_mode = freqs,the_number_of_tie = ties)
+# all.consensus.pick <- all.consensus[paste0("res_",as.character(pick.choice))]
+#all.consensus$consensus <- vals
+
+```
+
+```{r}
+tie.label
+```
+
+```{r}
+ggplot(data=test, aes(x=frequency_of_mode)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,12000) +
+  labs(title = "the frequency of mode", subtitle = paste0("total of ",ncol(all)," tools"))
+```
+
+```{r}
+test.adjust <- test
+test.adjust[test.adjust$frequency_of_mode==1,"frequency_of_mode"] <- "a b c d"
+test.adjust[test.adjust$frequency_of_mode==2,"frequency_of_mode"] <- "a a b b, a a b c"
+test.adjust[test.adjust$frequency_of_mode==3,"frequency_of_mode"] <- "a a a b"
+test.adjust[test.adjust$frequency_of_mode==4,"frequency_of_mode"] <- "a a a a"
+
+
+
+ggplot(data=test.adjust, aes(x=frequency_of_mode)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,12000) +
+  labs(title = "the frequency of mode", subtitle = paste0("total of ",ncol(all)," tools"))
+
+
+```
+
+```{r}
+ggplot(data=test, aes(x=ties)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,20000) +
+  labs(title = "how many cells are called tie", subtitle = paste0("total of ",ncol(all)," tools"))
+```
+
+
+
+
+
+```{r}
+#Explore tie cell
+all.label <- cbind(all,test.adjust)
+tie.label <- all[all.label$the_number_of_tie==2,]
+
+res.tie <- apply(tie.label,1,FUN = function(x){
+  unique(sort(unname(unlist(x))))
+})
+tie.label <- data.frame(t(res.tie)) %>% mutate(mix = paste(X1,X2))
+
+ggplot(data=tie.label, aes(x=mix)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,1000) +
+  labs(title = "how many of tie are called in the same cell", subtitle = paste0("total of ",nrow(tie.label)," tied cells"," from ",nrow(all)," cells"))
+```
+
+```{r}
+tie.label
+```
+
+
+```{r}
+#merge(all,tie.label,by = "row.names", all = TRUE)
+
+library(tidyverse)
+
+h <- list()
+g <- list()
+
+q <- list()
+
+h[[1]] <- as.tibble(rownames_to_column(all))
+
+g[[1]] <- as.tibble(rownames_to_column(tie.label[,"mix",drop =FALSE]))
+
+q[[1]] <- as.tibble(rownames_to_column(gbm.meta))
+
+all.meta.tie <- map2(q, h, left_join) %>% map2(.,g,left_join)
+all.meta.tie <- data.frame(all.meta.tie)
+
+tie.meta <- all.meta.tie[!is.na(all.meta.tie$mix),]
+tie.meta
+tie.radation <- split(tie.meta,f = tie.meta$radiation)
+
+str(tie.radation)
+```
+```{r}
+
+
+p1 <- ggplot(data=tie.radation[[1]], aes(x=mix)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,1000) +
+  labs(title = "Control:how many of tie are called in the same cell", subtitle = paste0("total of ",nrow(tie.radation[[1]])," tied cells"," from ",nrow(all)," cells"))
+
+
+
+p2 <- ggplot(data=tie.radation[[2]], aes(x=mix)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,1000) +
+  labs(title = "Radiated:how many of tie are called in the same cell", subtitle = paste0("total of ",nrow(tie.radation[[2]])," tied cells"," from ",nrow(all)," cells"))
+
+p1 / p2
+```
+
+
+
+```{r}
+#Try stochastic model
+
+
+vals <- c()
+
+set.seed(7)
+
+for (i in 1:nrow(all)) {
+  anno.row <- unlist(all[i,])
+  
+  val <- sample(anno.row,size = 1)
+  vals <- append(vals,val)
+}
+
+test.stochastic <- data.frame(consensus = vals)
+```
+
+```{r}
+ggplot(data=test.stochastic, aes(x=consensus)) +
+geom_bar() +
+geom_text(stat='count', aes(label=..count..), vjust=-1) + ylim(0,12000) +
+  labs(title = "consensus: random from tie", subtitle = paste0("total of ",ncol(all)," tools"))
+```
+```{r}
+# #Try stochastic model: try many seed
+# for (p in 1:100) {
+#   set.seed(p)
+#  for (i in 1:nrow(all)) {
+#   anno.row <- unlist(all[i,])
+# 
+#   val <- sample(anno.row,size = 1)
+#   vals <- append(vals,val)
+# 
+#  }
+#   z <- unname(vals)
+#   z <- as.factor(z)
+# 
+#   levels(z) <- c(levels(z), "AC",     "MES",     "NPC"   ,  "OPC", "unknown")
+#   k <- table(z)
+#   k <- data.frame(k,row.names = names(k) )
+# 
+#   k <- k[,-1,drop = FALSE]
+# 
+#   colnames(k) <- p
+# 
+#   y <- cbind(y,k)
+#   print(p)
+# }
+
+```
+
+```{r}
+# library(parallel)
+# n.cores <- parallel::detectCores() - 3
+# seed.rep <- 1:10
+# 
+# res.2 <- mclapply(X = seed.rep,mc.cores = n.cores,FUN = function(x) {
+#   vals <- c()
+#   set.seed(x)
+#  for (i in 1:nrow(all)) {
+#   anno.row <- unlist(all[i,])
+# 
+#   val <- sample(anno.row,size = 1)
+#   vals <- append(vals,val)
+# 
+#  }
+#   z <- unname(vals)
+#   z <- as.factor(z)
+#   levels(z) <- c(levels(z), "AC",     "MES",     "NPC"   ,  "OPC", "unknown")
+#   k <- table(z)
+#   k <- data.frame(k,row.names = names(k) )
+# 
+#   k <- k[,-1,drop = FALSE]
+# 
+#   colnames(k) <- x
+# 
+#   return(list(vals = vals, summary = k))
+# })
+```
+
+```{r}
+# res.list <- res
+# test <- Reduce(full_join,res)
+# 
+# library(dplyr)
+# res.df <- data.frame(t(bind_cols(res)))
+# res.df$seeds <- rownames(res.df)
+# res.df
+# 
+# #Transform df first
+# rownames(res.df) <- NULL
+# res.trans <- data.frame(matrix(ncol = 3,nrow = 0))
+# colnames(res.trans) <- c("counts","seeds","celltype")
+# for (i in colnames(res.df)[1:5]) {
+#   sub <- res.df[c(i,"seeds")]
+#   sub <- cbind(sub,rep(i,times = nrow(sub)))
+#   colnames(sub) <- c("counts","seeds","celltype")
+#   res.trans <- rbind(res.trans,sub)
+# }
+# 
+# res.trans$seeds <- as.numeric(res.trans$seeds)
+# res.trans <- res.trans %>% mutate(plus1 = counts + 1)
+# 
+# ggplot(res.trans, aes(x=seeds, y=counts, colour = celltype)) + geom_line() + scale_y_log10()
+# 
+# ggplot(res.trans, aes(x=seeds, y=counts, colour = celltype)) + geom_line()
+```
+
+
+```{r}
+# consensus.stochastic.seeds.df <- data.frame(matrix(nrow = nrow(all),ncol = 0))
+# p <- 1
+# for (i in res.2) {
+#   temp <- data.frame(i[[1]])
+#   colnames(temp) <- p
+#   consensus.stochastic.seeds.df <- cbind(consensus.stochastic.seeds.df,temp)
+#   p <- p+1
+# }
+# consensus.stochastic.seeds.df
+```
+
+
+
+```{r}
+#Do sankey
+library(ggsankey)
+library(ggplot2)
+
+all.sankey <- cbind(all,all.consensus["consensus"])
+for (i in 1:ncol(all.sankey)) {
+  all.sankey[,i] <- paste0(all.sankey[,i],"_",i)
+}
+
+all.sankey
+
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+df
+```
+
+
+```{r}
+# Chart 1
+pl <- ggplot(df, aes(x = x
+                     , next_x = next_x
+                     , node = node
+                     , next_node = next_node
+                     , fill = factor(node)
+                     , label = node)
+             )
+pl <- pl +geom_sankey(flow.alpha = 0.5
+                      , node.color = "black"
+                      ,show.legend = FALSE)
+pl <- pl +geom_sankey_label(size = 2, color = "black", fill= "white")
+pl <- pl +  theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl +  theme(axis.title = element_blank()
+                  , axis.text.y = element_blank()
+                  , axis.ticks = element_blank()  
+                  , panel.grid = element_blank()
+                  )
+
+#pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object,sig,sep = "; "))
+pl <- pl + labs(fill = 'Nodes')
+pl
+
+```
+
+```{r}
+#Filter out only on consensus
+
+
+res.keep <- "res_0.75"
+
+
+all.keep <- cbind(all,all.consensus[c("consensus")])
+all.keep <- all.keep[all.consensus[,res.keep] == TRUE,]
+all.keep
+
+```
+```{r}
+#Do sankey
+library(ggsankey)
+library(ggplot2)
+## transform_data
+
+all.keep.sankey <- all.keep
+for (i in 1:ncol(all.keep.sankey)) {
+  all.keep.sankey[,i] <- paste0(all.keep.sankey[,i],"_",i)
+}
+
+
+df <- all.keep.sankey %>%
+  make_long(colnames(all.keep.sankey))
+df
+```
+
+```{r}
+# Chart 1
+pl <- ggplot(df, aes(x = x
+                     , next_x = next_x
+                     , node = node
+                     , next_node = next_node
+                     , fill = factor(node)
+                     , label = node)
+             )
+pl <- pl +geom_sankey(flow.alpha = 0.5
+                      , node.color = "black"
+                      ,show.legend = FALSE)
+pl <- pl +geom_sankey_label(size = 2, color = "black", fill= "white")
+pl <- pl +  theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl +  theme(axis.title = element_blank()
+                  , axis.text.y = element_blank()
+                  , axis.ticks = element_blank()  
+                  , panel.grid = element_blank())
+#pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object,sig,"filterd",res.keep,sep = "; "))
+pl <- pl + labs(fill = 'Nodes')
+pl
+```
+
+
+
+```{r}
+# If want the filter version
+all.meta.consensus <- merge(gbm.meta,all.consensus,by = "row.names", all = TRUE)
+```
+```{r}
+sum(table(all.meta.consensus$consensus))
+table(is.na(all.meta.consensus$consensus))
+nrow(all.meta.consensus)
+```
+
+```{r}
+#visualization
+#Utilize old code
+all.meta.consensus
+each.meta.all <- all.meta.consensus 
+
+
+
+each.meta.list <- list()
+
+for (i in radiation){
+  donor.group <- i
+  each.meta <- subset(each.meta.all,radiation == donor.group)
+  
+  each.meta <- each.meta %>%
+  group_by(donor_id, consensus) %>%
+  summarise(count = n()) %>%
+  group_by(donor_id) %>%
+  mutate(per=count/sum(count)) %>% 
+  ungroup()
+  
+  each.meta <- each.meta %>% 
+  cbind(data.frame(radiation = rep(donor.group,length(each.meta$consensus))))
+  each.meta.list[[length(each.meta.list) + 1]] <- each.meta
+}
+
+each.meta.df <- data_frame()
+for (i in 1:length(each.meta.list)) {
+  each.meta.df <- rbind(each.meta.df,(each.meta.list[[i]]))
+}
+
+#Add subtype that have zero count
+consensus.choice <- unique(each.meta.df$consensus)
+consensus.choice
+each.meta.df.correct <- data.frame(matrix(nrow = 0,ncol = ncol(each.meta.df)))
+
+for (i in unique(each.meta.df$radiation)) {
+  for (p in unique(each.meta.df$donor_id)) {
+    each.meta.fill <- subset(each.meta.df, radiation == i & donor_id == p)
+    consensus.choice.left <- setdiff(consensus.choice,each.meta.fill$consensus)
+    if (length(consensus.choice.left) > 0){
+      for (q in consensus.choice.left) {
+        each.meta.fill[nrow(each.meta.fill) + 1,] <- c(p, q, 0,0,i)
+        each.meta.df.correct <- rbind(each.meta.df.correct,each.meta.fill) 
+      }
+    } else {
+      each.meta.df.correct <- rbind(each.meta.df.correct,each.meta.fill) 
+    }
+  }
+}
+each.meta.df.correct$donor_id <- as.factor(each.meta.df.correct$donor_id)
+each.meta.df.correct$consensus <- as.factor(each.meta.df.correct$consensus)
+each.meta.df.correct$radiation <- as.factor(each.meta.df.correct$radiation)
+each.meta.df.correct$count <- as.numeric(each.meta.df.correct$count)
+each.meta.df.correct$per <- as.numeric(each.meta.df.correct$per)
+each.meta.df.correct$per <- format(round(each.meta.df.correct$per, 2), nsmall = 2)
+each.meta.df.correct$per <- as.numeric(each.meta.df.correct$per)
+each.meta.df.correct
+
+each.meta.df <- each.meta.df.correct 
+```
+
+
+```{r}
+#Visualisation
+ggplot(each.meta.df, aes(x= "", y = per, fill=consensus)) + 
+  geom_col() +
+  facet_wrap(~  donor_id  + radiation, ncol = 6)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  #geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors", subtitle = "consensus")
+```
+```{r}
+
+#Visualisation
+ggplot(each.meta.df, aes(x= "", y = per, fill=consensus)) + 
+  geom_col() +
+  facet_wrap(~ radiation + donor_id, ncol = 13)+
+  ggtitle(" ") +
+  coord_polar("y", start=0) +
+  theme_void() +
+  #geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) + 
+  labs(title="All donors", subtitle = paste0("consensus_no_filtered; num_tools = ",as.character(ncol(all))))
+```
+```{r}
+#Visualisation
+ggplot(each.meta.df, aes(x = radiation, y = per, fill = consensus))+
+   facet_wrap(~  donor_id , ncol = 5)+
+  geom_bar(stat = "identity")+
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+
+```{r}
+ggplot(each.meta.df, aes(x = consensus, y = per, fill = radiation, colour = radiation)) + geom_bar(stat = "identity", position = "dodge",width = 0.5) + 
+  geom_text(aes(label = paste(per,"%")), position=position_dodge(width=0.9), vjust=-0.25,size = 1) +
+  facet_wrap(~  donor_id , ncol = 5)+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+```{r}
+table(each.meta.all[each.meta.all$donor_id == "E62N" & each.meta.all$radiation == "radiated",]$consensus)
+```
+
+
+
+
+
+
+
+<!-- #Compare the same but on neftel dataset -->
+<!-- ```{r} -->
+<!-- #Do sankey -->
+<!-- library(ggsankey) -->
+<!-- library(ggplot2) -->
+<!-- ## transform_data -->
+
+<!-- colnames(gbm@meta.data) -->
+<!-- gbm <- readRDS("./../output/temp") -->
+
+<!-- all <- gbm@meta.data -->
+<!-- all$celltype <- paste0(all$celltype,"_neftel") -->
+<!-- all$scSorter <- paste0(all$scSorter,"_sorter_each") -->
+<!-- all$scSorter_all <- paste0(all$scSorter_all,"sorter_all") -->
+<!-- all$sctype_4equal <- paste0(all$sctype_4equal,"_sctype") -->
+
+<!-- df <- all %>% -->
+<!--   make_long(celltype, scSorter_all,scSorter) -->
+<!-- df -->
+
+<!-- df <- all %>% -->
+<!--   make_long(celltype, scSorter, sctype_4equal) -->
+<!-- df -->
+
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # Chart 1 -->
+<!-- pl <- ggplot(df, aes(x = x -->
+<!--                      , next_x = next_x -->
+<!--                      , node = node -->
+<!--                      , next_node = next_node -->
+<!--                      , fill = factor(node) -->
+<!--                      , label = node) -->
+<!--              ) -->
+<!-- pl <- pl +geom_sankey(flow.alpha = 0.5 -->
+<!--                       , node.color = "black" -->
+<!--                       ,show.legend = FALSE) -->
+<!-- pl <- pl +geom_sankey_label(size = 3, color = "black", fill= "white", hjust = -0.5) -->
+<!-- pl <- pl +  theme_bw() -->
+<!-- pl <- pl + theme(legend.position = "none") -->
+<!-- pl <- pl +  theme(axis.title = element_blank() -->
+<!--                   , axis.text.y = element_blank() -->
+<!--                   , axis.ticks = element_blank()   -->
+<!--                   , panel.grid = element_blank()) -->
+<!-- pl <- pl + scale_fill_viridis_d(option = "inferno") -->
+<!-- pl <- pl + labs(title = "neftel") -->
+<!-- pl <- pl + labs(fill = 'Nodes') -->
+<!-- pl -->
+
+<!-- ``` -->
+
+
+<!-- #Pick the consistent cell -->
+<!-- ```{r} -->
+<!-- all -->
+<!-- test <- apply(all,1,FUN = function(x) { -->
+<!--   return(length(unique(x))  1) -->
+
+<!-- }) -->
+<!-- #table(rownames(all) == names(test)) -->
+
+<!-- all.consistent <-all[test,1, drop = FALSE] -->
+<!-- colnames(all.consistent) <- "celltype_consistent" -->
+<!-- all.consistent -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #write.csv(all.consistent, file = paste0("./../output/",object,"_",sig,"_",names(anno.pick),"_onlyconsistent",".csv" )) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #Save for future -->
+<!-- # write.csv(all.consensus, file = paste0("./../output/consensus_",object,"_",sig,"_",names(anno.pick),".csv"), row.names = TRUE) -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- all.consensus -->
+<!-- #Save for future -->
+<!-- #write.csv(all.consensus, file = paste0("./../output/consensus_",object,"_",sig,"_",names(anno.pick),"_newscID.csv"), row.names = TRUE) -->
+<!-- ``` -->
+
+#create consensus weighted
+```{r}
+#create consensus weighted
+all.count.consensus <- data.frame(matrix(nrow = 5, ncol = 0))
+pb <- txtProgressBar(min = 0, max = nrow(all), initial = 0) 
+for (i in 1:nrow(all)){
+  test5 <-as.factor(unname(unlist(all[i,])))  
+  levels(test5) <- c(levels(test5), "AC",     "MES",     "NPC"   ,  "OPC", "unknown")
+  library(forcats)
+  test5 <- fct_relevel(test5,"AC",     "MES",     "NPC"   ,  "OPC", "unknown")
+  test5
+  
+  
+  test6 <- data.frame(table(test5),row.names = 1)
+  colnames(test6) <- rownames(all[i,])
+  all.count.consensus <- cbind(all.count.consensus,test6)
+  
+
+  setTxtProgressBar(pb,i)
+}
+close(pb)
+# all.count.consensus
+# temp <- all.count.consensus
+# temp
+```
+
+```{r}
+all.count.consensus <- data.frame(t(all.count.consensus))
+```
+
+```{r}
+all.consensus
+```
+
+
+
+
+```{r}
+#visualization
+#Utilize old code
+
+
+each.meta.all <- merge(gbm.meta, all.count.consensus, by=0)
+rownames(each.meta.all) <- each.meta.all[,1]
+
+# each.meta.all
+test10 <- each.meta.all %>% 
+  group_by(donor_id,radiation) %>%
+  summarise(AC=sum(AC),MES=sum(MES),NPC=sum(NPC),OPC=sum(OPC),unknown=sum(unknown)) %>%
+  ungroup()
+# test10
+
+```
+```{r}
+table(test10$unknown)
+
+#unknown is so low so we will remove unknown
+test10 <- test10[,-7]
+
+```
+
+
+
+```{r}
+
+res.trans <- data.frame(matrix(ncol = 4,nrow = 0))
+
+for (i in 1:nrow(test10)) {
+  donor.id.rep <- data.frame(donor_id = rep(test10[i,"donor_id",drop =TRUE],times = 4),radiation = rep(test10[i,"radiation",drop =TRUE],times = 4))
+  x <- data.frame(counts = t(test10[i,3:6]))
+  x <- rownames_to_column(x,var = "subtype")
+  donor.id.rep <- cbind(donor.id.rep,x)
+  res.trans <- rbind(res.trans,donor.id.rep)
+}
+
+res.trans <- res.trans %>% 
+  group_by(donor_id,radiation) %>%
+  mutate(per = 100*counts/sum(counts)) %>%
+  ungroup()
+
+res.trans$per <-  format(round(res.trans$per, 1), nsmall = 1)
+
+res.trans$subtype <- as.factor(res.trans$subtype)
+res.trans$per <- as.numeric(res.trans$per)
+res.trans$donor_id <- as.factor(res.trans$donor_id)
+res.trans$radiation <- as.factor(res.trans$radiation)
+
+res.trans
+```
+
+
+
+
+
+```{r}
+#Visualisation
+ggplot(res.trans, aes(x = radiation, y = per, fill = subtype))+
+   facet_wrap(~  donor_id , ncol = 5)+
+  geom_bar(stat = "identity") + 
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank()) +
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+```
+```{r}
+#Visualisation
+ggplot(res.trans[res.trans$radiation=="control",], aes(x = radiation, y = per, fill = subtype))+
+   facet_wrap(~  donor_id , ncol = 5)+
+  geom_bar(stat = "identity") + 
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank()) +
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + labs(title = "control")
+```
+
+```{r}
+#Try hierarchical cluster
+
+res.trans.2 <- data.frame(t(matrix(res.trans$per,nrow = 4)),row.names = unique(paste0(res.trans$donor_id,"_",res.trans$radiation)))
+colnames(res.trans.2) <- res.trans$subtype[1:4] 
+
+#Control
+d.c <- dist(res.trans.2[grep("control",rownames(res.trans.2)),])
+hc.c <- hclust(d.c)
+```
+
+
+```{r}
+# Dendrogram
+par(mar=c(5,6,4,15)+.1)
+plot(as.dendrogram(hc.c), horiz = T)
+abline(v = 30, lty=2,col = "red")
+```
+
+```{r}
+#See change
+
+res.trans.2.diff <- res.trans.2[grep("radiated",rownames(res.trans.2)),] - res.trans.2[grep("control",rownames(res.trans.2)),] 
+rownames(res.trans.2.diff) <- gsub("radiated","diff",rownames(res.trans.2.diff))
+```
+
+
+
+```{r}
+library(patchwork)
+library(ggpubr)
+p1 <- gghistogram(res.trans.2.diff,x = "AC")
+p2 <- gghistogram(res.trans.2.diff,x = "NPC")
+p3 <- gghistogram(res.trans.2.diff,x = "OPC")
+p4 <- gghistogram(res.trans.2.diff,x = "MES")
+
+(p1+p2)/(p3+p4)
+```
+
+```{r}
+#Change
+d <- dist(res.trans.2.diff)
+hc<- hclust(d)
+
+# Dendrogram
+par(mar=c(5,6,4,15)+.1)
+plot(as.dendrogram(hc), horiz = T)
+
+```
+
+
+```{r}
+#all each donor no weight on donor_size
+res.trans.all <- res.trans %>% 
+  group_by(radiation,subtype) %>%
+  summarise(sum = sum(per)) %>%
+  group_by(radiation) %>%
+  mutate(per=sum/sum(sum)) %>% 
+  ungroup()
+
+res.trans.all$per <-  format(round(res.trans.all$per, 2), nsmall = 2)
+
+res.trans.all$subtype <- as.factor(res.trans.all$subtype)
+res.trans.all$per <- as.numeric(res.trans.all$per)
+res.trans.all$radiation <- as.factor(res.trans.all$radiation)
+
+ggplot(res.trans.all, aes(x = radiation, y = per, fill = subtype))+
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + labs(subtitle = "all each donor no weight on donor_size")
+```
+
+
+
+```{r}
+#3in4
+
+all.3in4 <- all[all.consensus$res_0.75,]
+#create consensus weighted
+all.3in4.count.consensus <- data.frame(matrix(nrow = 5, ncol = 0))
+pb <- txtProgressBar(min = 0, max = nrow(all.3in4), initial = 0) 
+
+for (i in 1:nrow(all.3in4)){
+  test5 <-as.factor(unname(unlist(all.3in4[i,])))  
+  levels(test5) <- c(levels(test5), "AC",     "MES",     "NPC"   ,  "OPC", "unknown")
+  library(forcats)
+  test5 <- fct_relevel(test5,"AC",     "MES",     "NPC"   ,  "OPC", "unknown")
+  
+  
+  test6 <- data.frame(table(test5),row.names = 1)
+  colnames(test6) <- rownames(all.3in4[i,])
+  all.3in4.count.consensus <- cbind(all.3in4.count.consensus,test6)
+  
+
+  setTxtProgressBar(pb,i)
+}
+close(pb)
+
+```
+```{r}
+all.3in4.count.consensus <- data.frame(t(all.3in4.count.consensus))
+all.3in4.count.consensus
+```
+
+
+```{r}
+#visualization
+#Utilize old code
+
+each.meta.all <- merge(gbm.meta, all.3in4.count.consensus, by=0)
+rownames(each.meta.all) <- each.meta.all[,1]
+
+test10 <- each.meta.all %>% 
+  group_by(donor_id,radiation) %>%
+  summarise(AC=sum(AC),MES=sum(MES),NPC=sum(NPC),OPC=sum(OPC),unknown=sum(unknown)) %>%
+  ungroup()
+```
+
+
+
+```{r}
+
+res.trans <- data.frame(matrix(ncol = 4,nrow = 0))
+
+for (i in 1:nrow(test10)) {
+  donor.id.rep <- data.frame(donor_id = rep(test10[i,"donor_id",drop =TRUE],times = 5),radiation = rep(test10[i,"radiation",drop =TRUE],times = 5))
+  x <- data.frame(counts = t(test10[i,3:7]))
+  x <- rownames_to_column(x,var = "subtype")
+  donor.id.rep <- cbind(donor.id.rep,x)
+  res.trans <- rbind(res.trans,donor.id.rep)
+}
+
+res.trans <- res.trans %>% 
+  group_by(donor_id,radiation) %>%
+  mutate(per = 100*counts/sum(counts)) %>%
+  ungroup()
+
+res.trans$per <-  format(round(res.trans$per, 1), nsmall = 1)
+
+res.trans$subtype <- as.factor(res.trans$subtype)
+res.trans$per <- as.numeric(res.trans$per)
+res.trans$donor_id <- as.factor(res.trans$donor_id)
+res.trans$radiation <- as.factor(res.trans$radiation)
+```
+
+
+
+```{r}
+#Visualisation
+ggplot(res.trans, aes(x = radiation, y = per, fill = subtype))+
+   facet_wrap(~  donor_id , ncol = 5)+
+  geom_bar(stat = "identity") + 
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank()) +
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) + labs(title = "3in4")
+```
+
+```{r}
+#all each donor no weight on donor_size
+res.trans.all <- res.trans %>% 
+  group_by(radiation,subtype) %>%
+  summarise(sum = sum(per)) %>%
+  group_by(radiation) %>%
+  mutate(per=sum/sum(sum)) %>% 
+  ungroup()
+
+res.trans.all$per <-  format(round(res.trans.all$per, 2), nsmall = 2)
+
+res.trans.all$subtype <- as.factor(res.trans.all$subtype)
+res.trans.all$per <- as.numeric(res.trans.all$per)
+res.trans.all$radiation <- as.factor(res.trans.all$radiation)
+
+ggplot(res.trans.all, aes(x = radiation, y = per, fill = subtype))+
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + labs(title = "3in4",subtitle = "all each donor no weight on donor_size")
+```
+
+
+
+#Others
+```{r}
+
+all.count.consensus$merge <- paste0(all.count.consensus$AC,all.count.consensus$MES,all.count.consensus$NPC,all.count.consensus$OPC)
+
+ggplot(all.count.consensus, aes(x=merge)) +
+  geom_bar() +theme(axis.text.x = element_text(angle = 90,size = 5))
+
+```
+```{r}
+all.count.consensus.call34 <- all.count.consensus[
+  apply(all.count.consensus[1:4],1,FUN = function(x){
+  any(c(3,4) %in% x)}),]
+```
+
+```{r}
+all.count.consensus
+```
+
+```{r}
+#try annotate subtype by subgroup
+all.count.consensus <- all.count.consensus %>% mutate(combined = paste0(AC,MES,NPC,OPC))
+#write.csv(all.count.consensus, file = "./../output/consensus_all_4metamodules_new_50_weighted.csv")
+```
+
+#Do linear regression to check whether the consistency is explaning the
+```{r}
+library(Seurat)
+gbm <- readRDS(file = "./../output/seurat_gbm_qc")
+```
+
+
+```{r}
+library(UCell)
+signatures <- read.csv(file = paste0("./../output/signature_subtype_",sig,".csv"))
+markers <- list()
+markers$MES <- signatures$MES.new
+markers$NPC <- signatures$NPC.new
+markers$OPC <- signatures$OPC.new
+markers$AC <- signatures$AC.new
+
+```
+
+```{r}
+gbm <- AddModuleScore_UCell(gbm, features = markers)
+signature.names <- paste0(names(markers), "_UCell")
+```
+
+```{r}
+gbm <- AddMetaData(gbm,all.count.consensus)
+```
+
+```{r}
+model.ac <- lm(AC_UCell ~ AC,gbm@meta.data)
+model.mes <- lm(MES_UCell ~ MES,gbm@meta.data)
+model.opc <- lm(OPC_UCell ~ OPC,gbm@meta.data)
+model.npc <- lm(NPC_UCell ~ NPC,gbm@meta.data)
+```
+
+```{r}
+ggplotRegression <- function (fit) {
+
+require(ggplot2)
+
+ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red") +
+  labs(subtitle =  paste("Adj R2 = ",signif(summary(fit)$adj.r.squared, 5),
+                     "Intercept =",signif(fit$coef[[1]],5 ),
+                     " Slope =",signif(fit$coef[[2]], 5),
+                     " P =",signif(summary(fit)$coef[2,4], 5)))
+}
+
+p.ac <- ggplotRegression(model.ac)
+p.npc <- ggplotRegression(model.npc)
+p.mes <- ggplotRegression(model.mes)
+p.opc <- ggplotRegression(model.opc)
+```
+
+
+```{r}
+p.ac
+p.npc
+p.mes
+p.opc
+```
+```{r}
+#what if check only in control cell
+gbm.meta.control <- gbm@meta.data[gbm$radiation == "control",]
+model.ac <- lm(AC_UCell ~ AC,gbm.meta.control)
+model.mes <- lm(MES_UCell ~ MES,gbm.meta.control)
+model.opc <- lm(OPC_UCell ~ OPC,gbm.meta.control)
+model.npc <- lm(NPC_UCell ~ NPC,gbm.meta.control)
+
+p.ac <- ggplotRegression(model.ac)
+p.npc <- ggplotRegression(model.npc)
+p.mes <- ggplotRegression(model.mes)
+p.opc <- ggplotRegression(model.opc)
+p.ac
+p.npc
+p.mes
+p.opc
+```
+```{r}
+kruskal.test(NPC_UCell ~ as.factor(NPC), data = gbm.meta.control)
+
+pair.wise <- pairwise.wilcox.test(gbm.meta.control$NPC_UCell, as.factor(gbm.meta.control$NPC),
+                 p.adjust.method = "BH")
+pair.wise
+```
+
+```{r}
+#Remove outlier 
+
+subtype <- "NPC"
+subtype.ucell <- paste0(subtype,"_UCell")
+data <- gbm@meta.data[,c(subtype,subtype.ucell)]
+dim(data)
+## [1] 150   2
+ 
+list_quantiles <- tapply(data[,subtype.ucell], data[,subtype], quantile)
+ 
+Q1s <- sapply(1:3, function(i) list_quantiles[[i]][2])
+Q3s <- sapply(1:3, function(i) list_quantiles[[i]][4])
+ 
+IQRs <- tapply(data[,subtype.ucell], data[,subtype], IQR)
+ 
+Lowers <- Q1s - 1.5*IQRs
+Uppers <- Q3s + 1.5*IQRs
+ 
+datas <- split(data, data[,subtype])
+ 
+data_no_outlier <- NULL
+for (i in 1:4){
+out <- subset(datas[[i]], datas[[i]][,subtype.ucell] > Lowers[i] & datas[[i]][,subtype.ucell]< Uppers[i])
+data_no_outlier <- rbind(data_no_outlier, out)
+}
+data_no_outlier
+
+
+
+model.sub <- lm(NPC_UCell ~ NPC,data_no_outlier)
+p.sub <- ggplotRegression(model.sub)
+p.sub
+
+
+
+kruskal.test(NPC_UCell ~ as.factor(NPC), data = data_no_outlier)
+
+pair.wise <- pairwise.wilcox.test(data_no_outlier$NPC_UCell, as.factor(data_no_outlier$NPC),
+                 p.adjust.method = "BH")
+pair.wise
+```
+
+
+#Add gene_mutation data
+```{r}
+classification <- data.frame(readxl::read_xlsx("./../data/lucy_gene_classification.xlsx",sheet = 4))
+classification[is.na(classification)] <- "na"
+rownames(classification) <- classification[,1,drop = TRUE]
+classification <- classification[,-1]
+
+classification <- data.frame(t(classification))
+row.names <- rownames(classification)
+classification <- as.data.frame(unclass(classification),stringsAsFactors=TRUE)
+rownames(classification) <- row.names 
+
+
+#Merge run 1 and run2 column and pick common in the bigger run
+classification$Runs <- classification$Run2
+classification$Runs <- as.character(classification$Runs)
+classification[classification$Runs == "yes","Runs"] <- 2
+classification[classification$Runs == "no","Runs"] <- 1
+classification$Runs <- as.factor(classification$Runs)
+classification <- subset(classification,select = -c(Run1,Run2,Which.run.more))
+
+
+classification
+```
+
+```{r}
+diff <- res.trans.2.diff
+
+control <- data.frame(res.trans.2[grepl("control",rownames(res.trans.2)),])
+colnames(control) <- c("control_AC","control_MES","control_NPC","control_OPC")
+rownames(control) <- unique(res.trans$donor_id)
+
+radiated <- data.frame(res.trans.2[grepl("radiated",rownames(res.trans.2)),])
+colnames(radiated) <- c("radiated_AC","radiated_MES","radiated_NPC","radiated_OPC")
+rownames(radiated) <- unique(res.trans$donor_id)
+
+
+
+rownames(diff) <- unique(res.trans$donor_id)
+colnames(diff) <- c("diff_AC","diff_MES","diff_NPC","diff_OPC")
+
+
+donor.meta <- cbind(classification,control,radiated,diff)
+colnames(donor.meta)
+```
+
+
+
+```{r}
+library(philentropy)
+library(cultevo)
+
+# # "control.dis","diff.dis","class.hamming"
+# alpha <- c(0.1,0.9,0)
+
+
+# "control.dis","radiated.dis","class.hamming"
+alpha <- c(0,1,0)
+
+
+#Not include runs in hamming
+class.hamming <- as.matrix(hammingdists(donor.meta[,c("Verhaak","Richard", "MESImm", "MC","EGFRvIII","TWRTp","Runs" )]))
+colnames(class.hamming) <- rownames(donor.meta)
+rownames(class.hamming) <- rownames(donor.meta)
+
+control.dis <- distance(donor.meta[,c("control_AC" ,"control_MES", "control_NPC" ,"control_OPC")], method = "euclidean")
+colnames(control.dis) <- rownames(donor.meta)
+rownames(control.dis) <- rownames(donor.meta)
+
+radiated.dis <- distance(donor.meta[,c("radiated_AC" ,"radiated_MES", "radiated_NPC" ,"radiated_OPC")], method = "euclidean")
+colnames(radiated.dis) <- rownames(donor.meta)
+rownames(radiated.dis) <- rownames(donor.meta)
+
+diff.dis <- distance(donor.meta[,c("diff_AC","diff_MES","diff_NPC","diff_OPC")], method = "euclidean")
+colnames(diff.dis) <- rownames(donor.meta)
+rownames(diff.dis) <- rownames(donor.meta)
+
+library(sidier)
+# distance.combined <- distance.comb(matrices=c("control.dis","diff.dis","class.hamming"),saveFile=FALSE,method="Corrected",alphas = alpha)
+# distance.combined <- as.dist(distance.combined, diag = TRUE)
+
+distance.combined <- distance.comb(matrices=c("control.dis","radiated.dis","class.hamming"),saveFile=FALSE,method="Corrected",alphas = alpha)
+distance.combined <- as.dist(distance.combined, diag = TRUE)
+
+cls.radiated <- hclust(as.dist(radiated.dis))
+cls <- hclust(distance.combined)
+
+donor.meta.ordered <- donor.meta[rownames(donor.meta)[cls$order],]
+
+
+set.seed(7)
+col1 <- donor.meta.ordered[,1]
+col2 <- donor.meta.ordered[,2]
+col3 <- donor.meta.ordered[,3]
+col4 <- donor.meta.ordered[,4]
+col5 <- donor.meta.ordered[,5]
+col6 <- donor.meta.ordered[,6]
+col7 <- donor.meta.ordered[,7]
+
+
+names(col1) <- rownames(donor.meta.ordered)
+names(col2) <- rownames(donor.meta.ordered)
+names(col3) <- rownames(donor.meta.ordered)
+names(col4) <- rownames(donor.meta.ordered)
+names(col5) <- rownames(donor.meta.ordered)
+names(col6) <- rownames(donor.meta.ordered)
+names(col7) <- rownames(donor.meta.ordered)
+```
+
+
+
+
+
+```{r}
+#Visualisation
+library("ggdendro")
+library(ggpubr)
+library(ggplotify)
+library(cowplot)
+library(gridExtra)
+library(ComplexHeatmap)
+set.seed(77)
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h1 <- Heatmap(col1,name = colnames(donor.meta.ordered[1]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h2 <- Heatmap(col2,name = colnames(donor.meta.ordered[2]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h3 <- Heatmap(col3,name = colnames(donor.meta.ordered[3]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h4 <- Heatmap(col4,name = colnames(donor.meta.ordered[4]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h5 <- Heatmap(col5,name = colnames(donor.meta.ordered[5]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h6 <- Heatmap(col6,name = colnames(donor.meta.ordered[6]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h7 <- Heatmap(col7,name = colnames(donor.meta.ordered[7]))
+
+h.all <- h1 + h2 + h3 + h4 + h5 + h6 +h7
+h.all <-draw(h.all, ht_gap = unit(0, "cm"))
+
+res.trans <- res.trans %>%
+  mutate(radiation = fct_relevel(radiation, 
+            "radiated", "control"))
+res.trans <- res.trans %>%
+  mutate(donor_id = fct_relevel(donor_id, 
+           rownames(donor.meta.ordered)))
+res.trans <- res.trans %>%
+  mutate(subtype = fct_relevel(subtype, 
+           "AC","MES","OPC","NPC"))
+
+
+res.trans <- res.trans[!res.trans$subtype == "unknown",]
+p.subtype.control <- ggplot(res.trans[res.trans$radiation=="control",], aes(x = radiation, y = per, fill = subtype)) +
+  scale_fill_manual(values=c("pink", "lightblue", "lightgreen","orchid4")) +
+  coord_flip() +
+  facet_wrap(~  donor_id , ncol = 1,strip.position = "right")+
+  geom_bar(stat = "identity") + 
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank()) +
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.y= element_blank(),strip.text = element_text(size = 5),panel.spacing = unit(0.01, "cm"),axis.title = element_blank(),axis.text.x = element_blank(),axis.ticks.x = element_blank(),legend.position = "bottom",legend.key.size = unit(0.2, 'cm'), #change legend key size
+        legend.title = element_blank(), #change legend title font size
+        legend.text = element_text(size=7),
+        legend.spacing.x = unit(0.05, 'cm'))
+
+p.subtype.radiated <- ggplot(res.trans[res.trans$radiation=="radiated",], aes(x = radiation, y = per, fill = subtype)) +
+  scale_fill_manual(values=c("pink", "lightblue", "lightgreen","orchid4")) +
+  coord_flip() +
+  facet_wrap(~  donor_id , ncol = 1,strip.position = "right")+
+  geom_bar(stat = "identity") + 
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank()) +
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.y= element_blank(),strip.text = element_text(size = 5),panel.spacing = unit(0.01, "cm"),axis.title = element_blank(),axis.text.x = element_blank(),axis.ticks.x = element_blank(),legend.position = "bottom",legend.key.size = unit(0.2, 'cm'), #change legend key size
+        legend.title = element_blank(), #change legend title font size
+        legend.text = element_text(size=7),
+        legend.spacing.x = unit(0.05, 'cm'))
+
+
+diff.2 <- rownames_to_column(diff,var = "donor_id")
+res.trans.2.diff.long <- gather(diff.2, subtype, change, diff_AC:diff_OPC, factor_key=TRUE)
+res.trans.2.diff.long <- res.trans.2.diff.long %>%
+  mutate(donor_id = fct_relevel(donor_id, 
+           rownames(donor.meta.ordered)))
+res.trans.2.diff.long <- res.trans.2.diff.long %>%
+  mutate(subtype = fct_relevel(subtype, 
+           "diff_AC","diff_MES","diff_OPC","diff_NPC"))
+
+diff.subtype <- ggplot(res.trans.2.diff.long, aes(x = subtype, y = change, fill = subtype)) +
+  facet_wrap(~  donor_id , ncol = 1,strip.position = "right") +
+  scale_fill_manual(values=c("pink", "lightblue", "lightgreen","orchid4")) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank(),strip.text = element_text(size = 5),panel.spacing = unit(0.2, "cm"),axis.title = element_blank(),axis.text.x = element_blank(),axis.ticks.x = element_blank(),legend.position = "bottom",legend.key.size = unit(0.1, 'cm'), #change legend key size
+        legend.title = element_blank(), #change legend title font size
+        legend.text = element_text(size=5),
+        legend.spacing.x = unit(0.03, 'cm'))
+dendro <- ggdendrogram(cls, rotate = TRUE, size = 2)  + scale_y_reverse() + theme(axis.text.x = element_blank())
+
+
+dendro 
+p.subtype.control
+p.subtype.radiated
+diff.subtype
+h.all
+```
+
+
+
+
+```{r}
+dendro <- dendro + scale_x_reverse() + theme(aspect.ratio=8/1, plot.margin = margin(0.15,0,1.2,0, "cm"),axis.text.y = element_blank())
+gb <- grid.grabExpr(draw(h.all))
+
+p.subtype.control <- p.subtype.control + theme(plot.margin = margin(0.15,0,1.15,0, "cm"),strip.text = element_blank(),legend.margin = margin(0, 0, 0, 0))
+
+p.subtype.radiated <- p.subtype.radiated + theme(plot.margin = margin(0.15,0,1.15,0, "cm"),strip.text = element_blank(),legend.margin = margin(0, 0, 0, 0))
+
+diff.subtype <- diff.subtype + theme(plot.margin = margin(0.45,0,1.9,0, "null"),strip.text = element_blank())
+
+
+
+# grid.arrange(dendro,p.subtype.control,diff.subtype,gb, layout_matrix = rbind( c(1,2,2,3,3,4,4,4,4,4),
+#                                                                      c(1,2,2,3,3,4,4,4,4,4)),
+#              top = textGrob(paste0("Control:Change:Classification = ",alpha[1],":",alpha[2],":",alpha[3]),gp=gpar(fontsize=10,font=1)))
+
+grid.arrange(dendro,p.subtype.control,p.subtype.radiated,gb, layout_matrix = rbind( c(1,2,2,3,3,4,4,4,4,4),
+                                                                     c(1,2,2,3,3,4,4,4,4,4)),
+             top = textGrob(paste0("Control:Radiated:Classification = ",alpha[1],":",alpha[2],":",alpha[3]),gp=gpar(fontsize=10,font=1)))
+
+```
+
+```{r}
+donor.meta.cont.diff_pca$x
+```
+
+
+```{r}
+#Try using from PCA
+library(ggfortify)
+pca.input <- list(list("control & radiated",c("control_AC" ,"control_MES", "control_NPC" ,"control_OPC","radiated_AC" ,"radiated_MES", "radiated_NPC" ,"radiated_OPC")),
+     list("control",c("control_AC" ,"control_MES", "control_NPC" ,"control_OPC")),
+     list("radiated",c("radiated_AC" ,"radiated_MES", "radiated_NPC" ,"radiated_OPC")))
+
+
+#change only at choose 1 = control + change, two control, 
+choose <- pca.input[[3]]
+
+input <- choose[[1]]
+donor.meta.cont.diff_pca <- prcomp(donor.meta[,choose[[2]]])
+
+choose
+```
+
+
+```{r}
+autoplot(donor.meta.cont.diff_pca,label = TRUE)
+dm<-dist(donor.meta.cont.diff_pca$x) 
+hc<-hclust(dm, method="complete") 
+
+
+
+donor.meta.ordered <- donor.meta[rownames(donor.meta)[hc$order],]
+
+donor.meta.ordered
+set.seed(7)
+col1 <- donor.meta.ordered[,1]
+col2 <- donor.meta.ordered[,2]
+col3 <- donor.meta.ordered[,3]
+col4 <- donor.meta.ordered[,4]
+col5 <- donor.meta.ordered[,5]
+col6 <- donor.meta.ordered[,6]
+col7 <- donor.meta.ordered[,7]
+
+
+names(col1) <- rownames(donor.meta.ordered)
+names(col2) <- rownames(donor.meta.ordered)
+names(col3) <- rownames(donor.meta.ordered)
+names(col4) <- rownames(donor.meta.ordered)
+names(col5) <- rownames(donor.meta.ordered)
+names(col6) <- rownames(donor.meta.ordered)
+names(col7) <- rownames(donor.meta.ordered)
+
+#Visualisation
+library("ggdendro")
+library(ggpubr)
+library(ggplotify)
+library(cowplot)
+library(gridExtra)
+library(ComplexHeatmap)
+set.seed(77)
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h1 <- Heatmap(col1,name = colnames(donor.meta.ordered[1]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h2 <- Heatmap(col2,name = colnames(donor.meta.ordered[2]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h3 <- Heatmap(col3,name = colnames(donor.meta.ordered[3]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h4 <- Heatmap(col4,name = colnames(donor.meta.ordered[4]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h5 <- Heatmap(col5,name = colnames(donor.meta.ordered[5]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h6 <- Heatmap(col6,name = colnames(donor.meta.ordered[6]))
+
+ht_opt(legend_title_position = "leftcenter-rot",legend_title_gp = gpar(fontsize = 5, fontface = "bold"),legend_labels_gp = gpar(fontsize = 3, fontface = "bold"), legend_grid_height = unit(0.3,"cm"), legend_grid_width = unit(0.3,"cm"),heatmap_column_names_gp = gpar(fontsize = 10, fontface = "bold"))
+h7 <- Heatmap(col7,name = colnames(donor.meta.ordered[7]))
+
+h.all <- h1 + h2 + h3 + h4 + h5 + h6 +h7
+h.all <-draw(h.all, ht_gap = unit(0, "cm"))
+
+res.trans <- res.trans %>%
+  mutate(radiation = fct_relevel(radiation, 
+            "radiated", "control"))
+res.trans <- res.trans %>%
+  mutate(donor_id = fct_relevel(donor_id, 
+           rownames(donor.meta.ordered)))
+res.trans <- res.trans %>%
+  mutate(subtype = fct_relevel(subtype, 
+           "AC","MES","OPC","NPC"))
+
+
+res.trans <- res.trans[!res.trans$subtype == "unknown",]
+p.subtype.control <- ggplot(res.trans[res.trans$radiation=="control",], aes(x = radiation, y = per, fill = subtype)) +
+  scale_fill_manual(values=c("pink", "lightblue", "lightgreen","orchid4")) +
+  coord_flip() +
+  facet_wrap(~  donor_id , ncol = 1,strip.position = "right")+
+  geom_bar(stat = "identity") + 
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank()) +
+  geom_text(aes(label = paste(per,"%")), position = position_stack(vjust = 0.5),size = 1.5) + theme(axis.text.y= element_blank(),strip.text = element_text(size = 5),panel.spacing = unit(0.01, "cm"),axis.title = element_blank(),axis.text.x = element_blank(),axis.ticks.x = element_blank(),legend.position = "bottom",legend.key.size = unit(0.2, 'cm'), #change legend key size
+        legend.title = element_blank(), #change legend title font size
+        legend.text = element_text(size=7),
+        legend.spacing.x = unit(0.05, 'cm'))
+
+
+
+
+diff.2 <- rownames_to_column(diff,var = "donor_id")
+res.trans.2.diff.long <- gather(diff.2, subtype, change, diff_AC:diff_OPC, factor_key=TRUE)
+res.trans.2.diff.long <- res.trans.2.diff.long %>%
+  mutate(donor_id = fct_relevel(donor_id, 
+           rownames(donor.meta.ordered)))
+res.trans.2.diff.long <- res.trans.2.diff.long %>%
+  mutate(subtype = fct_relevel(subtype, 
+           "diff_AC","diff_MES","diff_OPC","diff_NPC"))
+
+diff.subtype <- ggplot(res.trans.2.diff.long, aes(x = subtype, y = change, fill = subtype)) +
+  facet_wrap(~  donor_id , ncol = 1,strip.position = "right") +
+  scale_fill_manual(values=c("pink", "lightblue", "lightgreen","orchid4")) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  theme(axis.text.y = element_blank(),axis.ticks.y = element_blank(),strip.text = element_text(size = 5),panel.spacing = unit(0.2, "cm"),axis.title = element_blank(),axis.text.x = element_blank(),axis.ticks.x = element_blank(),legend.position = "bottom",legend.key.size = unit(0.1, 'cm'), #change legend key size
+        legend.title = element_blank(), #change legend title font size
+        legend.text = element_text(size=5),
+        legend.spacing.x = unit(0.03, 'cm'))
+dendro <- ggdendrogram(cls, rotate = TRUE, size = 2)  + scale_y_reverse() + theme(axis.text.x = element_blank())
+
+
+
+dendro <- dendro + scale_x_reverse() + theme(aspect.ratio=8/1, plot.margin = margin(0.15,0,1.2,0, "cm"),axis.text.y = element_blank())
+gb <- grid.grabExpr(draw(h.all))
+
+p.subtype.control <- p.subtype.control + theme(plot.margin = margin(0.15,0,1.15,0, "cm"),strip.text = element_blank(),legend.margin = margin(0, 0, 0, 0))
+
+
+diff.subtype <- diff.subtype + theme(plot.margin = margin(0.45,0,1.9,0, "null"),strip.text = element_blank())
+```
+
+
+```{r}
+grid.arrange(dendro,p.subtype.control,diff.subtype,gb, layout_matrix = rbind( c(1,2,2,3,3,4,4,4,4,4),
+                                                                     c(1,2,2,3,3,4,4,4,4,4)),
+             top = textGrob(paste0("Hierarchical clustering on PCA 1:",ncol(donor.meta.cont.diff_pca$x),"th of ",input),gp=gpar(fontsize=10,font=1)))
+
+
+```
+
+
+#Factorial Analysis of Mixed Data (FAMD)
+
+```{r}
+library(FactoMineR)
+library(vcd)
+library(factoextra)
+```
+
+```{r}
+donor.meta_famd <- FAMD(subset(donor.meta, select = -c(Runs)),
+                  graph=TRUE)
+donor.meta_famd$call
+```
+```{r}
+donor.meta.diff.class <- subset(donor.meta, select = -c(Runs,control_AC,control_MES,
+control_NPC,control_OPC))
+donor.meta.diff.class_famd <- FAMD(donor.meta.diff.class,
+                  graph=TRUE)
+
+```
+```{r}
+eig.val <- get_eigenvalue(donor.meta.diff.class_famd)
+fviz_screeplot(donor.meta.diff.class_famd)
+```
+
+
+
+```{r}
+fviz_ellipses(donor.meta.diff.class_famd,1:6, geom = "point")
+```
+
+
+```{r}
+#Control
+donor.meta.control.class <- subset(donor.meta, select = -c(Runs,diff_AC,diff_MES,
+diff_NPC,diff_OPC))
+donor.meta.control.class_famd <- FAMD(donor.meta.control.class,
+                  graph=TRUE)
+fviz_famd_ind(donor.meta.control.class_famd)
+```
+
+```{r}
+fviz_ellipses(donor.meta.control.class_famd,1:6, geom = "point")
+```
+
+```{r}
+summary(donor.meta.diff.class_famd)
+```
+
+#Clustering: diff +class
+```{r}
+results <- donor.meta.diff.class_famd$ind[[1]]
+results
+```
+
+
+```{r}
+fviz_nbclust(results, FUNcluster=kmeans, k.max = 10) 
+fviz_nbclust(results, FUNcluster=kmeans, method="gap_stat", k.max = 10)+ theme_classic()
+```
+
+```{r}
+km1<-eclust(results, "kmeans", hc_metric="eucliden",k=8)
+fviz_silhouette(km1) 
+```
+
+
+```{r}
+km2<-eclust(results, "kmeans", hc_metric="manhattan",k=8)
+fviz_silhouette(km2) 
+```
+```{r}
+#PAM
+fviz_nbclust(results, FUNcluster=cluster::pam, k.max = 8)
+fviz_nbclust(results, FUNcluster=cluster::pam, method="gap_stat", k.max  = 8)+ theme_classic()
+```
+```{r}
+pam1<-eclust(results, "pam", k=8) 
+fviz_silhouette(pam1)
+```
+```{r}
+dm<-dist(results) 
+hc<-hclust(dm, method="complete") 
+plot(as.dendrogram(hc))
+clust.vec.8<-cutree(hc, k=8) 
+fviz_cluster(list(data=results, cluster=clust.vec.8))
+
+```
+
+```{r}
+plot(density(dm))
+```
+#Clustering: Control + class
+```{r}
+results <- donor.meta.control.class_famd$ind[[1]]
+results
+```
+
+
+```{r}
+fviz_nbclust(results, FUNcluster=kmeans, k.max = 10) 
+fviz_nbclust(results, FUNcluster=kmeans, method="gap_stat", k.max = 10)+ theme_classic()
+```
+
+```{r}
+km1<-eclust(results, "kmeans", hc_metric="eucliden",k=6)
+```
+
+
+```{r}
+km2<-eclust(results, "kmeans", hc_metric="manhattan",k=6)
+```
+```{r}
+#PAM
+fviz_nbclust(results, FUNcluster=cluster::pam, k.max = 5)
+fviz_nbclust(results, FUNcluster=cluster::pam, method="gap_stat", k.max  = 5)+ theme_classic()
+```
+```{r}
+pam1<-eclust(results, "pam", k=5) 
+fviz_silhouette(pam1)
+```
+```{r}
+dm<-dist(results) 
+hc<-hclust(dm, method="complete") 
+plot(as.dendrogram(hc))
+clust.vec.5<-cutree(hc, k=5) 
+fviz_cluster(list(data=results, cluster=clust.vec.5))
+
+```
+
+```{r}
+plot(density(dm))
+```
+#Clustering: diff + control + class
+
+```{r}
+results <- donor.meta_famd$ind[[1]]
+results
+```
+
+
+```{r}
+fviz_nbclust(results, FUNcluster=kmeans, k.max = 10) 
+fviz_nbclust(results, FUNcluster=kmeans, method="gap_stat", k.max = 10)+ theme_classic()
+```
+
+```{r}
+km1<-eclust(results, "kmeans", hc_metric="eucliden",k=6)
+fviz_silhouette(km1) 
+```
+
+
+```{r}
+km2<-eclust(results, "kmeans", hc_metric="manhattan",k=6)
+fviz_silhouette(km2) 
+```
+```{r}
+#PAM
+fviz_nbclust(results, FUNcluster=cluster::pam, k.max = 8)
+fviz_nbclust(results, FUNcluster=cluster::pam, method="gap_stat", k.max  = 8)+ theme_classic()
+```
+```{r}
+pam1<-eclust(results, "pam", k=7) 
+fviz_silhouette(pam1)
+```
+```{r}
+dm<-dist(results) 
+hc<-hclust(dm, method="complete") 
+plot(as.dendrogram(hc))
+clust.vec.6<-cutree(hc, k=6) 
+fviz_cluster(list(data=results, cluster=clust.vec.6))
+
+```
+
+```{r}
+plot(density(dm))
+```
+#Cont + diff: PCA + clustering
+```{r}
+library(ggfortify)
+
+donor.meta.cont.diff_pca <- prcomp(donor.meta[,8:15])
+
+
+autoplot(donor.meta.cont.diff_pca,label = TRUE)
+dm<-dist(donor.meta.cont.diff_pca$x) 
+hc<-hclust(dm, method="complete") 
+plot(as.dendrogram(hc))
+```
+
+```{r}
+
+# define area for the histogram
+par(fig=c(0.1,0.7,0.3,0.9))
+plot(as.dendrogram(cls),horiz = TRUE)
+# define area for the boxplot
+par(fig=c(0.8,1,0,1), new=TRUE)
+h.donor
+# define area for the stripchart
+par(fig=c(0.1,0.67,0.1,0.25), new=TRUE)
+h.all
+```
+
+

@@ -1,0 +1,613 @@
+#scID without "unassigned" 
+```{r}
+library(scID)
+library(Seurat)
+```
+
+```{r}
+# Ref
+neftel.smt <- readRDS("./../output/smrt_mal")
+reference_gem <- as.matrix(neftel.smt@assays$norm@data)
+reference_clusters <- as.factor(neftel.smt@meta.data[,celltype])
+names(reference_clusters) <- rownames(neftel.smt@meta.data)
+```
+
+
+```{r}
+# Target
+gbm <- readRDS("./../output/seurat_gbm_qc")
+```
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_integrated_donor_id_plus_subtype")
+gbm <- DietSeurat(
+  gbm,
+  counts = TRUE,
+  data = TRUE,
+  scale.data = FALSE,
+  features = NULL,
+  assays = "integrated",
+  dimreducs = NULL,
+  graphs = NULL,
+  misc = TRUE
+)
+```
+
+```{r}
+rm(neftel.smt)
+gc()
+```
+
+
+```{r}
+scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL, 
+                            reference_clusters = NULL, markers = NULL,
+                            logFC = 0.5, normalize_reference=TRUE,
+                            estimate_weights_from_target = FALSE, 
+                            weights = NULL, only_pos=FALSE) {
+  
+  # state the variable that will be use in the function
+  markers <- markers.glob
+  
+  # ----------------------------------------------------------------------------------------------------
+  # Data pre-processing
+  # ----------------------------------------------------------------------------------------------------
+  if (is.null(reference_gem) && is.null(reference_clusters) && is.null(markers)) {
+    stop("Please provide either clustered reference data or list of markers for each reference cluster")
+  } 
+  if (!is.null(reference_gem) && !is.null(reference_clusters)) {
+    # Check all reference cells have a cluster ID
+    common_cells <- intersect(names(reference_clusters), colnames(reference_gem))
+    if (length(common_cells) == 0) {
+      stop("None  of the reference cells has a cluster ID. Please check the reference_clusters list provided.")
+    } else {
+      reference_gem <- reference_gem[, common_cells]
+      rownames(reference_gem) <- make.names(toupper(rownames(reference_gem)), unique=TRUE)
+      
+      # Remove genes that are zero across all cells
+      reference_gem <- reference_gem[which(rowSums(reference_gem) != 0), ]
+      reference_clusters <- reference_clusters[common_cells]
+    }
+  }
+
+  if (!is.null(markers)) {
+    # Check markers have gene and cluster columns
+    if (length(intersect(c("gene", "cluster"), colnames(markers))) !=2 ) {
+      stop("Please provide a data frame of markers with gene and cluster in columns")
+    }
+    markers$gene <- toupper(markers$gene)
+  } 
+
+
+  # Target
+  rownames(target_gem) <- make.names(toupper(rownames(target_gem)), unique=TRUE)
+  # Remove genes that are zero across all cells
+  target_gem <- target_gem[which(rowSums(target_gem) != 0), ]
+
+  # ----------------------------------------------------------------------------------------------------
+  # Stage 1: Find signature genes from reference data
+  # ----------------------------------------------------------------------------------------------------
+  if (is.null(markers)) {
+
+    # Filter out signature genes that are not present in the target data
+    markers <- markers[which(markers$gene %in% rownames(target_gem)), ]
+
+    celltypes <- unique(markers$cluster)
+
+    if (estimate_weights_from_target) {
+      rm(reference_gem, reference_clusters)
+    }
+
+  } else {
+    markers <- markers[which(markers$gene %in% rownames(target_gem)), ]
+    celltypes <- unique(markers$cluster)
+
+  }
+
+  # Min-max normalization of target gem
+  target_gem_norm <- t(apply(target_gem[unique(markers$gene), ], 1, function(x) normalize_gene(x)))
+  target_gem_norm <- target_gem_norm[complete.cases(target_gem_norm), ]
+
+  # ----------------------------------------------------------------------------------------------------
+  # Stage 2: Weight signature genes
+  # ----------------------------------------------------------------------------------------------------
+  if (is.null(weights)) {
+    if (estimate_weights_from_target) {
+      weights <- list()
+      for (i in 1:length(celltypes)) {
+        celltype_markers <- markers[which(markers$cluster == celltypes[i]), ]
+        positive_markers <- celltype_markers$gene[which(celltype_markers$avg_log2FC > 0)]
+        negative_markers <- celltype_markers$gene[which(celltype_markers$avg_log2FC < 0)]
+        training_groups <- choose_training_set_edited(target_gem, positive_markers, negative_markers)
+        signature_genes <- c(positive_markers, negative_markers)
+        gene.weights <- scID_weight(target_gem_norm[signature_genes, , drop=FALSE], training_groups$in_pop, training_groups$out_pop)
+        # If only positive markers are selected, truncate all negative weights to 0
+        if (only_pos) {
+          gene.weights[which(gene.weights < 0)] <- 0
+        }
+        # Make Inf weights 0
+        gene.weights[is.infinite(gene.weights)] <- 0
+        weights[[as.character(celltypes[i])]] <- gene.weights
+
+      }
+      names(weights) <- celltypes
+    } else {
+      if (!is.null(reference_gem) && !is.null(reference_clusters)) {
+        weights <- list()
+        # Normalize reference gem
+        ref_gem_norm <- t(apply(reference_gem[unique(markers$gene), ], 1, function(x) normalize_gene(x)))
+        ref_gem_norm <- ref_gem_norm[complete.cases(ref_gem_norm), ]
+        for (i in 1:length(celltypes)) {
+          signature_genes <- markers$gene[which(markers$cluster == celltypes[i])]
+          true_cells <- names(reference_clusters)[which(reference_clusters == as.character(celltypes[i]))]
+          false_cells <- setdiff(names(reference_clusters), true_cells)
+          gene.weights <- scID_weight(gem = ref_gem_norm[signature_genes, ,drop=FALSE], true_cells, false_cells)
+  
+          weights[[as.character(celltypes[i])]] <- gene.weights
+          # If only positive markers are selected, truncate all negative weights to 0
+          if (only_pos) {
+            gene.weights[which(gene.weights < 0)] <- 0
+          }
+ 
+        }
+        # Won't need reference data any more, remove for efficiency
+        rm(reference_gem, reference_clusters, ref_gem_norm)
+      } else {
+        stop("Please provide reference data in order to calculate weights, choose to estimate weights from target data, or provide precompted gene weights.")
+      }
+    }
+  }
+
+  #----------------------------------------------------------------------------------------------------
+  # Stage 3: Find scores and putative matches
+  # ----------------------------------------------------------------------------------------------------
+  
+  scores <- data.frame(matrix(NA, length(celltypes), ncol(target_gem)), row.names = celltypes)
+  colnames(scores) <- colnames(target_gem)
+  
+  full_scores <- data.frame(matrix(NA, length(celltypes), ncol(target_gem)), row.names = celltypes)
+  colnames(full_scores) <- colnames(target_gem)
+
+  for (i in 1:length(celltypes)) {
+    celltype <- as.character(celltypes[i])
+    signature <- intersect(names(weights[[celltype]]), rownames(target_gem_norm))
+    weighted_gem <- weights[[celltype]][signature] * target_gem_norm[signature, ,drop=FALSE]
+    # Check if whole weighted gem is 0 (when all gene weighst are zero)
+    if (all(weighted_gem == 0)) {
+      full_scores[as.character(celltype), ] <- rep(0, ncol(full_scores))
+      print(paste("oh no",i))
+    } else {
+      score <- colSums(weighted_gem)/sqrt(sum(weights[[celltype]]^2))
+
+      matches <- final_populations_edited(score) 
+
+      scores[as.character(celltype), matches] <- scale(score[matches])
+      full_scores[as.character(celltype), ] <- score
+    }
+  }
+
+  # Resolve multi-class assignments
+  
+  labels <- apply(scores, 2, function(x) {ifelse(all(is.na(x)), "unassigned", rownames(scores)[which(x == max(x, na.rm = T))])})
+
+  #Add convert unassigned to random assigned one
+  #Check first whether we have unassigned or not
+  unassigned_index <- which(labels == "unassigned")
+
+  labels_edited <- labels
+  full_scores_unassigned <- NA
+  
+  if (length(unassigned_index) > 0) {
+  
+  full_scores_unassigned <- full_scores[,unassigned_index,drop = FALSE]
+
+  labels_unassigned <- apply(full_scores_unassigned, 2, function(x) {rownames(full_scores_unassigned)[which(x == max(x, na.rm = T))]})
+  labels_edited[unassigned_index] <- labels_unassigned
+  } else {
+  message("no unassigned")
+  }
+
+  # return result
+  list(scores = scores ,full_scores=full_scores, labels=labels, labels_edited = labels_edited)
+
+}
+
+final_populations_edited <- function(score) {
+  
+  fit <- suppressMessages(mclust::densityMclust(score, G = 1:4,plot = FALSE, verbose = FALSE))
+  
+  # Calculate average scID score per group of cells
+  avgScore <- rep(NA, length(unique(fit$classification)))
+  names(avgScore) <- unique(fit$classification)
+  for (ID in names(avgScore)) avgScore[ID] <- mean(score[names(which(fit$classification == ID))])
+
+  matches <- names(fit$classification)[which(fit$classification == names(which(avgScore == max(avgScore))))]
+  
+  matches
+}
+
+find_markers_edited <- function (reference_gem, reference_clusters, logFC, only.pos, 
+    normalize_reference) 
+{
+    library(Seurat)
+    so_ref <- CreateSeuratObject(reference_gem)
+    if (normalize_reference) {
+        so_ref <- suppressMessages(NormalizeData(so_ref,verbose = FALSE))
+    }
+    so_ref <- suppressMessages(ScaleData(so_ref,verbose = FALSE))
+    Idents(so_ref) <- as.factor(reference_clusters)
+    markers <- suppressMessages(FindAllMarkers(so_ref, test.use = "MAST", 
+        only.pos = only.pos, logfc.threshold = logFC,verbose = FALSE))
+    markers
+}
+
+choose_training_set_edited <- function (gem, positive_markers, negative_markers) 
+{
+    positive_markers <- intersect(positive_markers, rownames(gem))
+    negative_markers <- intersect(negative_markers, rownames(gem))
+    sink("aux")
+    binned_gem <- apply(gem, 1, function(x) biomod2::BinaryTransformation(x, 
+        threshold = quantile(x, 0.25, na.rm = TRUE)))
+    sink(NULL)
+    n_e <- rowSums(binned_gem)
+    if (length(positive_markers) >= 1) {
+        n_pme <- rowSums(binned_gem[, positive_markers, drop = FALSE])
+    }
+    else {
+        n_pme <- rep(0, nrow(binned_gem))
+        names(n_pme) <- rownames(binned_gem)
+    }
+    if (length(negative_markers) >= 1) {
+        n_nme <- rowSums(binned_gem[, negative_markers, drop = FALSE])
+    }
+    else {
+        n_nme <- rep(0, nrow(binned_gem))
+        names(n_nme) <- rownames(binned_gem)
+    }
+    n_pm <- max(length(positive_markers), 1)
+    n_nm <- max(length(negative_markers), 1)
+    data <- data.frame(recall = (n_pme/n_pm) - (n_nme/n_nm), 
+        precision = (n_pme - n_nme)/n_e)
+    rownames(data) <- colnames(gem)
+    data <- data[complete.cases(data), ]
+    library(mclust)
+    sink("aux")
+    fit <- Mclust(data)
+    sink(NULL)
+    centroids <- data.frame(matrix(NA, length(unique(fit$classification)), 
+        2), row.names = unique(fit$classification))
+    colnames(centroids) <- c("precision", "recall")
+    sds <- data.frame(matrix(NA, length(unique(fit$classification)), 
+        2), row.names = unique(fit$classification))
+    colnames(sds) <- c("precision", "recall")
+    for (ID in rownames(centroids)) {
+        centroids[ID, "precision"] <- mean(data[which(fit$classification == 
+            ID), "precision"])
+        sds[ID, "precision"] <- sd(data[which(fit$classification == 
+            ID), "precision"])
+        centroids[ID, "recall"] <- mean(data[which(fit$classification == 
+            ID), "recall"])
+        sds[ID, "recall"] <- sd(data[which(fit$classification == 
+            ID), "recall"])
+    }
+    IN_candidates <- unique(c(rownames(centroids)[which(centroids$recall == 
+        max(centroids$recall))], rownames(centroids)[which(centroids$precision == 
+        max(centroids$precision))]))
+    E_dist <- apply(centroids, 1, function(x) sqrt((1 - x[1])^2 + 
+        (1 - x[2])^2))
+    IN_id <- names(E_dist)[which(E_dist == min(E_dist))]
+    IN_cells <- colnames(gem)[which(fit$classification %in% IN_id)]
+    other_IN <- setdiff(IN_candidates, IN_id)
+    if (length(other_IN) == 1) {
+        NA_cells <- colnames(gem)[which(fit$classification %in% 
+            other_IN)]
+    }
+    else {
+        NA_cells <- c()
+    }
+    OUT_cells <- setdiff(rownames(data), c(IN_cells, NA_cells))
+    list(in_pop = IN_cells, out_pop = OUT_cells)
+}
+```
+
+
+```{r}
+#markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos=FALSE, normalize_reference=FALSE)
+
+#saveRDS(markers.glob,"./../output/markers_glob_scID")
+markers.glob <- readRDS("./../output/markers_glob_scID")
+```
+
+```{r}
+x <- as.matrix(gbm@assays$integrated@data)
+
+scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE)
+  
+
+```
+```{r}
+gbm.list.res <- list(scID_output)
+```
+
+
+```{r}
+saveRDS(gbm.list.res, file = paste0("./../output/scID_",object,"_",merge,"_allassigned"))
+```
+
+
+
+
+```{r}
+res.df <- data.frame()
+for (i in gbm.list.res) {
+  res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE),as.data.frame(i$labels_edited, stringsAsFactors = TRUE),data.frame(t(i$scores)))
+  res.df <- rbind(res.df,res.each.df)
+}
+colnames(res.df)[1] <- "scID"
+colnames(res.df)[2] <- "scID_edited"
+```
+
+```{r}
+table(res.df$scID)
+```
+
+```{r}
+gbm.meta <- read.csv("./../output/gbm_meta.csv",row.names = 1)
+```
+
+
+
+```{r}
+#Do sankey
+library(ggsankey)
+library(ggplot2)
+## transform_data
+scid.sankey <- scid[c("scID","scID_edited")]
+df <- scid.sankey %>%
+make_long(colnames(scid.sankey))
+
+pl <- ggplot(df, aes(x = x
+                   , next_x = next_x
+                   , node = node
+                   , next_node = next_node
+                   , fill = factor(node)
+                   , label = node)
+           )
+pl <- pl +geom_sankey(flow.alpha = 0.5
+                    , node.color = "black"
+                    ,show.legend = FALSE)
+pl <- pl +geom_sankey_label(size = 2, color = "black", fill= "white")
+pl <- pl +  theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl +  theme(axis.title = element_blank()
+                , axis.text.y = element_blank()
+                , axis.ticks = element_blank()  
+                , panel.grid = element_blank())
+#  pl <- pl + scale_fill_viridis_d(option = "inferno")
+#  pl <- pl + labs(fill = 'Nodes')
+pl
+```
+
+
+```{r}
+#pick only unassigned group
+unassgined.group <- unique(scid[scid$scID == "unassigned",]$donor_radiation)
+
+scid.unassigned <- subset(scid, donor_radiation == unassgined.group)
+scid.unassigned <- scid[scid$donor_radiation %in% unassgined.group,]
+```
+
+```{r}
+scid.list <- split(scid.unassigned, f = scid.unassigned$donor_radiation)
+```
+
+
+```{r}
+#Do sankey
+library(ggsankey)
+library(ggplot2)
+## transform_data
+
+plot.list <- lapply(scid.list, FUN = function(y) {
+ scid.each <- y[c("scID","scID_edited")]
+ df <- scid.each %>%
+  make_long(colnames(scid.each))
+  
+  pl <- ggplot(df, aes(x = x
+                     , next_x = next_x
+                     , node = node
+                     , next_node = next_node
+                     , fill = factor(node)
+                     , label = node)
+             )
+  pl <- pl +geom_alluvial(flow.alpha = 0.5
+                      , node.color = "black"
+                      ,show.legend = FALSE)
+  pl <- pl +geom_alluvial_text(size = 1.5, color = "black")
+  pl <- pl +  theme_bw()
+  pl <- pl + theme(legend.position = "none")
+  pl <- pl +  theme(axis.title = element_blank()
+                  , axis.text.y = element_blank()
+                  , axis.ticks = element_blank()  
+                  , panel.grid = element_blank())
+#  pl <- pl + scale_fill_viridis_d(option = "inferno")
+  pl <- pl + labs(fill = 'Nodes')
+  
+  
+  return(pl)
+})
+```
+
+
+```{r}
+patchwork::wrap_plots(plot.list[1:6])
+```
+```{r}
+patchwork::wrap_plots(plot.list[7:12])
+```
+```{r}
+patchwork::wrap_plots(plot.list[13:18])
+```
+
+```{r}
+patchwork::wrap_plots(plot.list[19:21])
+```
+
+
+
+```{r}
+write.csv(res.df,paste0("./../output/scID_",object,"_",merge,"_allassigned",".csv"),row.names = TRUE)
+```
+
+
+#clustifyr
+```{r}
+library(clustifyr)
+library(Seurat)
+```
+
+```{r}
+neftel.smt <- readRDS("./../output/smrt_mal")
+```
+
+```{r}
+new_ref_matrix <- seurat_ref(
+  seurat_object = neftel.smt,        # SeuratV3 object
+  cluster_col = celltype,    # name of column in meta.data containing cell identities
+)
+```
+
+
+
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_integrated_donor_id_plus_subtype")
+gbm <- DietSeurat(
+  gbm,
+  counts = TRUE,
+  data = TRUE,
+  scale.data = FALSE,
+  features = NULL,
+  assays = "integrated",
+  dimreducs = NULL,
+  graphs = NULL,
+  misc = TRUE
+)
+```
+
+
+```{r}
+library(parallel)
+n.cores <- 3
+set.seed(7)
+x <- DietSeurat(
+  gbm,
+  counts = TRUE,
+  data = TRUE,
+  scale.data = FALSE,
+  features = NULL,
+  assays = "integrated",
+  dimreducs = NULL,
+  graphs = NULL,
+  misc = TRUE
+)
+  
+  allgenes <- rownames(x)
+  x <- FindVariableFeatures(x,verbose = FALSE)
+  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+```
+
+
+```{r}
+res <- clustify(
+          input = x,      
+          ref_mat = new_ref_matrix,    
+          cluster_col = "RNA_snn_res.1", 
+          obj_out = TRUE,threshold = 0,verbose = TRUE,use_var_genes = )
+```
+
+
+```{r}
+gbm.list.res <- list(res@meta.data[c("type","r")])
+```
+
+
+```{r}
+names(gbm.list.res) <- NULL
+res.ref.df <- NULL
+res.ref.df <- do.call(rbind,gbm.list.res)
+
+colnames(res.ref.df) <- c("clustifyr_ref","r_ref")
+
+res.ref.df
+```
+
+```{r}
+table(res.ref.df$clustifyr_ref)
+```
+
+```{r}
+#try using marker based
+library(readxl)
+#signatures <- read_xlsx("./../data/gbm_subtype_new_original.xlsx",sheet = 2)
+
+signatures <- read.csv(paste0("./../output/signature_subtype_",merge,".csv"))
+
+
+gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  allgenes <- rownames(x)
+  x <- FindVariableFeatures(x,verbose = FALSE)
+  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+
+  print(paste("Analizing",names(gbm.list)[i]))
+  res <- clustify_lists(
+    input = x,             
+    cluster_col = "RNA_snn_res.1",
+    marker = signatures,                
+    metric = "pct", 
+    threshold = 0,
+    verbose = FALSE)
+  return(res@meta.data[c("type","r")])
+})
+
+```
+
+```{r}
+names(gbm.list.res) <- NULL
+res.marker.df <- NULL
+res.marker.df <- do.call(rbind,gbm.list.res)
+
+colnames(res.marker.df) <- c("clustifyr_marker","r_marker")
+res.marker.df
+```
+```{r}
+table(res.marker.df$clustifyr_marker)
+```
+
+
+```{r}
+all <- data.frame()
+all <- cbind(res.ref.df,res.marker.df)
+all
+```
+
+```{r}
+write.csv(all,paste0("./../output/clustifyr_",object,"_",merge,".csv"),row.names = TRUE)
+```
+
+
+
+
+
+
+
+
+``

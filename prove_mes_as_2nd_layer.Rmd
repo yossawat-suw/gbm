@@ -1,0 +1,412 @@
+
+```{r}
+gbm <-readRDS("./output/seurat_gbm_qc")
+```
+
+```{r}
+library(Seurat)
+library(UCell)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+
+signature <- read.csv("./output/signature_subtype_4metamodules_new_50.csv")
+
+signature.list <- list(ac = signature$AC.new,  opc = signature$OPC.new, npc = signature$NPC.new, mes = signature$MES.new)
+
+Idents(gbm) <- "donor_radiation"
+gbm.list <- SplitObject(gbm,split.by = "ident")
+```
+```{r}
+gc()
+```
+
+
+```{r}
+res.list <- lapply(gbm.list, FUN = function(gbm.each) {
+  gbm.each <- NormalizeData(gbm.each)
+  #Ucell
+  gbm.each <- AddModuleScore_UCell(gbm.each,features = signature)
+  score.ucell <- gbm.each@meta.data
+  data_long_ucell <- gather(score.ucell, condition, measurement, NPC.new_UCell:AC.new_UCell, factor_key=TRUE)
+  
+  p_ucell <- ggscatter(
+    data_long_ucell, x = "MES.new_UCell", y = "measurement",
+    color = "condition", palette = "jco",
+    add = "reg.line"
+    ) +
+    facet_wrap(~condition) +
+    stat_cor()
+  
+  #Seurat addmetamodule
+  gbm.each <- AddModuleScore(gbm.each,features = signature.list,name = names(signature.list))
+    score.seurat <- gbm.each@meta.data
+  data_long_seurat <- gather(score.seurat, condition, measurement, ac1:npc3, factor_key=TRUE)
+  
+  p_seurat <- ggscatter(
+     data_long_seurat, x = "mes4", y = "measurement",
+    color = "condition", palette = "jco",
+    add = "reg.line"
+    ) +
+    facet_wrap(~condition) +
+    stat_cor()
+    
+  return(list(p_ucell,p_seurat,score.ucell,score.seurat))
+})
+
+```
+
+
+```{r}
+res.list[[1]][[1]]
+res.list[[2]][[1]]
+res.list[[3]][[1]]
+res.list[[4]][[1]]
+res.list[[5]][[1]]
+res.list[[6]][[1]]
+res.list[[7]][[1]]
+res.list[[8]][[1]]
+res.list[[9]][[1]]
+res.list[[10]][[1]]
+res.list[[11]][[1]]
+res.list[[12]][[1]]
+res.list[[13]][[1]]
+res.list[[14]][[1]]
+res.list[[15]][[1]]
+res.list[[16]][[1]]
+res.list[[17]][[1]]
+res.list[[18]][[1]]
+res.list[[19]][[1]]
+res.list[[20]][[1]]
+res.list[[21]][[1]]
+res.list[[22]][[1]]
+res.list[[23]][[1]]
+res.list[[24]][[1]]
+res.list[[25]][[1]]
+res.list[[26]][[1]]
+```
+
+```{r}
+gbm@meta.data
+```
+
+```{r}
+res.list[[1]][[2]]
+res.list[[2]][[2]]
+res.list[[3]][[2]]
+res.list[[4]][[2]]
+res.list[[5]][[2]]
+res.list[[6]][[2]]
+res.list[[7]][[2]]
+res.list[[8]][[2]]
+res.list[[9]][[2]]
+res.list[[10]][[2]]
+res.list[[11]][[2]]
+res.list[[12]][[2]]
+res.list[[13]][[2]]
+res.list[[14]][[2]]
+res.list[[15]][[2]]
+res.list[[16]][[2]]
+res.list[[17]][[2]]
+res.list[[18]][[2]]
+res.list[[19]][[2]]
+res.list[[20]][[2]]
+res.list[[21]][[2]]
+res.list[[22]][[2]]
+res.list[[23]][[2]]
+res.list[[24]][[2]]
+res.list[[25]][[2]]
+res.list[[26]][[2]]
+```
+
+```{r}
+gbm.meta.ucell <- data.frame(matrix(ncol = ncol(res.list[[1]][[3]]),nrow = 0))
+colnames(gbm.meta.ucell) <- NULL
+
+for (i in 1:length(res.list)) {
+#  print(length(i))
+  #print(dim(i[[3]]))
+  gbm.meta.ucell <- rbind(gbm.meta.ucell, res.list[[i]][[3]])
+}
+
+gbm.meta.ucell <- gbm.meta.ucell[!gbm.meta.ucell$NPC.new_UCell == 0,]
+gbm.meta.ucell <- gbm.meta.ucell[!gbm.meta.ucell$OPC.new_UCell == 0,]
+gbm.meta.ucell <- gbm.meta.ucell[!gbm.meta.ucell$AC.new_UCell == 0,]
+gbm.meta.ucell <- gbm.meta.ucell[!gbm.meta.ucell$MES.new_UCell == 0,]
+```
+
+```{r}
+hist(gbm.meta.ucell$NPC.new_UCell)
+hist(-log(gbm.meta.ucell$NPC.new_UCell))
+
+
+hist(gbm.meta.ucell$NPC.new_UCell)
+hist(-log(gbm.meta.ucell$OPC.new_UCell))
+
+
+hist(gbm.meta.ucell$OPC.new_UCell)
+hist(-log(gbm.meta.ucell$AC.new_UCell))
+
+
+hist(gbm.meta.ucell$NPC.new_UCell)
+hist(-log(gbm.meta.ucell$NPC.new_UCell))
+
+
+hist(gbm.meta.ucell$MES.new_UCell)
+```
+
+```{r}
+gbm.meta.ucell$NPC.new_UCell <- -log(gbm.meta.ucell$NPC.new_UCell)
+gbm.meta.ucell$OPC.new_UCell <- -log(gbm.meta.ucell$OPC.new_UCell)
+gbm.meta.ucell$AC.new_UCell <- -log(gbm.meta.ucell$AC.new_UCell)
+```
+
+
+
+```{r}
+gbm.meta.ucell_long <- gather(gbm.meta.ucell, condition, measurement, NPC.new_UCell:AC.new_UCell, factor_key=TRUE)
+
+#adjust distribute
+summary(gbm.meta.ucell_long$measurement)
+```
+
+```{r}
+library(lme4)
+gbm.meta.ucell_long$donor_radiation <- as.factor(gbm.meta.ucell_long$donor_radiation)
+gbm.meta.ucell_long <- within(gbm.meta.ucell_long, donor_radiation_subtype <- factor(donor_radiation:condition))
+
+mixed.lmer <- lmer(measurement ~ MES.new_UCell + (1 + MES.new_UCell|donor_radiation/condition) , data = gbm.meta.ucell_long)
+
+summary(mixed.lmer)
+```
+
+```{r}
+mm_plot <- ggplot(gbm.meta.ucell_long, aes(x = MES.new_UCell, y = measurement, colour = condition)) +
+      facet_wrap(~donor_radiation, nrow=5) +   # a panel for each mountain range
+      geom_point(alpha = 0.5,size = 0.1) +
+      theme_classic() +
+      geom_line(data = cbind(gbm.meta.ucell_long, pred = predict(mixed.lmer)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
+      theme(legend.position = "none",
+            panel.spacing = unit(0, "cm"))  # adding space between panels
+
+mm_plot
+```
+
+```{r}
+gbm.meta.ucell_long.ac <- gbm.meta.ucell_long[gbm.meta.ucell_long$condition == "AC.new_UCell",]
+lmm.ac <- lmer(measurement ~ MES.new_UCell + (1 + MES.new_UCell|donor_radiation) , data = gbm.meta.ucell_long.ac)
+summary(lmm.ac)
+library(ggeffects)  # install the package first if you haven't already, then load it
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(lmm.ac, terms = c("MES.new_UCell"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+
+(ggplot(pred.mm) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = gbm.meta.ucell_long.ac,                      # adding the raw data (scaled values)
+              aes(x = MES.new_UCell, y = measurement, colour = donor_radiation),alpha = 0.1, size = 0.1) + 
+   labs(x = "MES", y = "-log(AC)", 
+        title = "") + 
+   theme_minimal()
+)
+
+
+mm_plot <- ggplot(gbm.meta.ucell_long.ac, aes(x = MES.new_UCell, y = measurement, colour = condition)) +
+      facet_wrap(~donor_radiation, nrow=5) +   # a panel for each mountain range
+      geom_point(alpha = 0.5,size = 0.1) +
+      theme_classic() +
+      geom_line(data = cbind(gbm.meta.ucell_long.ac, pred = predict(lmm.ac)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
+      theme(legend.position = "none",
+            panel.spacing = unit(0, "cm"))  # adding space between panels
+
+mm_plot
+```
+```{r}
+gbm.meta.ucell_long.npc <- gbm.meta.ucell_long[gbm.meta.ucell_long$condition == "NPC.new_UCell",]
+lmm.npc <- lmer(measurement ~ MES.new_UCell + (1 + MES.new_UCell|donor_radiation) , data = gbm.meta.ucell_long.npc)
+summary(lmm.npc)
+library(ggeffects)  # install the package first if you haven't already, then load it
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(lmm.npc, terms = c("MES.new_UCell"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+
+(ggplot(pred.mm) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = gbm.meta.ucell_long.npc,                      # adding the raw data (scaled values)
+              aes(x = MES.new_UCell, y = measurement, colour = donor_radiation),alpha = 0.1, size = 0.1) + 
+   labs(x = "MES", y = "-log(npc)", 
+        title = "") + 
+   theme_minimal()
+)
+
+mm_plot <- ggplot(gbm.meta.ucell_long.npc, aes(x = MES.new_UCell, y = measurement, colour = condition)) +
+      facet_wrap(~donor_radiation, nrow=5) +   # a panel for each mountain range
+      geom_point(alpha = 0.5,size = 0.1) +
+      theme_classic() +
+      geom_line(data = cbind(gbm.meta.ucell_long.npc, pred = predict(lmm.npc)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
+      theme(legend.position = "none",
+            panel.spacing = unit(0, "cm"))  # adding space between panels
+
+mm_plot
+```
+
+```{r}
+gbm.meta.ucell_long.opc <- gbm.meta.ucell_long[gbm.meta.ucell_long$condition == "OPC.new_UCell",]
+lmm.opc <- lmer(measurement ~ MES.new_UCell + (1 + MES.new_UCell|donor_radiation) , data = gbm.meta.ucell_long.opc)
+summary(lmm.opc)
+library(ggeffects)  # install the package first if you haven't already, then load it
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(lmm.opc, terms = c("MES.new_UCell"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+
+ggplot(pred.mm) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = gbm.meta.ucell_long.opc,                      # adding the raw data (scaled values)
+              aes(x = MES.new_UCell, y = measurement, colour = donor_radiation),alpha = 0.1, size = 0.1) + 
+   labs(x = "MES", y = "-log(OPC)", 
+        title = "") + 
+   theme_minimal()
+
+
+mm_plot <- ggplot(gbm.meta.ucell_long.opc, aes(x = MES.new_UCell, y = measurement, colour = condition)) +
+      facet_wrap(~donor_radiation, nrow=5) +   # a panel for each mountain range
+      geom_point(alpha = 0.5,size = 0.1) +
+      theme_classic() +
+      geom_line(data = cbind(gbm.meta.ucell_long.opc, pred = predict(lmm.opc)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
+      theme(legend.position = "none",
+            panel.spacing = unit(0, "cm"))  # adding space between panels
+
+mm_plot
+```
+
+
+
+```{r}
+#Correlation matrix
+library(ggcorrplot)
+ucell.score <- gbm.meta.ucell[,c("NPC.new_UCell","OPC.new_UCell","AC.new_UCell","MES.new_UCell")]
+corr<- cor(ucell.score)
+corr
+p.mat <- cor_pmat(ucell.score)
+head(p.mat[, 1:4])
+ggcorrplot(corr)
+```
+
+
+```{r}
+#Correlation matrix in subgroup
+gbm.meta.ucell.list <- gbm.meta.ucell %>%
+  group_split(donor_radiation)
+
+gbm.meta.ucell.list <- lapply(gbm.meta.ucell.list,FUN = function(x) {
+  ucell.score <- x[,c("NPC.new_UCell","OPC.new_UCell","AC.new_UCell","MES.new_UCell")]
+  corr<- cor(ucell.score)
+  return(corr)
+})
+
+corr <- Reduce('+', gbm.meta.ucell.list)/length(gbm.meta.ucell.list)
+
+
+corr.sd <- lapply(gbm.meta.ucell.list,FUN = function(x) {
+  return((corr - x)^2)
+})
+corr.sd  <- sqrt(Reduce('+', corr.sd)/(length(corr.sd) - 1))
+
+gc()
+
+```
+
+
+```{r}
+breaksList = seq(-1, 1, by = 0.01)
+pheatmap::pheatmap(data.frame(corr), cluster_cols = FALSE,cluster_rows = FALSE,display_numbers = TRUE,main = "Mean of Correlation",color = colorRampPalette(c("pink", "white","lightblue"))(length(breaksList)),breaks = breaksList)
+pheatmap::pheatmap(corr.sd, treeheight_row = 0, treeheight_col = 0,display_numbers = TRUE, main = "SD of Correlation",color = colorRampPalette(c("pink", "white","lightblue"))(length(breaksList)),breaks = breaksList)
+```
+
+```{r}
+#Try AC with NPC (because correlation value seem correlated)
+
+gbm.meta.ucell.ac_long <- gather(gbm.meta.ucell, condition, measurement, c(NPC.new_UCell,OPC.new_UCell,MES.new_UCell), factor_key=TRUE)
+
+
+gbm.meta.ucell_long.npc <- gbm.meta.ucell.ac_long[gbm.meta.ucell.ac_long$condition == "NPC.new_UCell",]
+lmm.npc <- lmer(measurement ~ AC.new_UCell + (1 + AC.new_UCell|donor_radiation) , data = gbm.meta.ucell_long.npc)
+summary(lmm.npc)
+library(ggeffects)  # install the package first if you haven't already, then load it
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(lmm.npc, terms = c("AC.new_UCell"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+
+(ggplot(pred.mm) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = gbm.meta.ucell_long.npc,                      # adding the raw data (scaled values)
+              aes(x = AC.new_UCell, y = measurement, colour = donor_radiation),alpha = 0.1, size = 0.1) + 
+   labs(x = "-log(ac)", y = "-log(npc)", 
+        title = "") + 
+   theme_minimal()
+)
+
+mm_plot <- ggplot(gbm.meta.ucell_long.npc, aes(x = AC.new_UCell, y = measurement, colour = condition)) +
+      facet_wrap(~donor_radiation, nrow=5) +   # a panel for each mountain range
+      geom_point(alpha = 0.5,size = 0.1) +
+      theme_classic() +
+      geom_line(data = cbind(gbm.meta.ucell_long.npc, pred = predict(lmm.npc)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
+      theme(legend.position = "none",
+            panel.spacing = unit(0, "cm"))  # adding space between panels
+
+mm_plot
+```
+```{r}
+#Try OPC with NPC (because correlation value seem correlated)
+
+gbm.meta.ucell.npc_long <- gather(gbm.meta.ucell, condition, measurement, c(AC.new_UCell,OPC.new_UCell,MES.new_UCell), factor_key=TRUE)
+
+
+gbm.meta.ucell_long.opc <- gbm.meta.ucell.npc_long[gbm.meta.ucell.npc_long$condition == "OPC.new_UCell",]
+lmm.opc <- lmer(measurement ~ NPC.new_UCell + (1 + NPC.new_UCell|donor_radiation) , data = gbm.meta.ucell_long.opc)
+
+library(ggeffects)  # install the package first if you haven't already, then load it
+
+# Extract the prediction data frame
+pred.mm <- ggpredict(lmm.opc, terms = c("NPC.new_UCell"))  # this gives overall predictions for the model
+
+# Plot the predictions 
+
+(ggplot(pred.mm) + 
+   geom_line(aes(x = x, y = predicted)) +          # slope
+   geom_ribbon(aes(x = x, ymin = predicted - std.error, ymax = predicted + std.error), 
+               fill = "lightgrey", alpha = 0.5) +  # error band
+   geom_point(data = gbm.meta.ucell_long.opc,                      # adding the raw data (scaled values)
+              aes(x = NPC.new_UCell, y = measurement, colour = donor_radiation),alpha = 0.1, size = 0.1) + 
+   labs(x = "-log(NPC)", y = "-log(OPC)", 
+        title = "") + 
+   theme_minimal()
+)
+
+mm_plot <- ggplot(gbm.meta.ucell_long.opc, aes(x = NPC.new_UCell, y = measurement, colour = condition)) +
+      facet_wrap(~donor_radiation, nrow=5) +   # a panel for each mountain range
+      geom_point(alpha = 0.5,size = 0.1) +
+      theme_classic() +
+      geom_line(data = cbind(gbm.meta.ucell_long.opc, pred = predict(lmm.opc)), aes(y = pred), size = 1) +  # adding predicted line from mixed model 
+      theme(legend.position = "none",
+            panel.spacing = unit(0, "cm"))  # adding space between panels
+
+mm_plot
+```
+

@@ -180,8 +180,8 @@ gbm[["RNA"]] <- AddMetaData(gbm[["RNA"]],metadata = ncell, col.name = "nCell_RNA
 ```
 
 ```{r}
-saveRDS(gbm,paste0("./../output/","seurat_gbm_qc"),compress = FALSE)
-```
+saveRDS(gbm,paste0("./../output/","seurat_gbm_qc"),compress = TRUE)
+    ```
 
 ```{r}
 gbm <- CellCycleScoring(object = gbm, g2m.features = cc.genes$g2m.genes,

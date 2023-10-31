@@ -847,7 +847,6 @@ library(nebula)
 
 
 
-#Save
 ```{r}
 saveRDS(smrt.mal,"./../output/smrt_mal", compress = TRUE)
 ```

@@ -16,20 +16,12 @@ subsheet <- sig.subtype.sheets[1]
 object <- "all"
 ```
 
-```{r}
-#Common config
-##Metamodule choice
-###This is for 6 metamodule
 
 
-sigs <- c("6metamodules","4metamodules_new","4metamodules_new_50","MESImm")
-sig <- sigs[3]
-sig
-```
 ```{r}
 #For reference based
-merges <- c("6metamodules","4_merge_metamodules")
-merge <- merges[2]
+merges <- c("6metamodules","4_merge_metamodules","4_merge_metamodules_3celltype")
+merge <- merges[3]
 celltypes <- c("celltype","celltype_merge")
 celltype <- celltypes[2]
 ```
@@ -40,4 +32,5 @@ celltype <- celltypes[2]
 anno.picks <- c(by_type=1, by_consistency = 2, only_diverge = 3, marker_based = 4)
 anno.pick <- anno.picks[3]
 ```
+
 

@@ -213,7 +213,7 @@ p6 <- ggplot(all.iqv, aes(x=B)) + geom_histogram(bins =  bin_num)
 all.iqv.con <- data.frame()
 all.iqv.con <- cbind(all.iqv,all.consensus)
 
-p1 <- ggplot(all.iqv.con, aes(x=DM, fill = res_0.6)) + geom_histogram(bins = bin_num)
+p1 <- ggplot(all.iqv.con, aes(x=DM, fill = 1)) + geom_histogram(bins = bin_num)
 p1
 ```
 
@@ -283,13 +283,16 @@ vals <- append(vals,val)
 all.consensus$consensus <- vals
 ```
 
+
+
+
 ```{r}
 all.consensus 
 ```
 
 ```{r}
 #Save for future 
-write.csv(all.consensus, "./../output/consensus_all_MESImm.csv", row.names = TRUE)
+#write.csv(all.consensus, "./../output/consensus_all_MESImm.csv", row.names = TRUE)
 ```
 
 ```{r}
@@ -461,9 +464,7 @@ ggplot(each.meta.df, aes(x= "", y = per, fill=consensus)) +
   labs(title="All donors", subtitle = paste0("consensus_no_filtered; num_tools = ",as.character(ncol(all))))
 ```
 
-```{r}
 
-```
 
 
 

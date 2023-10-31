@@ -1,0 +1,665 @@
+
+
+---
+title: "All"
+output: html_document
+date: '2023-06-08'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(ggplot2)
+library(Seurat)
+library(SeuratDisk)
+library(dplyr)
+library(readxl)
+library(tibble)
+library(patchwork)
+library(parallel)
+library(purrr)
+```
+
+```{r}
+#Parameter
+#Select the signature to be used
+# if it is new one, can add into the list but keep in mind to run the preprocessing of the signatures in the next chunk because it need to be preprocessed into xlsx file first
+sigs <- c("6metamodules","4metamodules_new","4metamodules_new_50","MESImm","3metamodules_new_50","4metamodules_new_50_mes")
+sig <- sigs[6]
+sig
+
+#cell input to be analyse
+
+object <- "all"
+
+```
+
+#signature preprocessing
+```{r}
+#automatic convert gene list
+signatures <- read.csv(paste0("./../output/signature_subtype_",sig,".csv"))
+
+#scsorter
+signatures.split <- list()
+for (i in 1:ncol(signatures)) {
+  signatures.each <- na.omit(signatures[i])
+  signatures.split <- append(signatures.split,list(signatures.each))
+}
+
+signatures.split <- lapply(signatures.split, FUN = function(x){
+  x <- cbind(rep(colnames(x),nrow(x)),x)
+  colnames(x) <- c("Type","Marker")
+  return(x)
+})
+
+signatures.scsorter <- do.call(rbind,signatures.split)
+
+#sctype
+signatures.merge <- apply(signatures, 2,paste0,collapse=",")
+
+signatures.sctype <- data.frame(signatures.merge)
+colnames(signatures.sctype) <- "geneSymbolmore1"
+signatures.sctype$geneSymbolmore2 <- NA
+signatures.sctype <- rownames_to_column(signatures.sctype, var = "cellName")
+tissueType <- data.frame(tissueType  = rep("gbm",nrow(signatures.sctype)))
+
+signatures.sctype <- cbind(tissueType, signatures.sctype)
+
+#scID
+signatures.split <- list()
+for (i in 1:ncol(signatures)) {
+  signatures.each <- na.omit(signatures[i])
+  signatures.split <- append(signatures.split,list(signatures.each))
+}
+
+signatures.split <- lapply(signatures.split, FUN = function(x){
+  x <- cbind(rep(colnames(x),nrow(x)),x)
+  colnames(x) <- c("cluster","gene")
+  return(x)
+})
+
+signatures.scid <- do.call(rbind,signatures.split)
+signatures.scid$cluster <- as.factor(signatures.scid$cluster)
+
+
+#SCINA
+signatures.scina <- as.data.frame(signatures)
+signatures.scina[is.na.data.frame(signatures.scina)] <- ""
+
+#markercount
+signatures.split <- list()
+for (i in 1:ncol(signatures)) {
+  signatures.each <- cbind(signatures[i],rep(1,nrow(signatures)))
+  signatures.split <- append(signatures.split,list(signatures.each))
+}
+
+signatures.split <- lapply(signatures.split, FUN = function(x){
+  x <- data.frame(t(na.omit(x)))
+  colnames(x) <- x[1,]
+  x[1,] <- 1
+  x <- x[1,]
+  x <- rownames_to_column(x,var = "celltype")
+})
+
+library(tibble)
+sig.markercount <- signatures.split %>% reduce(full_join, by='celltype')
+sig.markercount <- sig.markercount %>% column_to_rownames(var = "celltype")
+
+#Save to xlsx to be used later
+writexl::write_xlsx(signatures.sctype,path = paste0("./../data/gbm_",sig,"_sctype.xlsx"))
+writexl::write_xlsx(signatures.scsorter,path = paste0("./../data/gbm_",sig,"_scsorter.xlsx"))
+
+sig.markercount <- rownames_to_column(sig.markercount,var = "celltype")
+writexl::write_xlsx(sig.markercount,path = paste0("./../data/gbm_",sig,"_markercount.xlsx"))
+
+writexl::write_xlsx(signatures.scid,path = paste0("./../data/gbm_",sig,"_scID.xlsx"))
+```
+
+
+
+##tools
+#Sc-type
+```{r}
+library(HGNChelper)
+
+#Sctype
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
+source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
+
+```
+
+```{r}
+#Load genelist
+
+# DB file
+db_ = "./../data/gbm_subtype_new_sctype.xlsx"
+
+
+tissue = "gbm"
+
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+```
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm.list <- SplitObject(gbm, split.by = "split")
+
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+```
+
+
+```{r}
+library(dplyr)
+library(parallel)
+score.list <- list()
+n.cores <- parallel::detectCores() - 1
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x, verbose = FALSE)
+  x <- FindVariableFeatures(x, verbose = FALSE)
+  x <- ScaleData(x,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+  es.max <- sctype_score(scRNAseqData = x[["RNA"]]@scale.data, scaled = TRUE, 
+                    gs = gs_list$gs_positive, gs2 = NULL) 
+
+  cL_resutls = do.call("rbind", lapply(unique(x@meta.data$seurat_clusters), function(cl){
+      es.max.cl = sort(rowSums(es.max[ ,rownames(x@meta.data[x@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+      head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(x@meta.data$seurat_clusters==cl)), 10)
+  }))
+  sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+  score.list <- append(score.list,sctype_scores)
+  x@meta.data$scType = ""
+  for(j in unique(sctype_scores$cluster)){
+    cl_type <- sctype_scores[sctype_scores$cluster==j,]
+  x@meta.data$scType[x@meta.data$seurat_clusters == j] <-  as.character(cl_type$type[1])
+  }
+  return(list(sctype_scores=sctype_scores,x=x))
+}))
+```
+
+
+```{r}
+score.list <- lapply(gbm.list.res, "[[", 1)
+gbm.list.res <- lapply(gbm.list.res, "[[", 2)
+```
+
+```{r}
+each.meta.all <- list()
+for (i in gbm.list.res) {
+  each.meta <- i@meta.data[c("scType")]
+  each.meta.all <- rbind(each.meta.all,each.meta)
+}
+```
+
+```{r}
+table(each.meta.all$scType)
+```
+
+```{r}
+write.csv(each.meta.all,paste0("./../output/scType_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+
+#SCINA
+```{r}
+library(SCINA)
+library(preprocessCore)
+
+#marker based
+#normalized by quantile + log1p
+#Expectation-maximization inference
+```
+
+
+
+```{r}
+gbm <- readRDS("./../output/seurat_gbm_qc")
+
+gbm.list <- SplitObject(gbm, split.by = "split")
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+
+
+
+
+
+gbm.list.res <- list()
+rm(gbm)
+gc()
+
+for (i in 1:length(gbm.list)) {
+  exp  <- gbm.list[[i]]
+  exp <- log(exp@assays$RNA@counts + 1)
+  exp[] = normalize.quantiles(as.matrix(exp))
+  results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=TRUE)
+
+  gbm.list.res <- append(gbm.list.res,list(results))
+  print(paste("finish",names(gbm.list)[i]))
+  
+}
+
+gbm.list.res <- mclapply(gbm.list,mc.cores = 4, FUN = function(x){
+  exp <- log(x@assays$RNA@counts + 1)
+  exp[] = normalize.quantiles(as.matrix(exp))
+  results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=FALSE)
+  return(results)
+})
+```
+
+```{r}
+names(gbm.list.res) <- names(gbm.list)
+```
+
+
+```{r}
+res.df <- data.frame()
+for (i in gbm.list.res) {
+  cell_labels <- data.frame(SCINA = i$cell_labels,stringsAsFactors = TRUE)
+  props <- data.frame(t(i$probabilities))
+  res.each.df <- add_column(props,cell_labels, .before = 1)
+  res.df <- rbind(res.df, res.each.df)
+}
+```
+
+
+
+```{r}
+write.csv(res.df,paste0("./../output/SCINA_",object,"_",sig,".csv"),row.names = TRUE)
+```
+
+
+
+#scSorter -->
+<!-- ```{r} -->
+<!-- library(scSorter) -->
+<!-- library(readxl) -->
+<!-- #Load annotation -->
+
+<!-- anno <- as.data.frame(read_xlsx(paste0("./../data/gbm_",sig,"_scsorter.xlsx"))) -->
+
+<!-- # make sure that anno is dataframe not the tibble bc it wil cause problem in rts function later if it is tibble -->
+<!-- anno -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- #Load dataset -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
+
+<!-- gbm.list <- SplitObject(gbm,split.by = "split") -->
+
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(scSorter) -->
+<!-- library(dplyr) -->
+<!-- library(parallel) -->
+<!-- library(tibble) -->
+
+<!-- n.cores <- parallel::detectCores() - 1 -->
+
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!-- #system.time(gbm.list.res <- lapply(X = gbm.list[4:5], FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose = FALSE) -->
+<!--   x <- FindVariableFeatures(x,verbose = FALSE) -->
+
+<!--   topgenes <- head(VariableFeatures(x), 2000) -->
+<!--   # gene expression need to be library normalized and log tranform first! # -->
+<!--   expr = GetAssayData(x, assay = "RNA", slot = "data") -->
+<!--   topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1 -->
+<!--   topgenes = topgenes[topgene_filter] -->
+<!--   picked_genes = unique(c(anno$Marker, topgenes)) -->
+<!--   expr = expr[rownames(expr) %in% picked_genes, ] -->
+
+<!--   rts <- scSorter(expr, anno) -->
+
+<!--   x <- AddMetaData(x,rts$Pred_Type, col.name = "scSorter") -->
+<!--   each.meta <- x@meta.data[c("scSorter")] -->
+<!--   each.meta <- rownames_to_column(each.meta) -->
+
+<!--   return(list(rts=rts,each.meta=each.meta)) -->
+<!-- })) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- rts.list <- lapply(gbm.list.res, "[[", 1) -->
+
+
+<!-- #Keep rts results of all -->
+<!-- saveRDS(rts.list,paste0("./../output/scsorter_rts_",object,"_",sig), compress = TRUE) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gbm.list.res <- lapply(gbm.list.res, "[[", 2) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #Demultiplex list -->
+<!-- each.meta.df <- data.frame() -->
+
+<!-- for (i in 1:length(gbm.list.res)) { -->
+<!--   each.meta.df <- rbind(each.meta.df,data.frame(gbm.list.res[[i]])) -->
+<!-- } -->
+
+<!-- colnames(each.meta.df)[1] <- "cell_id" -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- nrow(each.meta.df) -->
+<!-- table(each.meta.df$scSorter) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- write.csv(each.meta.df,paste0("./../output/scsorter_",object,"_",sig,".csv"),row.names = FALSE) -->
+<!-- ``` -->
+
+
+
+
+
+
+#UCell -->
+<!-- ```{r} -->
+<!-- library(UCell) -->
+<!-- #load subtpye signature -->
+<!-- #signatures <- read_xlsx("./../data/gbm_subtype_genelist.xlsx",sheet = 2) -->
+<!-- #signatures <- read_xlsx("./../data/gbm_subtype_new_original.xlsx",sheet = 2) -->
+
+<!-- #signatures <- read.csv(paste0("./../output/signature_subtype_",sig,".csv")) -->
+
+<!-- signatures.ucell <- read_xlsx("./../data/MESImm_original.xlsx",sheet = 3) -->
+
+
+<!-- signatures.ucell <- as.list(signatures.ucell)  -->
+<!-- signatures.ucell <- lapply(signatures.ucell, na.omit) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
+<!-- gbm <- NormalizeData(gbm,verbose = FALSE) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gbm <- AddModuleScore_UCell(gbm, features =signatures) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm.meta <- gbm@meta.data -->
+<!-- gbm.meta.colnames <- colnames(gbm.meta) -->
+<!-- gbm.meta.colnames -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- phenotype <- gbm.meta.colnames[grepl('*_UCell', gbm.meta.colnames)] -->
+<!-- score <- gbm@meta.data[,phenotype] -->
+
+
+<!-- celltype.all <- c() -->
+<!-- for (i in 1:nrow(score)) { -->
+
+<!--   score_cell <- sort(unlist((score[i,])),decreasing = TRUE) -->
+<!--   celltype <- names(score_cell[1]) -->
+<!--   celltype.all <- append(celltype.all,celltype) -->
+
+<!-- } -->
+
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- max(score) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm$UCell <- celltype.all -->
+
+<!-- each.meta.df <- gbm@meta.data[c("UCell")] -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- each.meta.df -->
+<!-- table(each.meta.df$UCell) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- write.csv(each.meta.df,paste0("./../output/UCell_",object,"_",sig,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
+#scID:marker-based -->
+<!-- ```{r} -->
+<!-- library(readxl) -->
+<!-- # markers <- read_xlsx("./../data/gbm_subtype_new_scID.xlsx") -->
+<!-- # markers$cluster <- as.factor(markers$cluster) -->
+
+<!-- markers <- signatures.scid -->
+<!-- markers$cluster <- as.factor(markers$cluster) -->
+
+<!-- rownames(markers) <- markers$gene -->
+<!-- markers.head <- head(markers,20) -->
+
+<!-- markers.test <-readRDS("./../data/example/scID/markers.rds") -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # Ref -->
+<!-- # neftel.smt <- readRDS("./../output/smrt_mal") -->
+<!-- # reference_gem <- as.matrix(neftel.smt@assays$norm@data) -->
+<!-- # reference_clusters <- neftel.smt$celltype_merge -->
+<!-- #  -->
+<!-- # neftel.cell.id <- names(reference_clusters) -->
+<!-- # reference_clusters <- as.factor(gsub("like",".new",reference_clusters)) -->
+<!-- #  -->
+<!-- # names(reference_clusters) <- neftel.cell.id -->
+
+
+<!-- # Target -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
+<!-- gbm.list <- SplitObject(gbm, split.by = "split") -->
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- rm(gbm,neftel.smt) -->
+<!-- gc() -->
+<!-- ``` -->
+
+
+<!-- ```{r message=FALSE, warning=FALSE, paged.print=FALSE} -->
+<!-- x <- NormalizeData(gbm.list$run1_control_E55N,normalization.method = "RC",verbose = FALSE) -->
+<!-- time1 <- system.time(test <- rowSums(as.matrix(x@assays$RNA@counts) != 0)) -->
+<!-- time1  -->
+
+
+<!-- x@assays$RNA@counts[1:3,1:3] -->
+<!-- str(x@assays$RNA@counts) -->
+<!-- str(as.matrix(x@assays$RNA@counts)[1,1]) -->
+<!-- str(gbm.list$run1_control_E55N@assays) -->
+<!-- gbm.list[4:5] -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- n.cores <- 1 -->
+<!-- #n.cores <- parallel::detectCores() - 2 -->
+<!-- system.time(gbm.list.res <- lapply(X = gbm.list[4:5], FUN = function(x)  { -->
+<!-- #system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,normalization.method = "RC",verbose = FALSE) -->
+<!--   x <- as.matrix(x@assays$RNA@data) -->
+<!--   # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1) -->
+<!--   scID_output <- scid_multiclass(target_gem = x, markers = markers.head, estimate_weights_from_target = TRUE,logFC = 0.6, only_pos = TRUE) -->
+<!--   return(scID_output) -->
+<!--   gc() -->
+<!-- })) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- saveRDS(gbm.list.res, file = paste0("./../output/scID_markers",object,"_",sig)) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- print(1) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- res.df <- data.frame() -->
+<!-- for (i in gbm.list.res) { -->
+<!--   res.each.df <- cbind(data.frame(i$labels, stringsAsFactors = TRUE),data.frame(t(i$scores))) -->
+<!--   res.df <- rbind(res.df,res.each.df) -->
+<!-- } -->
+<!-- colnames(res.df)[1] <- "scID_unassigned" -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- score <- res.df[grepl('*new', colnames(res.df))] -->
+<!-- score -->
+
+<!-- celltype.all <- c() -->
+<!-- for (i in 1:nrow(score)) { -->
+<!--   score_cell <- sort(unlist((score[i,])),decreasing = TRUE) -->
+
+<!--   celltype <- names(score_cell[1]) -->
+<!--   celltype.all <- append(celltype.all,celltype) -->
+
+<!-- } -->
+<!-- res.df$scID <- celltype.all -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- library(tibble) -->
+<!-- res.df <- rownames_to_column(res.df) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- head(res.df) -->
+<!-- table(res.df$scID) -->
+<!-- table(res.df$scID_unassigned) -->
+<!-- head(res.df, 30) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- write.csv(res.df,paste0("./../output/scID_markers_",object,"_",sig,".csv"),row.names = FALSE) -->
+<!-- ``` -->
+
+
+
+
+
+
+#MarkerCount (the analysis part is in python code)
+
+<!-- ```{r} -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
+
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
+
+
+<!-- SaveH5Seurat(gbm, filename = paste0("./../output/gbm_qc.h5Seurat"), overwrite = TRUE)  -->
+
+<!-- Convert(paste0("./../output/gbm_qc.h5Seurat"), dest = "h5ad",overwrite = TRUE) -->
+<!-- ``` -->
+
+#clustifyr_marker -->
+<!-- ```{r} -->
+<!-- library(clustifyr) -->
+<!-- library(Seurat) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
+<!-- gbm.list <- SplitObject(gbm, split.by = "split") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- #try using marker based -->
+<!-- library(readxl) -->
+<!-- #signatures <- read_xlsx("./../data/gbm_subtype_new_original.xlsx",sheet = 2) -->
+
+<!-- signatures <- read.csv(paste0("./../output/signature_subtype_",merge,".csv")) -->
+
+
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose = FALSE) -->
+<!--   allgenes <- rownames(x) -->
+<!--   x <- FindVariableFeatures(x,verbose = FALSE) -->
+<!--   x <- ScaleData(x, features = allgenes ,verbose = FALSE) -->
+<!--   x <- RunPCA(x, verbose = FALSE) -->
+<!--   x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE) -->
+<!--   x <- FindClusters(x, resolution = 1, verbose = FALSE) -->
+
+<!--   print(paste("Analizing",names(gbm.list)[i])) -->
+<!--   res <- clustify_lists( -->
+<!--     input = x,              -->
+<!--     cluster_col = "RNA_snn_res.1", -->
+<!--     marker = signatures,                 -->
+<!--     metric = "pct",  -->
+<!--     threshold = 0, -->
+<!--     verbose = FALSE) -->
+<!--   return(res@meta.data[c("type","r")]) -->
+<!-- }))   -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- names(gbm.list.res) <- NULL -->
+<!-- res.marker.df <- NULL -->
+<!-- res.marker.df <- do.call(rbind,gbm.list.res) -->
+<!-- colnames(res.marker.df) <- c("clustifyr_marker","r_marker") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- all <- data.frame() -->
+<!-- all <- cbind(res.ref.df,res.marker.df) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- write.csv(all,paste0("./../output/clustifyr_marker_",object,"_",merge,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
