@@ -1,6 +1,6 @@
 
 ```{r}
-# source("default.R")
+source("default.R")
 ```
 
 ```{r}
@@ -201,6 +201,7 @@ library(Seurat)
 
 ```{r}
 # Ref
+print("load neftel")
 neftel.smt <- readRDS("./../output/smrt_mal")
 neftel.smt <- subset(neftel.smt, idents = chosen_celltypes)
 reference_gem <- as.matrix(neftel.smt@assays$norm@data)
@@ -210,6 +211,7 @@ names(reference_clusters) <- rownames(neftel.smt@meta.data)
 
 
 ```{r}
+print("load gbm")
 # Target
 gbm <- readRDS("./../output/seurat_gbm_qc")
 gbm.list <- SplitObject(gbm, split.by = "split")
@@ -223,11 +225,11 @@ gbm.list[c("run1_radiated_E24N", "run1_radiated_E26N", "run1_control_E31N", "run
 
 ```{r}
 rm(gbm, neftel.smt)
-gc()
 ```
 
 
 ```{r}
+
 scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
                                    reference_clusters = NULL, markers = NULL,
                                    logFC = 0.5, normalize_reference = TRUE,
@@ -432,6 +434,7 @@ find_markers_edited <- function(
 
 
 ```{r}
+print("find_markers_edited")
 markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 ```
 
@@ -447,15 +450,13 @@ library(parallel)
 n.cores <- parallel::detectCores()
 # n.cores <- parallel::detectCores() - 3
 all.tasks <- length(gbm.list)
-i <- 0
+
 
 # gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
 
-
+print("load run sc_id_edited")
 gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
-  message("Running ", unique(x$split))
-  i <<- i + 1
-  message("it is ", i, " out of ", all.tasks)
+
 
   x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE)
   x <- as.matrix(x@assays$RNA@data)
@@ -466,10 +467,13 @@ gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
   #  gc()
   return(scID_output)
 })
+
+print("finish")
 ```
 
 
 ```{r}
+
 saveRDS(gbm.list.res, file = paste0("./../output/scID_", object, "_", merge, "_allassigned"))
 ```
 
@@ -498,6 +502,7 @@ colnames(res.df)[2] <- "scID_edited"
 
 
 ```{r}
+print("save result")
 write.csv(res.df, paste0("./../output/scID_", object, "_", merge, "_allassigned", ".csv"), row.names = TRUE)
 ```
 

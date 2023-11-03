@@ -1,4 +1,4 @@
-# source("default.R")
+source("default.R")
 
 library(parallel)
 library(tidyverse)
@@ -24,17 +24,18 @@ merge <- merges[3]
 all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
 chosen_celltypes <- all_celltypes[c(1, 3, 4)]
 
-
 library(scID)
 library(Seurat)
 
 # Ref
+print("load neftel")
 neftel.smt <- readRDS("./../output/smrt_mal")
 neftel.smt <- subset(neftel.smt, idents = chosen_celltypes)
 reference_gem <- as.matrix(neftel.smt@assays$norm@data)
 reference_clusters <- as.factor(neftel.smt@meta.data[, celltype])
 names(reference_clusters) <- rownames(neftel.smt@meta.data)
 
+print("load gbm")
 # Target
 gbm <- readRDS("./../output/seurat_gbm_qc")
 gbm.list <- SplitObject(gbm, split.by = "split")
@@ -45,7 +46,7 @@ gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y = 
 gbm.list[c("run1_radiated_E24N", "run1_radiated_E26N", "run1_control_E31N", "run1_radiated_E31N")] <- NULL
 
 rm(gbm, neftel.smt)
-gc()
+
 
 scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
                                    reference_clusters = NULL, markers = NULL,
@@ -245,6 +246,7 @@ find_markers_edited <- function(
   markers
 }
 
+print("find_markers_edited")
 markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 
 # saveRDS(markers.glob,"./../output/markers_glob_scID")
@@ -255,15 +257,13 @@ library(parallel)
 n.cores <- parallel::detectCores()
 # n.cores <- parallel::detectCores() - 3
 all.tasks <- length(gbm.list)
-i <- 0
+
 
 # gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
 
-
+print("load run sc_id_edited")
 gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
-  message("Running ", unique(x$split))
-  i <<- i + 1
-  message("it is ", i, " out of ", all.tasks)
+
 
   x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE)
   x <- as.matrix(x@assays$RNA@data)
@@ -274,6 +274,9 @@ gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
   #  gc()
   return(scID_output)
 })
+
+print("finish")
+
 
 saveRDS(gbm.list.res, file = paste0("./../output/scID_", object, "_", merge, "_allassigned"))
 
@@ -287,7 +290,7 @@ colnames(res.df)[2] <- "scID_edited"
 
 # gbm.meta <- read.csv("./../output/gbm_meta.csv",row.names = 1)
 
-
 # scid <- merge(res.df, gbm.meta, by = 'row.names', all = TRUE)
 
+print("save result")
 write.csv(res.df, paste0("./../output/scID_", object, "_", merge, "_allassigned", ".csv"), row.names = TRUE)
