@@ -30,34 +30,34 @@ library(randomcoloR)
 ```{r}
 gbm <- readRDS("./../output/seurat_gbm_qc")
 
-#Try analyse without integration 
+# Try analyse without integration
 gbm <- NormalizeData(gbm, verbose = FALSE)
 gbm <- FindVariableFeatures(gbm, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
 gbm <- ScaleData(gbm, verbose = FALSE)
 gbm <- RunPCA(gbm, npcs = 30, verbose = FALSE)
 gbm <- RunUMAP(gbm, reduction = "pca", dims = 1:30, verbose = FALSE)
-#gbm <- RunTSNE(gbm,reduction = "pca", dims = 1:30, verbose = FALSE)
-#gbm <- FindNeighbors(gbm, reduction = "pca", dims = 1:30, verbose = FALSE)
-#gbm <- FindClusters(gbm, resolution =0.4, verbose = FALSE)
+# gbm <- RunTSNE(gbm,reduction = "pca", dims = 1:30, verbose = FALSE)
+# gbm <- FindNeighbors(gbm, reduction = "pca", dims = 1:30, verbose = FALSE)
+# gbm <- FindClusters(gbm, resolution =0.4, verbose = FALSE)
 ```
 
 
 
 
 ```{r}
-p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE, group.by = "runs")
+p0 <- DimPlot(gbm, reduction = "umap", label = TRUE, group.by = "runs")
 # p0 <- p0 + labs(subtitle = "control + radiated; no integration")
 p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration")
 p0
 ```
 ```{r}
-p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE, group.by = "batch",repel = TRUE)
+p0 <- DimPlot(gbm, reduction = "umap", label = TRUE, group.by = "batch", repel = TRUE)
 # p0 <- p0 + labs(subtitle = "control + radiated; no integration")
 p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration")
 p0
 ```
 ```{r}
-p0 <- DimPlot(gbm, reduction = "umap" ,label = TRUE, group.by = "donor_id",repel = TRUE)
+p0 <- DimPlot(gbm, reduction = "umap", label = TRUE, group.by = "donor_id", repel = TRUE)
 # p0 <- p0 + labs(subtitle = "control + radiated; no integration")
 p0 <- p0 + labs(subtitle = "control + radiated; 2 runs ; no integration")
 p0
@@ -65,12 +65,12 @@ p0
 
 ```{r}
 Idents(gbm) <- "donor_id"
-sub <- subset(gbm, idents = c("E31N","E24N","E26N"))
+sub <- subset(gbm, idents = c("E31N", "E24N", "E26N"))
 ```
 
 
 ```{r}
-p0 <- DimPlot(sub, reduction = "umap",  group.by = "donor_id",split.by = "batch", ncol = 2)
+p0 <- DimPlot(sub, reduction = "umap", group.by = "donor_id", split.by = "batch", ncol = 2)
 p0
 ```
 
@@ -78,7 +78,7 @@ p0
 
 ```{r}
 Idents(gbm) <- "runs"
-gbm.run2 <- subset(gbm,idents = "run2")
+gbm.run2 <- subset(gbm, idents = "run2")
 gbm.run2 <- NormalizeData(gbm.run2, verbose = FALSE)
 gbm.run2 <- FindVariableFeatures(gbm.run2, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
 gbm.run2 <- ScaleData(gbm.run2, verbose = FALSE)
@@ -94,14 +94,14 @@ install.packages("sctransform")
 
 
 ```{r}
-p0 <- DimPlot(gbm.run2, reduction = "umap" ,label = TRUE, group.by = "batch",repel = TRUE)
+p0 <- DimPlot(gbm.run2, reduction = "umap", label = TRUE, group.by = "batch", repel = TRUE)
 p0 <- p0 + labs(subtitle = "control + radiated; run2 ; no integration")
 p0
 ```
 
 
 ```{r}
-p0 <- DimPlot(gbm.run2, reduction = "umap" ,label = TRUE, group.by = "donor_id",repel = TRUE)
+p0 <- DimPlot(gbm.run2, reduction = "umap", label = TRUE, group.by = "donor_id", repel = TRUE)
 p0 <- p0 + labs(subtitle = "control + radiated; run2 ; no integration")
 p0
 ```
@@ -112,27 +112,27 @@ gbm.run2.E37N
 ```
 
 ```{r}
-gbm <- AddMetaData(gbm,metadata = metamodule.4.new50.onlydiverge["consensus"],col.name = "new50_onlydiverge")
-#gbm <- AddMetaData(gbm,metadata = metamodule.4.new50.byconsistency["consensus"],col.name = "new50_byconsistency")
-#gbm <- AddMetaData(gbm,metadata = mes.imm["consensus"],col.name = "mes_imm")
+gbm <- AddMetaData(gbm, metadata = metamodule.4.new50.onlydiverge["consensus"], col.name = "new50_onlydiverge")
+# gbm <- AddMetaData(gbm,metadata = metamodule.4.new50.byconsistency["consensus"],col.name = "new50_byconsistency")
+# gbm <- AddMetaData(gbm,metadata = mes.imm["consensus"],col.name = "mes_imm")
 ```
 
 ```{r}
 p0 <- DimPlot(gbm, reduction = "umap", group.by = "new50_byconsistency")
-p0 
+p0
 ```
 
 
 ```{r}
 p0 <- DimPlot(gbm, reduction = "umap", group.by = "new50_onlydiverge")
-p0 
+p0
 ```
 
 
 
 ```{r}
-p0 <- DimPlot(gbm.run2.E37N, reduction = "umap", group.by = "new50_onlydiverge",split.by = "radiation", ncol = 2)
-p0 
+p0 <- DimPlot(gbm.run2.E37N, reduction = "umap", group.by = "new50_onlydiverge", split.by = "radiation", ncol = 2)
+p0
 ```
 
 
@@ -144,49 +144,51 @@ p0
 
 #integrate on ...
 ```{r}
-#Load data
+# Load data
 gbm <- readRDS("./../output/seurat_gbm_qc")
 ```
 
 
 ```{r}
 integration.method <- "donor_id"
-gbm.list <- SplitObject(gbm,split.by = integration.method)
+gbm.list <- SplitObject(gbm, split.by = integration.method)
 rm(gbm)
 ```
 
 
 ```{r}
 # normalize and identify variable features for each dataset independently
-gbm.list <- mclapply(X = gbm.list, mc.cores = (parallel::detectCores() - 2),FUN = function(x) {
-    x <- NormalizeData(x,verbose = FALSE)
-    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000,verbose = FALSE)
-    # VariableFeatures(x) <- union(VariableFeatures(x), unlist(signatures))
+gbm.list <- mclapply(X = gbm.list, mc.cores = (parallel::detectCores() - 2), FUN = function(x) {
+  x <- NormalizeData(x, verbose = FALSE)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000, verbose = FALSE)
+  # VariableFeatures(x) <- union(VariableFeatures(x), unlist(signatures))
 })
 ```
 
 
 ```{r}
 # select features that are repeatedly variable across datasets for integration
-features <- SelectIntegrationFeatures(object.list = gbm.list,verbose = FALSE, nfeatures = 2000)
+features <- SelectIntegrationFeatures(object.list = gbm.list, verbose = FALSE, nfeatures = 2000)
 
 # #Add sub-type into variable
 # for (i in 1:length(gbm.list)) {
 #   VariableFeatures(gbm.list[[i]]) <- union(VariableFeatures(gbm.list[[i]]), signatures)
 # }
 
-#Add subtype to features
-signatures <- read.csv(file = paste0("./../output/signature_subtype_",sig,".csv"))
+# Add subtype to features
+signatures <- read.csv(file = paste0("./../output/signature_subtype_", sig, ".csv"))
 signatures <- unlist(signatures)
 names(signatures) <- NULL
 signatures
 
-features <- union(features, 
-              intersect(signatures,rownames(gbm@assays$RNA@meta.features)))
+features <- union(
+  features,
+  intersect(signatures, rownames(gbm@assays$RNA@meta.features))
+)
 
 
-#plan("cluster", workers = 1)
-#plan("sequential")
+# plan("cluster", workers = 1)
+# plan("sequential")
 gc()
 ```
 
@@ -199,7 +201,7 @@ gc()
 
 # this command creates an 'integrated' data assay
 
-gbm.combined.integrated <- IntegrateData(anchorset = gbm.anchor,verbose = TRUE)
+gbm.combined.integrated <- IntegrateData(anchorset = gbm.anchor, verbose = TRUE)
 
 
 rm(gbm.list)
@@ -207,7 +209,7 @@ gc()
 ```
 
 ```{r}
-saveRDS(gbm.combined.integrated,file = paste0("./../output/seurat_gbm_integrated_",integration.method,"_plus_subtype"),compress = TRUE)
+saveRDS(gbm.combined.integrated, file = paste0("./../output/seurat_gbm_integrated_", integration.method, "_plus_subtype"), compress = TRUE)
 ```
 
 
@@ -215,18 +217,18 @@ saveRDS(gbm.combined.integrated,file = paste0("./../output/seurat_gbm_integrated
 #Post integral analysis 
 ```{r}
 integration.method <- "donor_id"
-gbm.combined.integrated <- readRDS(file = paste0("./../output/seurat_gbm_integrated_",integration.method,"_plus_subtype"))
+gbm.combined.integrated <- readRDS(file = paste0("./../output/seurat_gbm_integrated_", integration.method, "_plus_subtype"))
 ```
 
 ```{r}
-metamodule.4.new50.onlydiverge <- read.csv("./../output/consensus_all_4metamodules_new_50_only_diverge.csv",row.names = 1)
+metamodule.4.new50.onlydiverge <- read.csv("./../output/consensus_all_4metamodules_new_50_only_diverge.csv", row.names = 1)
 mes.imm <- read.csv("./../output/consensus_all_MESImm_marker_based.csv")
 rownames(mes.imm) <- mes.imm$X
 ```
 
 ```{r}
-gbm.combined.integrated <- AddMetaData(gbm.combined.integrated,metadata = metamodule.4.new50.onlydiverge["consensus"],col.name = "new50_onlydiverge")
-gbm.combined.integrated <- AddMetaData(gbm.combined.integrated,metadata = mes.imm["consensus"],col.name = "mes_imm")
+gbm.combined.integrated <- AddMetaData(gbm.combined.integrated, metadata = metamodule.4.new50.onlydiverge["consensus"], col.name = "new50_onlydiverge")
+gbm.combined.integrated <- AddMetaData(gbm.combined.integrated, metadata = mes.imm["consensus"], col.name = "mes_imm")
 ```
 
 ```{r}
@@ -237,80 +239,85 @@ gbm.combined.integrated <- ScaleData(gbm.combined.integrated, verbose = FALSE)
 gbm.combined.integrated <- RunPCA(gbm.combined.integrated, npcs = 30, verbose = FALSE)
 gbm.combined.integrated <- RunUMAP(gbm.combined.integrated, reduction = "pca", dims = 1:30)
 
-#gbm.combined.integrated <- FindNeighbors(gbm.combined.integrated, reduction = "pca", dims = 1:30)
-#gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.13)
+# gbm.combined.integrated <- FindNeighbors(gbm.combined.integrated, reduction = "pca", dims = 1:30)
+# gbm.combined.integrated <- FindClusters(gbm.combined.integrated, resolution = 0.13)
 ```
 
 ```{r}
 set.seed(1)
 group_by <- "batch"
-palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][,group_by])))
+palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][, group_by])))
 p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = palette) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 4, face = "bold")
-        )
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 4, face = "bold")
+  )
 p
 ```
 ```{r}
 set.seed(1)
 group_by <- "donor_run"
-palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][,group_by])))
+palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][, group_by])))
 p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = palette) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 4, face = "bold")
-        )
-LabelClusters(p, id = group_by,  fontface = "bold", color = "red",size = 2, repel = TRUE )
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 4, face = "bold")
+  )
+LabelClusters(p, id = group_by, fontface = "bold", color = "red", size = 2, repel = TRUE)
 ```
 ```{r}
 set.seed(1)
 group_by <- "radiation"
-palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][,group_by])))
+palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][, group_by])))
 p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = palette) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 4, face = "bold")
-        )
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 4, face = "bold")
+  )
 p
 ```
 
 ```{r}
 set.seed(1000)
 group_by <- "split"
-palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][,group_by])))
+palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][, group_by])))
 p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = palette) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 4, face = "bold")
-        )
-LabelClusters(p, id = group_by,  fontface = "bold", color = "darkred",size = 1.5, repel = TRUE)
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 4, face = "bold")
+  )
+LabelClusters(p, id = group_by, fontface = "bold", color = "darkred", size = 1.5, repel = TRUE)
 ```
 
 
 ```{r}
-
 set.seed(1)
 group_by <- "donor_radiation"
-palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][,group_by])))
+palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][, group_by])))
 p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = palette) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 4, face = "bold")
-        )
-LabelClusters(p, id = group_by,  fontface = "bold", color = "red",size = 2, repel = TRUE )
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 4, face = "bold")
+  )
+LabelClusters(p, id = group_by, fontface = "bold", color = "red", size = 2, repel = TRUE)
 ```
 ```{r}
 set.seed(1)
 group_by <- "radiation"
 split_by <- "donor_id"
-palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][,group_by])))
-p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = alpha(palette,0.1),split.by = split_by,ncol = 4,pt.size = 0.001) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 4, face = "bold")
-        )
-#LabelClusters(p, id = group_by,  fontface = "bold", color = "red",size = 2, repel = TRUE )
+palette <- distinctColorPalette(length(unique(gbm.combined.integrated[[]][, group_by])))
+p <- DimPlot(gbm.combined.integrated, group.by = group_by, cols = alpha(palette, 0.1), split.by = split_by, ncol = 4, pt.size = 0.001) +
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 4, face = "bold")
+  )
+# LabelClusters(p, id = group_by,  fontface = "bold", color = "red",size = 2, repel = TRUE )
 p
 ```
 
@@ -331,32 +338,32 @@ DimPlot(gbm.combined.integrated, split.by = "new50_onlydiverge", group.by = "rad
 
 
 ```{r}
-DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge",split.by = "split", ncol = 6) +
-  theme(strip.text.x = element_text(size = 4, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 5, face = "bold"))
+DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge", split.by = "split", ncol = 6) +
+  theme(
+    strip.text.x = element_text(size = 4, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 5, face = "bold")
+  )
 ```
 ```{r}
-DimPlot(gbm.combined.integrated,group.by = "mes_imm")
+DimPlot(gbm.combined.integrated, group.by = "mes_imm")
 ```
 ```{r}
-DimPlot(gbm.combined.integrated,group.by = "mes_imm",split.by = "radiation")
+DimPlot(gbm.combined.integrated, group.by = "mes_imm", split.by = "radiation")
 ```
 
 ```{r}
-#Check intersection with each other
+# Check intersection with each other
 signatures <- read.csv("./../output/signature_subtype_new_50.csv")
 ```
 
 
 ```{r}
-x = list(integrate.var = gbm.combined.integrated@assays$integrated@var.features, NPC = signatures$NPC.new, OPC=signatures$OPC.new, AC=signatures$AC.new, MES=signatures$MES.new)
+x <- list(integrate.var = gbm.combined.integrated@assays$integrated@var.features, NPC = signatures$NPC.new, OPC = signatures$OPC.new, AC = signatures$AC.new, MES = signatures$MES.new)
 
 vein <- ggvenn(x)
 vein <- vein + labs(title = "integrate_donor_run")
 vein
-
-
 ```
 
 
@@ -368,50 +375,52 @@ names(signatures.unlist) <- NULL
 
 
 ```{r}
-x = list(integrate.var = gbm.combined.integrated@assays$integrated@var.features,  sig=signatures.unlist)
+x <- list(integrate.var = gbm.combined.integrated@assays$integrated@var.features, sig = signatures.unlist)
 vein <- ggvenn(x)
 vein <- vein + labs(title = "integrate_donor_run")
 vein
 ```
 
 ```{r}
-intersect.genes <- intersect(gbm.combined.integrated@assays$integrated@var.features,signatures.unlist)
+intersect.genes <- intersect(gbm.combined.integrated@assays$integrated@var.features, signatures.unlist)
 intersect.genes
 ```
 
 
 
 ```{r}
-gbm.combined.integrated <- RunPCA(gbm.combined.integrated,features = intersect.genes)
+gbm.combined.integrated <- RunPCA(gbm.combined.integrated, features = intersect.genes)
 ```
 
 ```{r}
-ElbowPlot(gbm.combined.integrated,ndims = 30)
+ElbowPlot(gbm.combined.integrated, ndims = 30)
 ```
 
 
 
 ```{r}
-gbm.combined.integrated <- RunUMAP(gbm.combined.integrated,dims = 1:30)
-#gbm.combined.integrated <- RunTSNE(gbm.combined.integrated,dims = 1:10)
+gbm.combined.integrated <- RunUMAP(gbm.combined.integrated, dims = 1:30)
+# gbm.combined.integrated <- RunTSNE(gbm.combined.integrated,dims = 1:10)
 ```
 
 ```{r}
-DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge")
+DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge")
 ```
 
 
 ```{r}
-DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge", split.by = "donor_radiation", ncol = 6) + 
-    theme(strip.text.x = element_text(size = 6, face = "bold"),
-        axis.text = element_blank(),
-        legend.text = element_text(size = 5, face = "bold"))
+DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge", split.by = "donor_radiation", ncol = 6) +
+  theme(
+    strip.text.x = element_text(size = 6, face = "bold"),
+    axis.text = element_blank(),
+    legend.text = element_text(size = 5, face = "bold")
+  )
 
-#gbm.combined.integrated$donor_radiation <- paste0(gbm.combined.integrated$donor_id,"_",gbm.combined.integrated$radiation)
+# gbm.combined.integrated$donor_radiation <- paste0(gbm.combined.integrated$donor_id,"_",gbm.combined.integrated$radiation)
 ```
 
 ```{r}
-DimPlot(gbm.combined.integrated,group.by = "new50_onlydiverge",split.by = "new50_onlydiverge", ncol = 3)
+DimPlot(gbm.combined.integrated, group.by = "new50_onlydiverge", split.by = "new50_onlydiverge", ncol = 3)
 ```
 
 
@@ -442,7 +451,7 @@ p
 
 
 ```{r}
-signatures.mem <- read_xlsx("./../data/MESImm_original.xlsx",sheet = 3)
+signatures.mem <- read_xlsx("./../data/MESImm_original.xlsx", sheet = 3)
 signatures.mem
 ```
 

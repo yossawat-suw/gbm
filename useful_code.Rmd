@@ -1,32 +1,32 @@
 
 ```{r}
-gbm.meta.goi <- cbind(gbm.meta,feature.mtx.match)
+gbm.meta.goi <- cbind(gbm.meta, feature.mtx.match)
 gbm.meta.goi.list <- split(gbm.meta.goi, f = gbm.meta.goi$donor_id)
-wilcox.list <- lapply(gbm.meta.goi.list, FUN = function(x){
-  rad <- x[x$radiation == "radiated","CDKN1A"]
-  con <- x[x$radiation == "control","CDKN1A"]
-  model.wilcox <- wilcox.test(x = rad, y = con, alternative = "greater",paired = FALSE)
-  
+wilcox.list <- lapply(gbm.meta.goi.list, FUN = function(x) {
+  rad <- x[x$radiation == "radiated", "CDKN1A"]
+  con <- x[x$radiation == "control", "CDKN1A"]
+  model.wilcox <- wilcox.test(x = rad, y = con, alternative = "greater", paired = FALSE)
+
   return(model.wilcox$p.value)
 })
 wilcox.p <- unlist(wilcox.list)
-wilcox.p.adj <- p.adjust(res.vec,method="bonferroni")
+wilcox.p.adj <- p.adjust(res.vec, method = "bonferroni")
 ```
 
 ```{r}
 gbm.meta.goi.list[[1]]
 goi <- gois[1]
-gbm.meta.goi <- cbind(gbm.meta,feature.mtx.match)
+gbm.meta.goi <- cbind(gbm.meta, feature.mtx.match)
 gbm.meta.goi.list <- split(gbm.meta.goi, f = gbm.meta.goi$donor_id)
-ziw.list <- lapply(gbm.meta.goi.list, FUN = function(x){
-  rad <- x[x$radiation == "radiated",goi]
-  con <- x[x$radiation == "control",goi]
+ziw.list <- lapply(gbm.meta.goi.list, FUN = function(x) {
+  rad <- x[x$radiation == "radiated", goi]
+  con <- x[x$radiation == "control", goi]
   model.ziw <- ziw(rad, con, perm = FALSE)
-  
+
   n_rad <- sum(x$radiation == "radiated")
   n_con <- sum(x$radiation == "control")
-  
-  return(list(p = model.ziw$p.value,statistic = model.ziw$statistics, n1 = n_rad, n2 = n_con))
+
+  return(list(p = model.ziw$p.value, statistic = model.ziw$statistics, n1 = n_rad, n2 = n_con))
 })
 ziw.list[[1]]$p
 ziw.p <- sapply(ziw.list, FUN = function(x) {
@@ -41,16 +41,18 @@ n1 <- sapply(ziw.list, FUN = function(x) {
 n2 <- sapply(ziw.list, FUN = function(x) {
   return(x$n2)
 })
-ziw.p.adj <- p.adjust(ziw.p,method="bonferroni")
-stat.test.ziw <- data.frame(donor_id = names(ziw.p.adj),
-                            .y. = rep(goi,times = length(ziw.p.adj)),
-                            group1 = rep("radiated",times = length(ziw.p.adj)),
-                            group2 = rep("control",times = length(ziw.p.adj)),
-                            statistic = statistic,
-                            n1 = n1,
-                            n2 = n2,
-                            p = as.numeric(ziw.p),
-                            p.adj = as.numeric(ziw.p.adj))
+ziw.p.adj <- p.adjust(ziw.p, method = "bonferroni")
+stat.test.ziw <- data.frame(
+  donor_id = names(ziw.p.adj),
+  .y. = rep(goi, times = length(ziw.p.adj)),
+  group1 = rep("radiated", times = length(ziw.p.adj)),
+  group2 = rep("control", times = length(ziw.p.adj)),
+  statistic = statistic,
+  n1 = n1,
+  n2 = n2,
+  p = as.numeric(ziw.p),
+  p.adj = as.numeric(ziw.p.adj)
+)
 rownames(stat.test.ziw) <- NULL
 stat.test.ziw
 ```
@@ -58,15 +60,16 @@ stat.test.ziw
 gbm.meta.goi$radiation <- as.factor(gbm.meta.goi$radiation)
 
 gbm.meta.goi$radiation <- relevel(gbm.meta.goi$radiation, "radiated")
- 
+
 stat.test <- gbm.meta.goi %>%
   group_by(donor_id) %>%
-  wilcox_test(CDKN1A ~ radiation,paired = FALSE,alternative = "greater") %>% adjust_pvalue(method = "bonferroni")
+  wilcox_test(CDKN1A ~ radiation, paired = FALSE, alternative = "greater") %>%
+  adjust_pvalue(method = "bonferroni")
 stat.test.ziw <- stat.test
 stat.test.ziw$donor_id <- names(ziw.p.adj)
-stat.test.ziw$.y. <- rep(goi,times = length(ziw.p.adj))
-stat.test.ziw$group1 <- rep("radiated",times = length(ziw.p.adj))
-stat.test.ziw$group2 <- rep("control",times = length(ziw.p.adj))
+stat.test.ziw$.y. <- rep(goi, times = length(ziw.p.adj))
+stat.test.ziw$group1 <- rep("radiated", times = length(ziw.p.adj))
+stat.test.ziw$group2 <- rep("control", times = length(ziw.p.adj))
 stat.test.ziw$statistic <- statistic
 stat.test.ziw$n1 <- n1
 stat.test.ziw$n2 <- n2
@@ -82,19 +85,22 @@ stat.test.ziw
 library(ggpubr)
 library(ggplot2)
 library(rstatix)
-#gbm.meta.goi$CDKN1A_plus1 <- gbm.meta.goi$CDKN1A +1
+# gbm.meta.goi$CDKN1A_plus1 <- gbm.meta.goi$CDKN1A +1
 bxp <- ggboxplot(
-  #gbm.meta.goi, x = "radiation", y = "CDKN1A_plus1", fill = "#00AFBB", outlier.shape = NA,
-  gbm.meta.goi, x = "radiation", y = "CDKN1A", fill = "#00AFBB", outlier.shape = NA,
-  facet.by = "donor_id") +
-  scale_y_continuous(trans=scales::pseudo_log_trans(base = 2))
-  #yscale("log2", .format = TRUE)
+  # gbm.meta.goi, x = "radiation", y = "CDKN1A_plus1", fill = "#00AFBB", outlier.shape = NA,
+  gbm.meta.goi,
+  x = "radiation", y = "CDKN1A", fill = "#00AFBB", outlier.shape = NA,
+  facet.by = "donor_id"
+) +
+  scale_y_continuous(trans = scales::pseudo_log_trans(base = 2))
+# yscale("log2", .format = TRUE)
 
 # Make facet and add p-values
-stat.test.ziw <- stat.test.ziw %>% add_xy_position(x = "radiation",fun = "mean")
-bxp <- bxp + stat_pvalue_manual(stat.test.ziw, label = "p.adj.signif") 
-bxp <- bxp + labs(title = "Compare mean of gene expression: P21 (CDKN1A)",caption = "Zero inflated Wicoxon rank sum test (two tail); adjusted by bonferroni; assay = RNA, slot = data (depth normalized + log1p)")
+stat.test.ziw <- stat.test.ziw %>% add_xy_position(x = "radiation", fun = "mean")
+bxp <- bxp + stat_pvalue_manual(stat.test.ziw, label = "p.adj.signif")
+bxp <- bxp + labs(title = "Compare mean of gene expression: P21 (CDKN1A)", caption = "Zero inflated Wicoxon rank sum test (two tail); adjusted by bonferroni; assay = RNA, slot = data (depth normalized + log1p)")
 bxp <- bxp + theme(
-  axis.text.y = element_text(size = 6),axis.ticks.x = element_blank() )
+  axis.text.y = element_text(size = 6), axis.ticks.x = element_blank()
+)
 bxp
 ```

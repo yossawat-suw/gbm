@@ -1,0 +1,129 @@
+```{r}
+library(tibble)
+library(dplyr)
+```
+
+
+```{r}
+# Parameter
+# cell input to be analyse
+
+object <- "all"
+
+sigs <- c("6metamodules", "4metamodules_new_50", "3metamodules_new_50", "4metamodules_new_50_mes")
+sig <- sigs[6]
+
+
+
+# For reference based
+merges <- c("6metamodules", "4_merge_metamodules", "4_merge_metamodules_3celltypes", "4_merge_metamodules_mes")
+merge <- merges[4]
+# pick which celltype to be analyse
+
+all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
+chosen_celltypes <- all_celltypes[c(2)]
+```
+
+
+
+```{r}
+# 3subtype
+sig <- sigs[3]
+merge <- merges[3]
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("./../output/scType_", object, "_", sig, ".csv"), row.names = 1)
+sc.type <- sc.type[1]
+
+scina <- read.csv(paste0("./../output/SCINA_", object, "_", sig, ".csv"), row.names = 1)
+scina <- scina[1]
+# ref-based
+clustify.r <- read.csv(paste0("./../output/clustifyr_", object, "_", merge, ".csv"), row.names = 1)
+clustify.r <- clustify.r[1]
+scid <- read.csv(paste0("./../output/scID_", object, "_", merge, ".csv"), row.names = 1)
+scid <- scid[1]
+anno <- bind_cols(sc.type, scina, clustify.r, scid)
+
+colnames(anno) <- paste(colnames(anno), sig, sep = "_")
+
+sc.type
+scina
+clustify.r
+scid
+anno
+```
+
+```{r}
+# mes
+sig <- sigs[4]
+merge <- merges[4]
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("./../output/scType_", object, "_", sig, ".csv"), row.names = 1)
+sc.type <- sc.type[1]
+
+scina <- read.csv(paste0("./../output/SCINA_", object, "_", sig, ".csv"), row.names = 1)
+scina <- scina[1]
+# ref-based
+clustify.r <- read.csv(paste0("./../output/clustifyr_", object, "_", merge, ".csv"), row.names = 1)
+clustify.r <- clustify.r[1]
+scid <- read.csv(paste0("./../output/scID_", object, "_", merge, ".csv"), row.names = 1)
+scid <- scid[1]
+anno <- bind_cols(sc.type, scina, clustify.r, scid)
+
+colnames(anno) <- paste(colnames(anno), sig, sep = "_")
+
+sc.type
+scina
+clustify.r
+scid
+anno
+```
+
+```{r}
+# 4  subtype
+sig <- sigs[3]
+merge <- merges[2]
+
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("./../output/scType_", object, "_", sig, ".csv"), row.names = 1)
+sc.type <- sc.type[1]
+
+scina <- read.csv(paste0("./../output/SCINA_", object, "_", sig, ".csv"), row.names = 1)
+scina <- scina[1]
+# ref-based
+clustify.r <- read.csv(paste0("./../output/clustifyr_", object, "_", merge, ".csv"), row.names = 1)
+clustify.r <- clustify.r[1]
+scid <- read.csv(paste0("./../output/scID_", object, "_", merge, ".csv"), row.names = 1)
+scid <- scid[1]
+anno <- bind_cols(sc.type, scina, clustify.r, scid)
+
+colnames(anno) <- paste(colnames(anno), sig, sep = "_")
+
+sc.type
+scina
+clustify.r
+scid
+anno
+```
+
+
+
+
+
+```{r}
+# Import metadata
+gbm.meta <- read.csv("./../output/gbm_meta.csv", row.names = 1)
+
+
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("./../output/scType_", object, "_", sig, ".csv"), row.names = 1)
+scina <- read.csv(paste0("./../output/SCINA_", object, "_", sig, ".csv"), row.names = 1)
+
+# ref-based
+clustify.r <- read.csv(paste0("./../output/clustifyr_", object, "_", merge, ".csv"), row.names = 1)
+scid <- read.csv(paste0("./../output/scID_", object, "_", merge, ".csv"), row.names = 1)
+```
+

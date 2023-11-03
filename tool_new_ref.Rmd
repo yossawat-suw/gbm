@@ -1,205 +1,199 @@
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r}
+# source("default.R")
 ```
 
 ```{r}
-system
-```
-
-```{r}
-library(ggplot2)
-library(Seurat)
-library(SeuratDisk)
-library(dplyr)
-library(readxl)
-library(tibble)
-library(patchwork)
 library(parallel)
+library(tidyverse)
+library(Seurat)
+library(mclust)
+library(MASS)
+library(scID)
+library(biomod2)
 ```
 
 
+
 ```{r}
-#input cell
+print("set parameter")
+# input cell
 object <- "all"
 
-celltypes <- c("celltype","celltype_merge")
+celltypes <- c("celltype", "celltype_merge")
 celltype <- celltypes[2]
 
 
-#For reference based
-merges <- c("6metamodules","4_merge_metamodules","4_merge_metamodules_3celltypes","4_merge_metamodules_mes")
-merge <- merges[4]
-#pick which celltype to be analyse
+# For reference based
+merges <- c("6metamodules", "4_merge_metamodules", "4_merge_metamodules_3celltypes", "4_merge_metamodules_mes")
+merge <- merges[3]
+# pick which celltype to be analyse
 
-all_celltypes <- c("AClike","MESlike","NPClike","OPClike")
-chosen_celltypes <- all_celltypes[c(2)]
-chosen_celltypes
-
-
-
+all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
+chosen_celltypes <- all_celltypes[c(1, 3, 4)]
 ```
 
 
 
-#clustifyr
-```{r}
-library(clustifyr)
-library(Seurat)
-```
+<!-- #clustifyr -->
+<!-- ```{r} -->
+<!-- library(clustifyr) -->
+<!-- library(Seurat) -->
+<!-- ``` -->
 
-```{r}
-neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes);
-```
-```{r}
-new_ref_matrix <- seurat_ref(
-  seurat_object = neftel.smt,        # SeuratV3 object
-  cluster_col = celltype,    # name of column in meta.data containing cell identities
-)
-```
-
-
-```{r}
-gbm <- readRDS("./../output/seurat_gbm_qc")
-gbm.list <- SplitObject(gbm, split.by = "split")
-```
-
-```{r}
-gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
-gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
-gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
-gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
-gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
-```
-
-```{r}
-library(parallel)
-n.cores <- 3
-system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
-  x <- NormalizeData(x,verbose = FALSE)
-  allgenes <- rownames(x)
-  x <- FindVariableFeatures(x,verbose = FALSE)
-  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
-  x <- RunPCA(x, verbose = FALSE)
-  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
-  x <- FindClusters(x, resolution = 1, verbose = FALSE)
-
-  res <- clustify(
-          input = x,      
-          ref_mat = new_ref_matrix,    
-          cluster_col = "RNA_snn_res.1", 
-          obj_out = TRUE,threshold = 0,verbose = TRUE )     
-  return(res@meta.data[c("type","r")])
-}))
-```
-
-```{r}
-names(gbm.list.res) <- NULL
-res.ref.df <- NULL
-res.ref.df <- do.call(rbind,gbm.list.res)
-
-colnames(res.ref.df) <- c("clustifyr_ref","r_ref")
-```
+<!-- ```{r} -->
+<!-- neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes); -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- new_ref_matrix <- seurat_ref( -->
+<!--   seurat_object = neftel.smt,        # SeuratV3 object -->
+<!--   cluster_col = celltype,    # name of column in meta.data containing cell identities -->
+<!-- ) -->
+<!-- ``` -->
 
 
+<!-- ```{r} -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
+<!-- gbm.list <- SplitObject(gbm, split.by = "split") -->
+<!-- ``` -->
 
+<!-- ```{r} -->
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
+<!-- ``` -->
 
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- n.cores <- 3 -->
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose = FALSE) -->
+<!--   allgenes <- rownames(x) -->
+<!--   x <- FindVariableFeatures(x,verbose = FALSE) -->
+<!--   x <- ScaleData(x, features = allgenes ,verbose = FALSE) -->
+<!--   x <- RunPCA(x, verbose = FALSE) -->
+<!--   x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE) -->
+<!--   x <- FindClusters(x, resolution = 1, verbose = FALSE) -->
 
+<!--   res <- clustify( -->
+<!--           input = x,       -->
+<!--           ref_mat = new_ref_matrix,     -->
+<!--           cluster_col = "RNA_snn_res.1",  -->
+<!--           obj_out = TRUE,threshold = 0,verbose = TRUE )      -->
+<!--   return(res@meta.data[c("type","r")]) -->
+<!-- })) -->
+<!-- ``` -->
 
-```{r}
-write.csv(res.ref.df,paste0("./../output/clustifyr_",object,"_",merge,".csv"),row.names = TRUE)
-```
+<!-- ```{r} -->
+<!-- names(gbm.list.res) <- NULL -->
+<!-- res.ref.df <- NULL -->
+<!-- res.ref.df <- do.call(rbind,gbm.list.res) -->
+
+<!-- colnames(res.ref.df) <- c("clustifyr_ref","r_ref") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- write.csv(res.ref.df,paste0("./../output/clustifyr_",object,"_",merge,".csv"),row.names = TRUE) -->
+<!-- ``` -->
 
 
 
 
 
-#scID
-```{r}
-#install.packages('devtools')
-#devtools::install_github("BatadaLab/scID",dependencies = TRUE,force = TRUE)
-library(scID)
-library(Seurat)
-# target_gem <- readRDS(file="./../data/example/scID/target_gem.rds")
-# reference_gem <- readRDS(file="./../data/example/scID/reference_gem.rds")
-# reference_clusters <- readRDS(file="./../data/example/scID/reference_clusters.rds")
-```
 
-```{r}
-# Ref
-#neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes);
+<!-- #scID -->
+<!-- ```{r} -->
+<!-- if (!require("scID")) devtools::install_github("BatadaLab/scID",dependencies = TRUE,force = TRUE) -->
+<!-- # target_gem <- readRDS(file="./../data/example/scID/target_gem.rds") -->
+<!-- # reference_gem <- readRDS(file="./../data/example/scID/reference_gem.rds") -->
+<!-- # reference_clusters <- readRDS(file="./../data/example/scID/reference_clusters.rds") -->
+<!-- ``` -->
 
-neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt$celltype_merge <- as.character(neftel.smt$celltype_merge); neftel.smt@meta.data[!neftel.smt$celltype_merge == "MESlike","celltype_merge"] <- "non_MES"; neftel.smt$celltype_merge <- as.factor(neftel.smt$celltype_merge);
+<!-- ```{r} -->
+<!-- # Ref -->
+<!-- print("process neftel") -->
 
+<!-- neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes); -->
 
-reference_gem <- as.matrix(neftel.smt@assays$norm@data)
-reference_clusters <- as.factor(neftel.smt@meta.data[,celltype])
-names(reference_clusters) <- rownames(neftel.smt@meta.data)
-```
+<!-- #neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt$celltype_merge <- as.character(neftel.smt$celltype_merge); neftel.smt@meta.data[!neftel.smt$celltype_merge == "MESlike","celltype_merge"] <- "non_MES"; neftel.smt$celltype_merge <- as.factor(neftel.smt$celltype_merge); -->
 
 
-```{r}
-# Target
-gbm <- readRDS("./../output/seurat_gbm_qc")
-
-gbm.list <- SplitObject(gbm, split.by = "split")
-gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
-gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
-gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
-gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
-gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
-```
-
-```{r}
-rm(gbm,neftel.smt)
-gc()
-```
+<!-- reference_gem <- as.matrix(neftel.smt@assays$norm@data) -->
+<!-- reference_clusters <- as.factor(neftel.smt@meta.data[,celltype]) -->
+<!-- names(reference_clusters) <- rownames(neftel.smt@meta.data) -->
+<!-- ``` -->
 
 
+<!-- ```{r} -->
+<!-- # Target -->
+<!-- print("process gbm") -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
 
-```{r}
-library(parallel)
-n.cores <- 2
-#n.cores <- parallel::detectCores() - 2
-#gbm.list.test <- gbm.list[4:5]
-gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
-#system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
-  x <- NormalizeData(x,normalization.method = "RC",verbose = FALSE)
-  x <- as.matrix(x@assays$RNA@data)
-  # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
-  scID_output <- scid_multiclass(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE)
-  return(scID_output)
-  gc()
-})
-```
-```{r}
-saveRDS(gbm.list.res, file = paste0("./../output/scID_",object,"_",merge))
-```
+<!-- gbm.list <- SplitObject(gbm, split.by = "split") -->
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- rm(gbm,neftel.smt) -->
+<!-- gc() -->
+<!-- ``` -->
 
 
 
-```{r}
-res.df <- data.frame()
-for (i in gbm.list.res) {
-  res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE),data.frame(t(i$scores)))
-  res.df <- rbind(res.df,res.each.df)
-}
-colnames(res.df)[1] <- "scID"
-library(tibble)
-res.df <- rownames_to_column(res.df)
-colnames(res.df)[1] <- "cell_id"
-head(res.df)
-```
+<!-- ```{r} -->
+<!-- print("run scID") -->
+<!-- print(paste0("cores being used: ",parallel::detectCores())) -->
+<!-- gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  { -->
+<!-- #gbm.list.res <- mclapply(X = gbm.list, mc.cores = parallel::detectCores(), FUN = function(x)  { -->
+<!-- #gbm.list.res <- mclapply(X = gbm.list, mc.cores = parallel::detectCores(), FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,normalization.method = "RC",verbose = FALSE) -->
+<!--   x <- as.matrix(x@assays$RNA@data) -->
+<!--   # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1) -->
+<!--   scID_output <- scid_multiclass(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE) -->
+<!--   return(scID_output) -->
+<!--   gc() -->
+<!-- }) -->
+<!-- print("finish scID") -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- print("save RDS") -->
+<!-- saveRDS(gbm.list.res, file = paste0("./../output/scID_",object,"_",merge)) -->
+<!-- ``` -->
 
 
 
-```{r}
-write.csv(res.df,paste0("./../output/scID_",object,"_",merge,".csv"),row.names = FALSE)
-```
+<!-- ```{r} -->
+<!-- res.df <- data.frame() -->
+<!-- for (i in gbm.list.res) { -->
+<!--   res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE),data.frame(t(i$scores))) -->
+<!--   res.df <- rbind(res.df,res.each.df) -->
+<!-- } -->
+<!-- colnames(res.df)[1] <- "scID" -->
+<!-- library(tibble) -->
+<!-- res.df <- rownames_to_column(res.df) -->
+<!-- colnames(res.df)[1] <- "cell_id" -->
+
+<!-- ``` -->
 
 
 
-#scID without "unassigned"  -->
+
+<!-- ```{r} -->
+<!-- print("res.df") -->
+<!-- write.csv(res.df,paste0("./../output/scID_",object,"_",merge,".csv"),row.names = FALSE) -->
+<!-- ``` -->
+
+
+
+#scID without "unassigned"
 ```{r}
 library(scID)
 library(Seurat)
@@ -207,9 +201,10 @@ library(Seurat)
 
 ```{r}
 # Ref
-neftel.smt <- readRDS("./../output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes);
+neftel.smt <- readRDS("./../output/smrt_mal")
+neftel.smt <- subset(neftel.smt, idents = chosen_celltypes)
 reference_gem <- as.matrix(neftel.smt@assays$norm@data)
-reference_clusters <- as.factor(neftel.smt@meta.data[,celltype])
+reference_clusters <- as.factor(neftel.smt@meta.data[, celltype])
 names(reference_clusters) <- rownames(neftel.smt@meta.data)
 ```
 
@@ -218,27 +213,26 @@ names(reference_clusters) <- rownames(neftel.smt@meta.data)
 # Target
 gbm <- readRDS("./../output/seurat_gbm_qc")
 gbm.list <- SplitObject(gbm, split.by = "split")
-gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
-gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
-gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
-gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
-gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y = gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y = gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y = gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y = gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N", "run1_radiated_E26N", "run1_control_E31N", "run1_radiated_E31N")] <- NULL
 ```
 
 
 ```{r}
-rm(gbm,neftel.smt)
+rm(gbm, neftel.smt)
 gc()
 ```
 
 
 ```{r}
 scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
-                            reference_clusters = NULL, markers = NULL,
-                            logFC = 0.5, normalize_reference=TRUE,
-                            estimate_weights_from_target = FALSE,
-                            weights = NULL, only_pos=FALSE) {
-
+                                   reference_clusters = NULL, markers = NULL,
+                                   logFC = 0.5, normalize_reference = TRUE,
+                                   estimate_weights_from_target = FALSE,
+                                   weights = NULL, only_pos = FALSE) {
   # state the variable that will be use in the function
   markers <- markers.glob
 
@@ -255,7 +249,7 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
       stop("None  of the reference cells has a cluster ID. Please check the reference_clusters list provided.")
     } else {
       reference_gem <- reference_gem[, common_cells]
-      rownames(reference_gem) <- make.names(toupper(rownames(reference_gem)), unique=TRUE)
+      rownames(reference_gem) <- make.names(toupper(rownames(reference_gem)), unique = TRUE)
 
       # Remove genes that are zero across all cells
       reference_gem <- reference_gem[which(rowSums(reference_gem) != 0), ]
@@ -265,7 +259,7 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
 
   if (!is.null(markers)) {
     # Check markers have gene and cluster columns
-    if (length(intersect(c("gene", "cluster"), colnames(markers))) !=2 ) {
+    if (length(intersect(c("gene", "cluster"), colnames(markers))) != 2) {
       stop("Please provide a data frame of markers with gene and cluster in columns")
     }
     markers$gene <- toupper(markers$gene)
@@ -273,7 +267,7 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
 
 
   # Target
-  rownames(target_gem) <- make.names(toupper(rownames(target_gem)), unique=TRUE)
+  rownames(target_gem) <- make.names(toupper(rownames(target_gem)), unique = TRUE)
   # Remove genes that are zero across all cells
   target_gem <- target_gem[which(rowSums(target_gem) != 0), ]
 
@@ -281,7 +275,6 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
   # Stage 1: Find signature genes from reference data
   # ----------------------------------------------------------------------------------------------------
   if (is.null(markers)) {
-
     # Filter out signature genes that are not present in the target data
     markers <- markers[which(markers$gene %in% rownames(target_gem)), ]
 
@@ -290,11 +283,9 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
     if (estimate_weights_from_target) {
       rm(reference_gem, reference_clusters)
     }
-
   } else {
     markers <- markers[which(markers$gene %in% rownames(target_gem)), ]
     celltypes <- unique(markers$cluster)
-
   }
 
   # Min-max normalization of target gem
@@ -313,7 +304,7 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
         negative_markers <- celltype_markers$gene[which(celltype_markers$avg_log2FC < 0)]
         training_groups <- choose_training_set(target_gem, positive_markers, negative_markers)
         signature_genes <- c(positive_markers, negative_markers)
-        gene.weights <- scID_weight(target_gem_norm[signature_genes, , drop=FALSE], training_groups$in_pop, training_groups$out_pop)
+        gene.weights <- scID_weight(target_gem_norm[signature_genes, , drop = FALSE], training_groups$in_pop, training_groups$out_pop)
         # If only positive markers are selected, truncate all negative weights to 0
         if (only_pos) {
           gene.weights[which(gene.weights < 0)] <- 0
@@ -321,7 +312,6 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
         # Make Inf weights 0
         gene.weights[is.infinite(gene.weights)] <- 0
         weights[[as.character(celltypes[i])]] <- gene.weights
-
       }
       names(weights) <- celltypes
     } else {
@@ -334,14 +324,13 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
           signature_genes <- markers$gene[which(markers$cluster == celltypes[i])]
           true_cells <- names(reference_clusters)[which(reference_clusters == as.character(celltypes[i]))]
           false_cells <- setdiff(names(reference_clusters), true_cells)
-          gene.weights <- scID_weight(gem = ref_gem_norm[signature_genes, ,drop=FALSE], true_cells, false_cells)
+          gene.weights <- scID_weight(gem = ref_gem_norm[signature_genes, , drop = FALSE], true_cells, false_cells)
 
           weights[[as.character(celltypes[i])]] <- gene.weights
           # If only positive markers are selected, truncate all negative weights to 0
           if (only_pos) {
             gene.weights[which(gene.weights < 0)] <- 0
           }
-
         }
         # Won't need reference data any more, remove for efficiency
         rm(reference_gem, reference_clusters, ref_gem_norm)
@@ -364,13 +353,13 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
   for (i in 1:length(celltypes)) {
     celltype <- as.character(celltypes[i])
     signature <- intersect(names(weights[[celltype]]), rownames(target_gem_norm))
-    weighted_gem <- weights[[celltype]][signature] * target_gem_norm[signature, ,drop=FALSE]
+    weighted_gem <- weights[[celltype]][signature] * target_gem_norm[signature, , drop = FALSE]
     # Check if whole weighted gem is 0 (when all gene weighst are zero)
     if (all(weighted_gem == 0)) {
       full_scores[as.character(celltype), ] <- rep(0, ncol(full_scores))
-      print(paste("oh no",i))
+      print(paste("oh no", i))
     } else {
-      score <- colSums(weighted_gem)/sqrt(sum(weights[[celltype]]^2))
+      score <- colSums(weighted_gem) / sqrt(sum(weights[[celltype]]^2))
 
       matches <- final_populations_edited(score)
 
@@ -381,33 +370,34 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
 
   # Resolve multi-class assignments
 
-  labels <- apply(scores, 2, function(x) {ifelse(all(is.na(x)), "unassigned", rownames(scores)[which(x == max(x, na.rm = T))])})
+  labels <- apply(scores, 2, function(x) {
+    ifelse(all(is.na(x)), "unassigned", rownames(scores)[which(x == max(x, na.rm = T))])
+  })
 
-  #Add convert unassigned to random assigned one
-  #Check first whether we have unassigned or not
+  # Add convert unassigned to random assigned one
+  # Check first whether we have unassigned or not
   unassigned_index <- which(labels == "unassigned")
 
   labels_edited <- labels
   full_scores_unassigned <- NA
 
   if (length(unassigned_index) > 0) {
+    full_scores_unassigned <- full_scores[, unassigned_index, drop = FALSE]
 
-  full_scores_unassigned <- full_scores[,unassigned_index,drop = FALSE]
-
-  labels_unassigned <- apply(full_scores_unassigned, 2, function(x) {rownames(full_scores_unassigned)[which(x == max(x, na.rm = T))]})
-  labels_edited[unassigned_index] <- labels_unassigned
+    labels_unassigned <- apply(full_scores_unassigned, 2, function(x) {
+      rownames(full_scores_unassigned)[which(x == max(x, na.rm = T))]
+    })
+    labels_edited[unassigned_index] <- labels_unassigned
   } else {
-  message("no unassigned")
+    message("no unassigned")
   }
 
   # return result
-  list(scores = scores ,full_scores=full_scores, labels=labels, labels_edited = labels_edited)
-
+  list(scores = scores, full_scores = full_scores, labels = labels, labels_edited = labels_edited)
 }
 
 final_populations_edited <- function(score) {
-
-  fit <- suppressMessages(mclust::densityMclust(score, G = 1:4,plot = FALSE, verbose = FALSE))
+  fit <- suppressMessages(mclust::densityMclust(score, G = 1:4, plot = FALSE, verbose = FALSE))
 
   # Calculate average scID score per group of cells
   avgScore <- rep(NA, length(unique(fit$classification)))
@@ -419,19 +409,21 @@ final_populations_edited <- function(score) {
   matches
 }
 
-find_markers_edited <- function (reference_gem, reference_clusters, logFC, only.pos,
-    normalize_reference)
-{
-    library(Seurat)
-    so_ref <- CreateSeuratObject(reference_gem)
-    if (normalize_reference) {
-        so_ref <- suppressMessages(NormalizeData(so_ref,verbose = FALSE))
-    }
-    so_ref <- suppressMessages(ScaleData(so_ref,verbose = FALSE))
-    Idents(so_ref) <- as.factor(reference_clusters)
-    markers <- suppressMessages(FindAllMarkers(so_ref, test.use = "MAST",
-        only.pos = only.pos, logfc.threshold = logFC,verbose = FALSE))
-    markers
+find_markers_edited <- function(
+    reference_gem, reference_clusters, logFC, only.pos,
+    normalize_reference) {
+  library(Seurat)
+  so_ref <- CreateSeuratObject(reference_gem)
+  if (normalize_reference) {
+    so_ref <- suppressMessages(NormalizeData(so_ref, verbose = FALSE))
+  }
+  so_ref <- suppressMessages(ScaleData(so_ref, verbose = FALSE))
+  Idents(so_ref) <- as.factor(reference_clusters)
+  markers <- suppressMessages(FindAllMarkers(so_ref,
+    test.use = "MAST",
+    only.pos = only.pos, logfc.threshold = logFC, verbose = FALSE
+  ))
+  markers
 }
 ```
 
@@ -440,48 +432,45 @@ find_markers_edited <- function (reference_gem, reference_clusters, logFC, only.
 
 
 ```{r}
-#markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos=FALSE, normalize_reference=FALSE)
-gc()
+markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 ```
 
 
 ```{r}
-#saveRDS(markers.glob,"./../output/markers_glob_scID")
-markers.glob <- readRDS("./../output/markers_glob_scID")
+# saveRDS(markers.glob,"./../output/markers_glob_scID")
+# markers.glob <- readRDS("./../output/markers_glob_scID")
 ```
 
 ```{r}
 library(parallel)
-n.cores <- 2
-
-#n.cores <- parallel::detectCores() - 3
+# n.cores <- 2
+n.cores <- parallel::detectCores()
+# n.cores <- parallel::detectCores() - 3
 all.tasks <- length(gbm.list)
 i <- 0
 
-gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
+# gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
 
 
-#gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
+  message("Running ", unique(x$split))
+  i <<- i + 1
+  message("it is ", i, " out of ", all.tasks)
 
-  message("Running ",unique(x$split))
-  i <<- i +1
-  message("it is ",i," out of ",all.tasks)
-
-  x <- NormalizeData(x,normalization.method = "RC",verbose = FALSE)
+  x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE)
   x <- as.matrix(x@assays$RNA@data)
   # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
-  #scID_output <- tryCatch(scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE), error=function(e) NA)
-  scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE)
+  # scID_output <- tryCatch(scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE,  estimate_weights_from_target = TRUE, normalize_reference = FALSE), error=function(e) NA)
+  scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
 
-  gc()
+  #  gc()
   return(scID_output)
-
 })
 ```
 
 
 ```{r}
-saveRDS(gbm.list.res, file = paste0("./../output/scID_",object,"_",merge,"_allassigned"))
+saveRDS(gbm.list.res, file = paste0("./../output/scID_", object, "_", merge, "_allassigned"))
 ```
 
 
@@ -490,8 +479,8 @@ saveRDS(gbm.list.res, file = paste0("./../output/scID_",object,"_",merge,"_allas
 ```{r}
 res.df <- data.frame()
 for (i in gbm.list.res) {
-  res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE),as.data.frame(i$labels_edited, stringsAsFactors = TRUE),data.frame(t(i$scores)))
-  res.df <- rbind(res.df,res.each.df)
+  res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE), as.data.frame(i$labels_edited, stringsAsFactors = TRUE), data.frame(t(i$scores)))
+  res.df <- rbind(res.df, res.each.df)
 }
 colnames(res.df)[1] <- "scID"
 colnames(res.df)[2] <- "scID_edited"
@@ -499,18 +488,17 @@ colnames(res.df)[2] <- "scID_edited"
 
 
 ```{r}
-gbm.meta <- read.csv("./../output/gbm_meta.csv",row.names = 1)
-
+# gbm.meta <- read.csv("./../output/gbm_meta.csv",row.names = 1)
 ```
 
 
 ```{r}
-scid <- merge(res.df, gbm.meta, by = 'row.names', all = TRUE)
+# scid <- merge(res.df, gbm.meta, by = 'row.names', all = TRUE)
 ```
 
 
 ```{r}
-write.csv(res.df,paste0("./../output/scID_",object,"_",merge,"_allassigned",".csv"),row.names = TRUE)
+write.csv(res.df, paste0("./../output/scID_", object, "_", merge, "_allassigned", ".csv"), row.names = TRUE)
 ```
 
 
@@ -1227,4 +1215,3 @@ write.csv(res.df,paste0("./../output/scID_",object,"_",merge,"_allassigned",".cs
 <!-- ```{r} -->
 <!-- plotCellTypeTree(cellTypeTree(scClassify_res$trainRes)) -->
 <!-- ``` -->
-

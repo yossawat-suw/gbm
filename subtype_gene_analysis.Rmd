@@ -9,44 +9,43 @@ top10 <- head(VariableFeatures(gbm), 5)
 names(signature) <- NULL
 signature
 # plot variable features with and without labels
-plot1 <- VariableFeaturePlot(gbm,)
-plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE,)
+plot1 <- VariableFeaturePlot(gbm, )
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE, )
 gbm@assays$integrated@meta.features
 VariableFeaturePlot
 ```
 
 ```{r}
-
 ```
 
 ```{r}
 signature <- read.csv("./../output/signature_subtype_4metamodules_new_50.csv")
 signature <- signature %>%
-  unlist() 
+  unlist()
 ```
 
 ```{r}
 signature <- read.csv("./../output/signature_subtype_4metamodules_new_50.csv")
 
-#signature[] <- lapply(signature, function(x) gsub('.new','',x))
-colnames(signature) <- gsub('.new','',colnames(signature))
+# signature[] <- lapply(signature, function(x) gsub('.new','',x))
+colnames(signature) <- gsub(".new", "", colnames(signature))
 colnames(signature)
 signature.new <- data.frame(matrix(NA, nrow = 0, ncol = 2))
 for (i in colnames(signature)) {
-temp  <- cbind(signature[,i,drop=FALSE],rep(i,nrow(signature)))
-colnames(temp) <- c("gene","cluster")
-signature.new <- rbind(signature.new,temp)
+  temp <- cbind(signature[, i, drop = FALSE], rep(i, nrow(signature)))
+  colnames(temp) <- c("gene", "cluster")
+  signature.new <- rbind(signature.new, temp)
 }
 dup_gene <- signature.new[duplicated(signature.new$gene), "gene"]
 
-combined_cluster <- paste(signature.new[signature.new$gene== dup_gene, "cluster"], collapse = '')
+combined_cluster <- paste(signature.new[signature.new$gene == dup_gene, "cluster"], collapse = "")
 signature.new <- signature.new[!duplicated(signature.new$gene), ]
 rownames(signature.new) <- signature.new$gene
 
 var.df <- gbm@assays$integrated@meta.features
-var.df.test  <- merge(var.df,signature.new,by = 'row.names',all = TRUE)
-var.df.test[is.na(var.df.test$cluster),"subtyping"] <- "non_subtype"
-var.df.test[!is.na(var.df.test$cluster),"subtyping"] <- "subtype"
+var.df.test <- merge(var.df, signature.new, by = "row.names", all = TRUE)
+var.df.test[is.na(var.df.test$cluster), "subtyping"] <- "non_subtype"
+var.df.test[!is.na(var.df.test$cluster), "subtyping"] <- "subtype"
 ```
 
 
@@ -57,81 +56,82 @@ library(ggplot2)
 library(ggrepel)
 
 only_subtype <- subset(var.df.test, subtyping == "subtype")
-only_subtype <- only_subtype[order(only_subtype$vst.variance.standardized,decreasing = TRUE),]
+only_subtype <- only_subtype[order(only_subtype$vst.variance.standardized, decreasing = TRUE), ]
 
 
-p1 <- ggplot(var.df.test, aes(y=vst.variance.standardized,x=vst.mean,color = subtyping)) + geom_point()
-p1 <- p1 + geom_text_repel(data=head(only_subtype,n = 10), aes(y=vst.variance.standardized,x=vst.mean,label=cluster,color = cluster))
+p1 <- ggplot(var.df.test, aes(y = vst.variance.standardized, x = vst.mean, color = subtyping)) +
+  geom_point()
+p1 <- p1 + geom_text_repel(data = head(only_subtype, n = 10), aes(y = vst.variance.standardized, x = vst.mean, label = cluster, color = cluster))
 
 p1
 ```
 ```{r}
 library(Seurat)
-gbm <- ScaleData(gbm,features = rownames(gbm))
-gbm <- RunPCA(gbm,features = rownames(gbm)))
+gbm <- ScaleData(gbm, features = rownames(gbm))
+gbm <- RunPCA(gbm, features = rownames(gbm))
 ```
 ```{r}
-pca.load <- gbm@reductions$pca@feature.loadings[,1:30]
+pca.load <- gbm@reductions$pca@feature.loadings[, 1:30]
 pca.load <- abs(pca.load)
 pca.load <- data.frame(pca.load)
 pca.test <- pca.load
-pca.test[] <- apply(pca.test,2,function(x) rank(x))
-pca.test <- pca.test[rownames(signature.new),]
+pca.test[] <- apply(pca.test, 2, function(x) rank(x))
+pca.test <- pca.test[rownames(signature.new), ]
 
 pca.test
 ```
 
 
 ```{r}
-ggplot(pca.test,aes(x=PC_1,y=PC_2)) +geom_point() + scale_x_continuous(trans='log10') +
-  scale_y_continuous(trans='log10')
+ggplot(pca.test, aes(x = PC_1, y = PC_2)) +
+  geom_point() +
+  scale_x_continuous(trans = "log10") +
+  scale_y_continuous(trans = "log10")
 ```
 ```{r}
 pca.test
 ```
 
 ```{r}
-pca.vln <- data.frame(matrix(ncol = 3,nrow = 0))
-colnames(pca.vln) <- c("gene","rank","PC")
+pca.vln <- data.frame(matrix(ncol = 3, nrow = 0))
+colnames(pca.vln) <- c("gene", "rank", "PC")
 
 for (i in 1:ncol(pca.test)) {
-  
-new.test <- cbind(rownames(pca.test),pca.test[i],rep(colnames(pca.test[i]),times = nrow(pca.test[i])))
-rownames(new.test) <- NULL
-colnames(new.test) <- c("gene","rank","PC")
-pca.vln <- rbind(pca.vln,new.test)
-} 
+  new.test <- cbind(rownames(pca.test), pca.test[i], rep(colnames(pca.test[i]), times = nrow(pca.test[i])))
+  rownames(new.test) <- NULL
+  colnames(new.test) <- c("gene", "rank", "PC")
+  pca.vln <- rbind(pca.vln, new.test)
+}
 
-pca.vln$PC <- gsub("PC_","",pca.vln$PC)
+pca.vln$PC <- gsub("PC_", "", pca.vln$PC)
 pca.vln$PC <- as.numeric(pca.vln$PC)
-pca.vln <- pca.vln[order(pca.vln$PC),]
+pca.vln <- pca.vln[order(pca.vln$PC), ]
 pca.vln$PC <- as.factor(pca.vln$PC)
 ```
 
 ```{r}
 library(ggplot2)
 # Basic violin plot
-p <- ggplot(pca.vln, aes(x=PC, y=rank)) + 
+p <- ggplot(pca.vln, aes(x = PC, y = rank)) +
   geom_violin()
-p + scale_y_continuous(trans='log10')
-
+p + scale_y_continuous(trans = "log10")
 ```
 
 ```{r}
 pca.vln.sub <- subset(pca.vln, rank < 100)
 ```
 ```{r}
-p <- ggplot(pca.vln.sub, aes(x=PC, y=rank)) + 
+p <- ggplot(pca.vln.sub, aes(x = PC, y = rank)) +
   geom_violin()
-p <- p + scale_y_continuous(trans='log10')
+p <- p + scale_y_continuous(trans = "log10")
 p
 ```
 ```{r}
-n_pca <- length(unique(pca.vln[!is.na(pca.vln$rank),"gene"]))
-p <- ggplot(pca.vln, aes(x=PC, y=rank)) + 
-  geom_dotplot(binaxis='y',stackdir = "up", dotsize=1,binwidth = 0.01)
-p <- p + scale_y_continuous(trans='log10')
-p <- p + labs(title = "Rank of PCA of the subtype gene signature", subtitle = paste("total of",n_pca,"genes"))
+n_pca <- length(unique(pca.vln[!is.na(pca.vln$rank), "gene"]))
+p <- ggplot(pca.vln, aes(x = PC, y = rank)) +
+  geom_dotplot(binaxis = "y", stackdir = "up", dotsize = 1, binwidth = 0.01)
+p <- p + scale_y_continuous(trans = "log10")
+p <- p + labs(title = "Rank of PCA of the subtype gene signature", subtitle = paste("total of", n_pca, "genes"))
 p
 ```
 

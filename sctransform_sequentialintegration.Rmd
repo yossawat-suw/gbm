@@ -5,28 +5,28 @@ gbm <- readRDS("./../output/seurat_gbm_qc")
 
 ```{r}
 Idents(gbm) <- "donor_radiation"
-gbm.list <- SplitObject(gbm,split.by = "ident")
+gbm.list <- SplitObject(gbm, split.by = "ident")
 names(gbm.list)
 ```
 
 ```{r}
-gbm.list <- gbm.list[c("E13N_control","E13N_radiated","E55N_control","E55N_radiated","E57N_control","E57N_radiated","E51N_radiated","E24N_control","E24N_radiated","E26N_control","E26N_radiated","E31N_control","E31N_radiated","E35N_control","E35N_radiated","E37N_control","E37N_radiated","E39N_control","E39N_radiated","E56N_control","E56N_radiated","E62N_control","E62N_radiated")]
+gbm.list <- gbm.list[c("E13N_control", "E13N_radiated", "E55N_control", "E55N_radiated", "E57N_control", "E57N_radiated", "E51N_radiated", "E24N_control", "E24N_radiated", "E26N_control", "E26N_radiated", "E31N_control", "E31N_radiated", "E35N_control", "E35N_radiated", "E37N_control", "E37N_radiated", "E39N_control", "E39N_radiated", "E56N_control", "E56N_radiated", "E62N_control", "E62N_radiated")]
 
 names(gbm.list)
 ```
 
 ```{r}
-#pairwise between radiation then patient the by run (no E55N)
-sample.tree <- t(matrix(c(-1,-2,-3,-4,-5,-6,1,2,3,4,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-21,-22,-23,6,7,14,8,15,9,16,10,17,11,18,12,19,13,5,-7,20,21),nrow = 2))
+# pairwise between radiation then patient the by run (no E55N)
+sample.tree <- t(matrix(c(-1, -2, -3, -4, -5, -6, 1, 2, 3, 4, -8, -9, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20, -21, -22, -23, 6, 7, 14, 8, 15, 9, 16, 10, 17, 11, 18, 12, 19, 13, 5, -7, 20, 21), nrow = 2))
 sample.tree
 ```
 ```{r}
-#Remove E51 as no control
-gbm.list <- gbm.list[c("E13N_control","E13N_radiated","E55N_control","E55N_radiated","E57N_control","E57N_radiated","E24N_control","E24N_radiated","E26N_control","E26N_radiated","E31N_control","E31N_radiated","E35N_control","E35N_radiated","E37N_control","E37N_radiated","E39N_control","E39N_radiated","E56N_control","E56N_radiated","E62N_control","E62N_radiated")]
+# Remove E51 as no control
+gbm.list <- gbm.list[c("E13N_control", "E13N_radiated", "E55N_control", "E55N_radiated", "E57N_control", "E57N_radiated", "E24N_control", "E24N_radiated", "E26N_control", "E26N_radiated", "E31N_control", "E31N_radiated", "E35N_control", "E35N_radiated", "E37N_control", "E37N_radiated", "E39N_control", "E39N_radiated", "E56N_control", "E56N_radiated", "E62N_control", "E62N_radiated")]
 
 
-#pairwise between radiation then patient the by run (no E55N)
-sample.tree <- t(matrix(c(-1,-2,-3,-4,-5,-6,1,2,3,4,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-21,-22,6,7,14,8,15,9,16,10,17,11,18,12,19,13,5,20),nrow = 2))
+# pairwise between radiation then patient the by run (no E55N)
+sample.tree <- t(matrix(c(-1, -2, -3, -4, -5, -6, 1, 2, 3, 4, -7, -8, -9, -10, -11, -12, -13, -14, -15, -16, -17, -18, -19, -20, -21, -22, 6, 7, 14, 8, 15, 9, 16, 10, 17, 11, 18, 12, 19, 13, 5, 20), nrow = 2))
 sample.tree
 ```
 
@@ -37,21 +37,21 @@ sample.tree
 ```
 
 ```{r}
-#Add subtype to features
-signatures <- read.csv(file = paste0("./../output/signature_subtype_",sig,".csv"))
+# Add subtype to features
+signatures <- read.csv(file = paste0("./../output/signature_subtype_", sig, ".csv"))
 signatures <- unlist(signatures)
 names(signatures) <- NULL
 signatures
 gc()
-gbm.list <- pbmcapply::pbmclapply(X = gbm.list, mc.cores = 3,FUN = function(x) {
-  x <- SCTransform(x, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE,vars.to.regress = "percent.mt")
-  #x <- RunPCA(x,npcs = 30, verbose = FALSE,features = rownames(x))
-  x <- GetResidual(x,features = signatures)
-  x <- RunPCA(x,features=rownames(x))
+gbm.list <- pbmcapply::pbmclapply(X = gbm.list, mc.cores = 3, FUN = function(x) {
+  x <- SCTransform(x, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE, vars.to.regress = "percent.mt")
+  # x <- RunPCA(x,npcs = 30, verbose = FALSE,features = rownames(x))
+  x <- GetResidual(x, features = signatures)
+  x <- RunPCA(x, features = rownames(x))
 })
 
 
-res.list <- pbmcapply::pbmclapply(X =gbm.list,mc.cores = 10, FUN = function(x){
+res.list <- pbmcapply::pbmclapply(X = gbm.list, mc.cores = 10, FUN = function(x) {
   rownames(x@assays$SCT@meta.features)
 })
 
@@ -59,23 +59,27 @@ res.list <- pbmcapply::pbmclapply(X =gbm.list,mc.cores = 10, FUN = function(x){
 features <- SelectIntegrationFeatures(object.list = gbm.list, nfeatures = 3000)
 
 
-features <- union(features, 
-              intersect(signatures,Reduce(intersect, res.list)))
+features <- union(
+  features,
+  intersect(signatures, Reduce(intersect, res.list))
+)
 
 plan("sequential")
 options(future.globals.maxSize = 8000 * 1024^2)
 gbm.list <- PrepSCTIntegration(object.list = gbm.list, anchor.features = features)
 
-gbm.anchors <- FindIntegrationAnchors(object.list = gbm.list, normalization.method = "SCT",
-    anchor.features = features,reduction = "rpca")
+gbm.anchors <- FindIntegrationAnchors(
+  object.list = gbm.list, normalization.method = "SCT",
+  anchor.features = features, reduction = "rpca"
+)
 
-rm(gbm,gbm.list)
-saveRDS(gbm.anchors,file = "./../output/gbm_anchors_rpca")
+rm(gbm, gbm.list)
+saveRDS(gbm.anchors, file = "./../output/gbm_anchors_rpca")
 gbm.anchors <- readRDS(file = "./../output/gbm_anchors_rpca")
 
-gbm <- IntegrateData(anchorset = gbm.anchors, normalization.method = "SCT",sample.tree = sample.tree, dims = 1:30)
+gbm <- IntegrateData(anchorset = gbm.anchors, normalization.method = "SCT", sample.tree = sample.tree, dims = 1:30)
 gc()
-saveRDS(gbm,file = "./../output/seurat_gbm_integrated_sctransform_rpca_sequential_radiation-donor-runs",compress = TRUE)
+saveRDS(gbm, file = "./../output/seurat_gbm_integrated_sctransform_rpca_sequential_radiation-donor-runs", compress = TRUE)
 ```
 
 ```{r}
@@ -93,32 +97,31 @@ gbm <- FindClusters(gbm, resolution = 0.1)
 DimPlot(gbm)
 ```
 ```{r}
-DimPlot(gbm,group.by = "radiation")
+DimPlot(gbm, group.by = "radiation")
 ```
 
 ```{r}
-DimPlot(gbm,group.by = "radiation",split.by = "donor_id",ncol = 3)
+DimPlot(gbm, group.by = "radiation", split.by = "donor_id", ncol = 3)
 ```
 
 ```{r}
-DimPlot(gbm,group.by = "batch",split.by = "batch",ncol = 2 )
+DimPlot(gbm, group.by = "batch", split.by = "batch", ncol = 2)
 ```
 ```{r}
 library(UCell)
-signatures <- read.csv(file = paste0("./../output/signature_subtype_",sig,".csv"))
+signatures <- read.csv(file = paste0("./../output/signature_subtype_", sig, ".csv"))
 markers <- list()
 markers$MES <- signatures$MES.new
 markers$NPC <- signatures$NPC.new
 markers$OPC <- signatures$OPC.new
 markers$AC <- signatures$AC.new
-
 ```
 
 ```{r}
 gbm <- AddModuleScore_UCell(gbm, features = markers)
 signature.names <- paste0(names(markers), "_UCell")
 
-VlnPlot(gbm, features = signature.names,pt.size = 0)
+VlnPlot(gbm, features = signature.names, pt.size = 0)
 ```
 ```{r}
 markers <- list()
@@ -129,47 +132,45 @@ markers$AC.old <- signatures$AC
 gbm <- AddModuleScore_UCell(gbm, features = markers)
 signature.names <- paste0(names(markers), "_UCell")
 
-VlnPlot(gbm, features = signature.names,pt.size = 0)
+VlnPlot(gbm, features = signature.names, pt.size = 0)
 ```
 ```{r}
 set.seed(7)
 DefaultAssay(gbm) <- "integrated"
-gbm <- ScaleData(gbm, verbose = FALSE,features = rownames(gbm))
-gbm <- RunPCA(gbm, npcs = 30, verbose = FALSE,features = intersect(rownames(gbm),unname(unlist(signatures))))
+gbm <- ScaleData(gbm, verbose = FALSE, features = rownames(gbm))
+gbm <- RunPCA(gbm, npcs = 30, verbose = FALSE, features = intersect(rownames(gbm), unname(unlist(signatures))))
 gbm <- RunUMAP(gbm, reduction = "pca", dims = 1:30)
-#gbm <- RunTSNE(gbm, reduction = "pca", dims = 1:30)
+# gbm <- RunTSNE(gbm, reduction = "pca", dims = 1:30)
 gbm <- FindNeighbors(gbm, reduction = "pca", dims = 1:30)
 gbm <- FindClusters(gbm, resolution = 0.4)
-
 ```
 ```{r}
 Idents(gbm) <- "integrated_snn_res.0.2"
 DimPlot(gbm)
 ```
 ```{r}
-VlnPlot(gbm, features = signature.names,pt.size = 0)
+VlnPlot(gbm, features = signature.names, pt.size = 0)
 ```
 ```{r}
-FeaturePlot(gbm,features = signature.names)
+FeaturePlot(gbm, features = signature.names)
 ```
 #Try analye only the control
 ```{r}
 Idents(gbm) <- "radiation"
-gbm.control <- subset(gbm,idents = "control")
+gbm.control <- subset(gbm, idents = "control")
 gbm.control
 Idents(gbm.control) <- "donor_id"
-gbm.control.list <- SplitObject(gbm.control,split.by = "ident")
-
+gbm.control.list <- SplitObject(gbm.control, split.by = "ident")
 ```
 
 ```{r}
-gbm.control <- SCTransform(gbm.control, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE,vars.to.regress = "percent.mt")
+gbm.control <- SCTransform(gbm.control, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE, vars.to.regress = "percent.mt")
 ```
 
 
 ```{r}
 all.genes <- rownames(gbm.control)
-gbm.control <- RunPCA(gbm.control, verbose = FALSE,features = all.genes)
+gbm.control <- RunPCA(gbm.control, verbose = FALSE, features = all.genes)
 gbm.control <- RunUMAP(gbm.control, dims = 1:30, verbose = FALSE)
 gbm.control <- RunTSNE(gbm.control, dims = 1:30, verbose = FALSE)
 
@@ -179,43 +180,43 @@ gbm.control <- FindClusters(gbm.control, verbose = FALSE)
 
 
 ```{r}
-DimPlot(gbm.control, group.by = "donor_run",label = TRUE)
-DimPlot(gbm.control, group.by = "runs",label = TRUE,dims = 1:2)
+DimPlot(gbm.control, group.by = "donor_run", label = TRUE)
+DimPlot(gbm.control, group.by = "runs", label = TRUE, dims = 1:2)
 ```
 
 ```{r}
-DimPlot(gbm.control,reduction = "tsne", group.by = "runs")
+DimPlot(gbm.control, reduction = "tsne", group.by = "runs")
 ```
 
 ```{r}
-#Integrate on run
+# Integrate on run
 Idents(gbm.control) <- "runs"
-gbm.control.list <- SplitObject(gbm.control,split.by = "ident")
+gbm.control.list <- SplitObject(gbm.control, split.by = "ident")
 ```
 
 ```{r}
 Idents(gbm) <- "radiation"
-gbm.control <- subset(gbm,idents = "control")
+gbm.control <- subset(gbm, idents = "control")
 
 Idents(gbm.control) <- "runs"
-gbm.control.list <- SplitObject(gbm.control,split.by = "ident")
+gbm.control.list <- SplitObject(gbm.control, split.by = "ident")
 ```
 
 ```{r}
-#Add subtype to features
-signatures <- read.csv(file = paste0("./../output/signature_subtype_",sig,".csv"))
+# Add subtype to features
+signatures <- read.csv(file = paste0("./../output/signature_subtype_", sig, ".csv"))
 signatures <- unlist(signatures)
 names(signatures) <- NULL
 signatures
-gbm.control.list <- pbmcapply::pbmclapply(X = gbm.control.list, mc.cores = 2,FUN = function(x) {
-  x <- SCTransform(x, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE,vars.to.regress = "percent.mt")
-  #x <- RunPCA(x,npcs = 30, verbose = FALSE,features = rownames(x))
-  x <- GetResidual(x,features = signatures)
-  x <- RunPCA(x,features=rownames(x))
+gbm.control.list <- pbmcapply::pbmclapply(X = gbm.control.list, mc.cores = 2, FUN = function(x) {
+  x <- SCTransform(x, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE, vars.to.regress = "percent.mt")
+  # x <- RunPCA(x,npcs = 30, verbose = FALSE,features = rownames(x))
+  x <- GetResidual(x, features = signatures)
+  x <- RunPCA(x, features = rownames(x))
 })
 
 
-res.list <- pbmcapply::pbmclapply(X =gbm.control.list,mc.cores = 10, FUN = function(x){
+res.list <- pbmcapply::pbmclapply(X = gbm.control.list, mc.cores = 10, FUN = function(x) {
   rownames(x@assays$SCT@meta.features)
 })
 
@@ -223,22 +224,25 @@ res.list <- pbmcapply::pbmclapply(X =gbm.control.list,mc.cores = 10, FUN = funct
 features <- SelectIntegrationFeatures(object.list = gbm.control.list, nfeatures = 3000)
 
 
-features <- union(features, 
-              intersect(signatures,Reduce(intersect, res.list)))
+features <- union(
+  features,
+  intersect(signatures, Reduce(intersect, res.list))
+)
 
 plan("sequential")
 options(future.globals.maxSize = 8000 * 1024^2)
 gbm.control.list <- PrepSCTIntegration(object.list = gbm.control.list, anchor.features = features)
 
-gbm.anchors <- FindIntegrationAnchors(object.list = gbm.control.list, normalization.method = "SCT",
-    anchor.features = features,reduction = "cca")
+gbm.anchors <- FindIntegrationAnchors(
+  object.list = gbm.control.list, normalization.method = "SCT",
+  anchor.features = features, reduction = "cca"
+)
 
-rm(gbm,gbm.control.list)
-saveRDS(gbm.anchors,file = "./../output/gbm_control_anchors__sctransform_cca_runs")
+rm(gbm, gbm.control.list)
+saveRDS(gbm.anchors, file = "./../output/gbm_control_anchors__sctransform_cca_runs")
 gbm.anchors <- readRDS(file = "./../output/gbm_control_anchors__sctransform_cca_runs")
 gbm <- IntegrateData(anchorset = gbm.anchors, normalization.method = "SCT", dims = 1:30)
 
-saveRDS(gbm,file = "./../output/seurat_gbm_control_integrated__sctransform_cca_runs",compress = TRUE)
-
+saveRDS(gbm, file = "./../output/seurat_gbm_control_integrated__sctransform_cca_runs", compress = TRUE)
 ```
 

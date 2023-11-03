@@ -1,69 +1,41 @@
----
-title: "senescence_label"
-output: html_document
-date: "2023-06-14"
----
-
-```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
 
-```{r}
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
 }
 BiocManager::install("singscore")
-```
 
-```{r}
 library(Seurat)
 library(UCell)
 library(ggplot2)
 library(dplyr)
-```
 
-```{r}
 # Set commmon parameter
 radiation <- c("control", "radiated")
 donor.group <- radiation[1]
 suffix <- "_filter_norm_nolog"
-```
 
-```{r}
+
 # Load dataset
 
 gbm <- readRDS(paste0("./../output/", donor.group, suffix))
 
 # create senescence score
 signatures <- list(senescence = scan("./../data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
-```
 
-#Ucell
-```{r}
+
 gbm <- AddModuleScore_UCell(gbm, features = signatures, name = NULL)
-```
 
 
-```{r}
 FeaturePlot(gbm, reduction = "umap", features = names(signatures)) + labs(subtitle = donor.group)
-```
 
-```{r}
 saveRDS(gbm[[c("donor_id", "senescence")]], file = paste0("./../output/singlescore_", donor.group), compress = TRUE)
-```
 
-
-#Compare
-```{r}
 ctrl.sen <- readRDS(paste0("./../output/singlescore_", radiation[1]))
 rad.sen <- readRDS(paste0("./../output/singlescore_", radiation[2]))
-```
 
-```{r}
 ctrl.sen
-```
 
-```{r}
 ctrl.sen <- ctrl.sen %>%
   cbind(data.frame(radiation = rep(radiation[1], nrow(ctrl.sen))))
 
@@ -74,19 +46,11 @@ gbm.sen <- rbind(ctrl.sen, rad.sen)
 
 head(gbm.sen)
 table(gbm.sen$radiation)
-```
 
-
-
-
-```{r}
 # Histogram by group in ggplot2
 ggplot(gbm.sen, aes(x = senescence, fill = radiation)) +
   geom_histogram()
-```
 
-#The same way as lucy 
-```{r}
 # Importing
 gbm.senescence.genes <- scan("./../data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE)
 
@@ -107,10 +71,7 @@ gbm.sub.all <- cbind(gbm.sub.list[[1]], gbm.sub.list[[2]])
 setdiff(gbm.senescence.genes, rownames(gbm.sub.all))
 # So in the gene expression the ESM1 is missed
 ### check and found that the genes missed because was filtered in step of createseurat object:: min.cell (loss if min.cell > 3 that min it express only in 3 cell)
-```
 
-
-```{r}
 # Calculate quantile
 gbm.sub.all <- gbm.sub.list[[1]]
 
@@ -121,9 +82,7 @@ for (i in 1:nrow(gbm.sub.all)) {
 }
 q.all <- setNames(q.all, rownames(gbm.sub.all))
 q.all
-```
 
-```{r}
 # Compare to the quantile cutoff
 score.all.list <- list()
 for (i in 1:length(gbm.sub.list)) {
@@ -140,9 +99,7 @@ for (i in 1:length(gbm.sub.list)) {
 }
 radiation <- c("control", "radiated")
 names(score.all.list) <- radiation
-```
 
-```{r}
 # Prapare dataframe: add radiation group
 library(tibble)
 score.df.all <- data.frame()
@@ -155,48 +112,32 @@ for (i in 1:length(radiation)) {
 
   score.df.all <- rbind(score.df.all, score.df)
 }
-```
 
-```{r}
 # visualization
 library(ggplot2)
 
 ggplot(score.df.all, aes(x = senescence_lucy, fill = radiation)) +
   geom_histogram(position = "identity", alpha = 0.2, bins = 12)
-```
 
 
-
-```{r}
 gbm.temp@meta.data
-```
 
-#Test singscore
-```{r}
 library(singscore)
-```
-```{r}
 if (!require("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
 }
 
 BiocManager::install("GSEABase")
-```
 
-#The same way as lucy again but from her method
-```{r}
 gbm.senescence.genes <- scan("./../data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE)
-```
 
-```{r}
 gbm <- readRDS("./../output/seurat_gbm_qc")
 
 gbm <- NormalizeData(gbm, normalization.method = "RC", scale.factor = 1e4)
 gbm.run <- SplitObject(gbm, split.by = "runs")
-```
 
 
-```{r}
+
 # Run
 score.df.all.runs <- list()
 for (m in 1:length(gbm.run)) {
@@ -267,52 +208,26 @@ for (m in 1:length(gbm.run)) {
   }
   score.df.all.runs <- append(score.df.all.runs, list(score.df.all))
 }
-```
-```{r}
 sen_score <- rbind(score.df.all.runs[[1]], score.df.all.runs[[2]])
-```
 
-```{r}
 write.csv(sen_score, file = "./../output/senescence_score.csv", row.names = FALSE)
-```
 
-
-```{r}
 setdiff(gbm.senescence.genes, rownames(gbm.sub.all))
 # So in the gene expression the ESM1 is missed
 ### check and found that the genes missed because was filtered in step of createseurat object:: min.cell (loss if min.cell > 3 that min it express only in 3 cell)
-```
 
-
-
-
-
-
-
-
-
-```{r}
 table(score.df.all$senescence_lucy)
-```
 
-
-```{r}
 summary(score.df.all[score.df.all$radiation == "control", ][, 2])
-```
-```{r}
 summary(score.df.all[score.df.all$radiation == "radiated", ][, 2])
-```
 
 
-```{r}
 # visualization
 library(ggplot2)
 sen_score.run <- sen_score[sen_score$runs == "run1", ]
 ggplot(sen_score.run, aes(x = senescence_score, fill = radiation)) +
   geom_histogram(position = "identity", alpha = 0.2, bins = 14)
-```
-#Check the good of genes
-```{r}
+
 # Check whether senescene gene set express consistency in our dataset >> check drop out
 library(dplyr)
 df.list <- list()
@@ -330,39 +245,27 @@ for (i in 1:length(gbm.sub.list)) {
 length(gbm.sub.list)
 # names(df.list) <- radiation
 str(df.list)
-```
 
-
-```{r}
 # Control
 ggplot(df.list[[1]], aes(x = reorder(genes, per.drop), y = per.drop)) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(size = 5, angle = 90)) +
   labs(title = "Percent of zero count in each senescence gene", subtitle = radiation[1], y = "percent", x = "gene")
-```
-```{r}
 # Control
 ggplot(df.list[[2]], aes(x = reorder(genes, per.drop), y = per.drop)) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(size = 5, angle = 90)) +
   labs(title = "Percent of zero count in each senescence gene", subtitle = radiation[2], y = "percent", x = "gene")
-```
 
-```{r}
 # Look at heatamp
 ctrl <- readRDS("./../output/control_filter_norm_nolog")
 rad <- readRDS("./../output/radiated_filter_norm_nolog")
 gbm.com <- merge(ctrl, y = rad, add.cell.ids = c("control", "radiated"))
 rm(list = c("ctrl", "rad"))
 gc()
-```
 
-
-```{r}
 DoHeatmap(gbm.com, features = gbm.senescence.genes, slot = "data", size = 4, angle = 0) + labs(title = "Senescence Gene Set")
-```
 
-```{r}
 temp1 <- df.list[[1]] %>% cbind(data.frame(radiation = rep("control", nrow(df.list[[1]]))))
 temp2 <- df.list[[2]] %>% cbind(data.frame(radiation = rep("radiated", nrow(df.list[[2]]))))
 
@@ -372,16 +275,11 @@ df.all
 
 ggplot(df.all, aes(x = genes, y = per.drop)) +
   geom_violin(aes(fill = genes))
-```
 
-# oct 1 re watch it all again
-```{r}
 library(Seurat)
 library(tidyverse)
 gbm <- readRDS(file = "./../output/seurat_gbm_qc")
-```
 
-```{r}
 Idents(gbm) <- "donor_id"
 gbm.list <- SplitObject(gbm, split.by = "ident")
 Idents(gbm.list[[1]])
@@ -394,9 +292,7 @@ markers.list <- mclapply(gbm.list, mc.cores = n.cores, FUN = function(x) {
   markers$donor_id <- rep(unique(x$donor_id), times = nrow(markers))
   return(markers)
 })
-```
 
-```{r}
 # convert rowname to col
 res.list <- mclapply(markers.list, mc.cores = n.cores, FUN = function(x) {
   out <- rownames_to_column(x)
@@ -404,9 +300,7 @@ res.list <- mclapply(markers.list, mc.cores = n.cores, FUN = function(x) {
 })
 # cbind list
 marker.combined <- Reduce(rbind, res.list)
-```
 
-```{r}
 # seperate pos neg
 marker.combined.pos <- marker.combined[order(marker.combined$avg_log2FC, decreasing = TRUE), ]
 
@@ -414,10 +308,7 @@ marker.combined.pos <- marker.combined.pos[marker.combined.pos$avg_log2FC > 0, ]
 
 marker.combined.neg <- marker.combined[order(marker.combined$avg_log2FC, decreasing = FALSE), ]
 marker.combined.neg <- marker.combined.neg[marker.combined.neg$avg_log2FC < 0, ]
-```
 
-
-```{r}
 # find only highly consistent donor_id cut off 50%
 thres <- c()
 for (i in unique(marker.combined.pos$rowname)) {
@@ -431,31 +322,22 @@ for (i in unique(marker.combined.neg$rowname)) {
 }
 
 neg.genes <- unique(marker.combined.neg$rowname)[thres]
-```
-```{r}
+
 # remove duplicate by donor_id by pick the first one
 marker.combined.pos.first <- marker.combined.pos[match(unique(marker.combined.pos$rowname), marker.combined.pos$rowname), ]
 
 marker.combined.neg.first <- marker.combined.neg[match(unique(marker.combined.neg$rowname), marker.combined.neg$rowname), ]
-```
 
-```{r}
 # Final
 marker.combined.pos.first
 marker.pos <- marker.combined.pos.first[marker.combined.pos.first$rowname %in% pos.genes, ]
 
 marker.neg <- marker.combined.neg.first[marker.combined.neg.first$rowname %in% neg.genes, ]
-```
 
-```{r}
 marker.pos
 marker.neg
-```
-```{r}
 pos.genes.name <- marker.pos$rowname
-```
 
-```{r}
 # Check with current gene set
 
 senmayo <- readxl::read_xlsx("./../data/gene_set/senmayo.xlsx")
@@ -467,24 +349,15 @@ steal <- steal$SID3
 
 
 all <- list(senmayo = senmayo$`Gene(human)`, choudhary = early.rad$Gene_Name, salam = salam, lucy = gbm.senescence.genes, dge_point = pos.genes, sid3 = steal)
-```
 
-
-```{r}
 library(venn)
 venn::venn(all, ilabels = TRUE)
 venn(all[c("dge_point", "sid3", "lucy", "senmayo")])
 venn(all[c("dge_point", "lucy", "senmayo")])
 venn(all[c("dge_point", "sid3", "lucy", "salam")])
-```
 
-
-```{r}
 gbm.run <- SplitObject(gbm, split.by = "runs")
-```
 
-
-```{r}
 # Run
 radiation <- c("control", "radiated")
 gbm.senescence.genes <- scan("./../data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE)
@@ -559,48 +432,23 @@ for (m in 1:length(gbm.run)) {
   }
   score.df.all.runs <- append(score.df.all.runs, list(score.df.all))
 }
-```
-```{r}
 sen_score <- rbind(score.df.all.runs[[1]], score.df.all.runs[[2]])
-```
 
-
-
-
-
-```{r}
 setdiff(gbm.senescence.genes, rownames(gbm.sub.all))
 # So in the gene expression the ESM1 is missed
 ### check and found that the genes missed because was filtered in step of createseurat object:: min.cell (loss if min.cell > 3 that min it express only in 3 cell)
-```
 
-
-
-
-
-
-
-
-
-```{r}
 table(score.df.all$senescence_score)
-```
 
 
-```{r}
 summary(score.df.all[score.df.all$radiation == "control", ][, 2])
-```
-```{r}
 summary(score.df.all[score.df.all$radiation == "radiated", ][, 2])
-```
-```{r}
 gbm.senescence.genes
-```
-```{r}
-```
 
 
-```{r}
+
+
+
 # visualization
 library(ggplot2)
 runs <- "run1"
@@ -614,10 +462,7 @@ sen_score.run <- sen_score[sen_score$runs == runs, ]
 ggplot(sen_score.run, aes(x = senescence_score, fill = radiation)) +
   geom_histogram(position = "identity", alpha = 0.2, bins = 14) +
   labs(title = runs)
-```
 
-#Check the good of genes
-```{r}
 # Check whether senescene gene set express consistency in our dataset >> check drop out
 library(dplyr)
 df.list <- list()
@@ -632,32 +477,21 @@ for (i in 1:length(gbm.sub.list)) {
   df.list <- append(df.list, per.drop.df)
   # df.list[[donor.group]] <- c(df.list[[donor.group]],per.drop.df)
 }
-```
 
 
-```{r}
 # Control
 ggplot(df.list[[1]], aes(x = reorder(genes, per.drop), y = per.drop)) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(size = 5, angle = 90)) +
   labs(title = "Percent of zero count in each senescence gene", subtitle = radiation[1], y = "percent", x = "gene")
-```
-```{r}
 # Control
 ggplot(df.list[[2]], aes(x = reorder(genes, per.drop), y = per.drop)) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(size = 5, angle = 90)) +
   labs(title = "Percent of zero count in each senescence gene", subtitle = radiation[2], y = "percent", x = "gene")
-```
 
-
-
-
-```{r}
 DoHeatmap(gbm, features = gbm.senescence.genes, slot = "data", size = 4, angle = 0) + labs(title = "Senescence Gene Set")
-```
 
-```{r}
 temp1 <- df.list[[1]] %>% cbind(data.frame(radiation = rep("control", nrow(df.list[[1]]))))
 temp2 <- df.list[[2]] %>% cbind(data.frame(radiation = rep("radiated", nrow(df.list[[2]]))))
 
@@ -667,29 +501,23 @@ df.all
 
 ggplot(df.all, aes(x = genes, y = per.drop)) +
   geom_violin(aes(fill = genes))
-```
 
-#Calculate score and 95% for each patient (9 Oct 2023)
-```{r}
 library(Seurat)
 library(UCell)
 gbm <- readRDS("./../output/seurat_gbm_qc")
 
 # create senescence score
 signatures <- list(senescence = scan("./../data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
-```
 
-```{r}
 gbm <- NormalizeData(gbm)
 gbm <- ScaleData(gbm, features = rownames(gbm))
-```
 
-#Ucell
-```{r}
+
+
 gbm <- AddModuleScore_UCell(gbm, features = signatures, name = NULL)
-```
 
-```{r}
+
+
 gbm$donor_id <- as.factor(gbm$donor_id)
 gbm$sen_label <- NA
 gbm$cutoff_sen <- NA
@@ -702,36 +530,23 @@ for (i in levels(gbm$donor_id)) {
   gbm@meta.data[gbm$radiation == "radiated" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence"
 }
 gbm@meta.data[is.na(gbm$sen_label), "sen_label"] <- "not_senescence"
-```
-```{r}
 gbm@meta.data
-```
 
-```{r}
 ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) +
   geom_histogram(position = "identity", bins = 40, alpha = 0.5)
-```
 
-
-```{r}
 # visualization
 library(ggplot2)
 
 ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) +
   geom_histogram(position = "identity", bins = 40, alpha = 0.5) +
   facet_wrap(~runs, ncol = 1)
-```
 
-
-
-```{r}
 ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) +
   geom_histogram(position = "identity", bins = 40, alpha = 0.5) +
   facet_wrap(~donor_id, ncol = 4) +
   scale_y_sqrt(breaks = c(0, 100, 500))
-```
 
-```{r}
 library(dplyr)
 library(ggplot2)
 
@@ -742,17 +557,12 @@ p <- ggplot(gbm@meta.data, aes(x = senescence, fill = radiation)) +
   geom_vline(mapping = aes(xintercept = cutoff_sen))
 
 p
-```
-```{r}
 # Add percentage of senescence state in radiated group
 
 cols_to_convert <- c("donor_id", "radiation", "runs", "batch", "split", "donor_run", "donor_radiation", "sen_label")
 
 gbm@meta.data[cols_to_convert] <- lapply(gbm@meta.data[cols_to_convert], factor)
-```
 
-
-```{r}
 # calculate the
 
 rad.sen.prop <- gbm@meta.data[gbm$radiation == "radiated", ] %>%
@@ -787,7 +597,3 @@ p <- p +
   ylab("Count")
 
 p
-```
-
-
-

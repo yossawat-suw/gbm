@@ -1,5 +1,7 @@
 
 
+
+
 ---
 title: "All"
 output: html_document
@@ -14,7 +16,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(ggplot2)
 library(Seurat)
-library(SeuratDisk)
 library(dplyr)
 library(readxl)
 library(tibble)
@@ -24,98 +25,97 @@ library(purrr)
 ```
 
 ```{r}
-#Parameter
-#Select the signature to be used
+# Parameter
+# Select the signature to be used
 # if it is new one, can add into the list but keep in mind to run the preprocessing of the signatures in the next chunk because it need to be preprocessed into xlsx file first
-sigs <- c("6metamodules","4metamodules_new","4metamodules_new_50","MESImm","3metamodules_new_50","4metamodules_new_50_mes")
-sig <- sigs[6]
+sigs <- c("6metamodules", "4metamodules_new_50", "3metamodules_new_50", "4metamodules_new_50_mes")
+sig <- sigs[4]
 sig
 
-#cell input to be analyse
+# cell input to be analyse
 
 object <- "all"
-
 ```
 
 #signature preprocessing
 ```{r}
-#automatic convert gene list
-signatures <- read.csv(paste0("./../output/signature_subtype_",sig,".csv"))
+# automatic convert gene list
+signatures <- read.csv(paste0("./../output/signature_subtype_", sig, ".csv"))
 
-#scsorter
+# scsorter
 signatures.split <- list()
 for (i in 1:ncol(signatures)) {
   signatures.each <- na.omit(signatures[i])
-  signatures.split <- append(signatures.split,list(signatures.each))
+  signatures.split <- append(signatures.split, list(signatures.each))
 }
 
-signatures.split <- lapply(signatures.split, FUN = function(x){
-  x <- cbind(rep(colnames(x),nrow(x)),x)
-  colnames(x) <- c("Type","Marker")
+signatures.split <- lapply(signatures.split, FUN = function(x) {
+  x <- cbind(rep(colnames(x), nrow(x)), x)
+  colnames(x) <- c("Type", "Marker")
   return(x)
 })
 
-signatures.scsorter <- do.call(rbind,signatures.split)
+signatures.scsorter <- do.call(rbind, signatures.split)
 
-#sctype
-signatures.merge <- apply(signatures, 2,paste0,collapse=",")
+# sctype
+signatures.merge <- apply(signatures, 2, paste0, collapse = ",")
 
 signatures.sctype <- data.frame(signatures.merge)
 colnames(signatures.sctype) <- "geneSymbolmore1"
 signatures.sctype$geneSymbolmore2 <- NA
 signatures.sctype <- rownames_to_column(signatures.sctype, var = "cellName")
-tissueType <- data.frame(tissueType  = rep("gbm",nrow(signatures.sctype)))
+tissueType <- data.frame(tissueType = rep("gbm", nrow(signatures.sctype)))
 
 signatures.sctype <- cbind(tissueType, signatures.sctype)
 
-#scID
+# scID
 signatures.split <- list()
 for (i in 1:ncol(signatures)) {
   signatures.each <- na.omit(signatures[i])
-  signatures.split <- append(signatures.split,list(signatures.each))
+  signatures.split <- append(signatures.split, list(signatures.each))
 }
 
-signatures.split <- lapply(signatures.split, FUN = function(x){
-  x <- cbind(rep(colnames(x),nrow(x)),x)
-  colnames(x) <- c("cluster","gene")
+signatures.split <- lapply(signatures.split, FUN = function(x) {
+  x <- cbind(rep(colnames(x), nrow(x)), x)
+  colnames(x) <- c("cluster", "gene")
   return(x)
 })
 
-signatures.scid <- do.call(rbind,signatures.split)
+signatures.scid <- do.call(rbind, signatures.split)
 signatures.scid$cluster <- as.factor(signatures.scid$cluster)
 
 
-#SCINA
+# SCINA
 signatures.scina <- as.data.frame(signatures)
 signatures.scina[is.na.data.frame(signatures.scina)] <- ""
 
-#markercount
+# markercount
 signatures.split <- list()
 for (i in 1:ncol(signatures)) {
-  signatures.each <- cbind(signatures[i],rep(1,nrow(signatures)))
-  signatures.split <- append(signatures.split,list(signatures.each))
+  signatures.each <- cbind(signatures[i], rep(1, nrow(signatures)))
+  signatures.split <- append(signatures.split, list(signatures.each))
 }
 
-signatures.split <- lapply(signatures.split, FUN = function(x){
+signatures.split <- lapply(signatures.split, FUN = function(x) {
   x <- data.frame(t(na.omit(x)))
-  colnames(x) <- x[1,]
-  x[1,] <- 1
-  x <- x[1,]
-  x <- rownames_to_column(x,var = "celltype")
+  colnames(x) <- x[1, ]
+  x[1, ] <- 1
+  x <- x[1, ]
+  x <- rownames_to_column(x, var = "celltype")
 })
 
 library(tibble)
-sig.markercount <- signatures.split %>% reduce(full_join, by='celltype')
+sig.markercount <- signatures.split %>% reduce(full_join, by = "celltype")
 sig.markercount <- sig.markercount %>% column_to_rownames(var = "celltype")
 
-#Save to xlsx to be used later
-writexl::write_xlsx(signatures.sctype,path = paste0("./../data/gbm_",sig,"_sctype.xlsx"))
-writexl::write_xlsx(signatures.scsorter,path = paste0("./../data/gbm_",sig,"_scsorter.xlsx"))
+# Save to xlsx to be used later
+writexl::write_xlsx(signatures.sctype, path = paste0("./../data/gbm_", sig, "_sctype.xlsx"))
+writexl::write_xlsx(signatures.scsorter, path = paste0("./../data/gbm_", sig, "_scsorter.xlsx"))
 
-sig.markercount <- rownames_to_column(sig.markercount,var = "celltype")
-writexl::write_xlsx(sig.markercount,path = paste0("./../data/gbm_",sig,"_markercount.xlsx"))
+sig.markercount <- rownames_to_column(sig.markercount, var = "celltype")
+writexl::write_xlsx(sig.markercount, path = paste0("./../data/gbm_", sig, "_markercount.xlsx"))
 
-writexl::write_xlsx(signatures.scid,path = paste0("./../data/gbm_",sig,"_scID.xlsx"))
+writexl::write_xlsx(signatures.scid, path = paste0("./../data/gbm_", sig, "_scID.xlsx"))
 ```
 
 
@@ -125,79 +125,118 @@ writexl::write_xlsx(signatures.scid,path = paste0("./../data/gbm_",sig,"_scID.xl
 ```{r}
 library(HGNChelper)
 
-#Sctype
+# Sctype
 source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/gene_sets_prepare.R")
 source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sctype_score_.R")
-
 ```
 
 ```{r}
-#Load genelist
+# Load genelist
 
 # DB file
-db_ = "./../data/gbm_subtype_new_sctype.xlsx"
-
-
-tissue = "gbm"
+db_ <- paste0("./../data/gbm_", sig, "_sctype.xlsx")
+as.list(signatures.sctype$geneSymbolmore1)
+tissue <- "gbm"
 
 # prepare gene sets
-gs_list = gene_sets_prepare(db_, tissue)
-
+gs_list <- gene_sets_prepare(db_, tissue)
 ```
 
 ```{r}
 gbm <- readRDS("./../output/seurat_gbm_qc")
 gbm.list <- SplitObject(gbm, split.by = "split")
 
-gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
-gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
-gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
-gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
-gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y = gbm.list[["run1_radiated_E31N"]])
+gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y = gbm.list[["run1_control_E31N"]])
+gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y = gbm.list[["run1_radiated_E26N"]])
+gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y = gbm.list[["run1_radiated_E24N"]])
+gbm.list[c("run1_radiated_E24N", "run1_radiated_E26N", "run1_control_E31N", "run1_radiated_E31N")] <- NULL
 ```
 
 
 ```{r}
-library(dplyr)
-library(parallel)
+rm(gbm)
+gc()
+```
+
+
+
+
+
+```{r}
+source("./function.R")
+
+features <- do.call(paste, args = as.list(signatures.sctype$geneSymbolmore1))
+features <- gsub(" ", ",", features)
+features <- strsplit(features, ",")
+features <- unlist(features)
+
 score.list <- list()
-n.cores <- parallel::detectCores() - 1
-system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+n.cores <- parallel::detectCores() - 5
+# gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
+gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
   x <- NormalizeData(x, verbose = FALSE)
   x <- FindVariableFeatures(x, verbose = FALSE)
-  x <- ScaleData(x,verbose = FALSE)
-  x <- RunPCA(x, verbose = FALSE)
-  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
-  x <- FindClusters(x, resolution = 1, verbose = FALSE)
-  es.max <- sctype_score(scRNAseqData = x[["RNA"]]@scale.data, scaled = TRUE, 
-                    gs = gs_list$gs_positive, gs2 = NULL) 
 
-  cL_resutls = do.call("rbind", lapply(unique(x@meta.data$seurat_clusters), function(cl){
-      es.max.cl = sort(rowSums(es.max[ ,rownames(x@meta.data[x@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
-      head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(x@meta.data$seurat_clusters==cl)), 10)
-  }))
-  sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
-  score.list <- append(score.list,sctype_scores)
-  x@meta.data$scType = ""
-  for(j in unique(sctype_scores$cluster)){
-    cl_type <- sctype_scores[sctype_scores$cluster==j,]
-  x@meta.data$scType[x@meta.data$seurat_clusters == j] <-  as.character(cl_type$type[1])
-  }
-  return(list(sctype_scores=sctype_scores,x=x))
-}))
+  x <- ScaleData(x, verbose = FALSE, features = rownames(x))
+
+  x <- RunPCA(x, verbose = FALSE, features = features, npcs = 20)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, verbose = FALSE)
+})
 ```
+
+
+
+
+
+```{r}
+# we use sctype_score_edited (just edit code to prevent matrix becoming vector) &rowSum part (both I add drop = FALSE) to prevent error when there is only on marker type
+# gbm.list.res <- lapply(X = gbm.list[1],  FUN = function(x)  {
+gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
+  es.max <- sctype_score_edited(
+    scRNAseqData = x[["RNA"]]@scale.data, scaled = TRUE,
+    gs = gs_list$gs_positive, gs2 = NULL
+  )
+
+  cL_resutls <- do.call("rbind", lapply(unique(x@meta.data$seurat_clusters), function(cl) {
+    es.max.cl <- sort(rowSums(es.max[, rownames(x@meta.data[x@meta.data$seurat_clusters == cl, ]), drop = FALSE]), decreasing = !0)
+    head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(x@meta.data$seurat_clusters == cl)), 10)
+  }))
+  sctype_scores <- cL_resutls %>%
+    group_by(cluster) %>%
+    top_n(n = 1, wt = scores)
+  if (length(gs_list$gs_positive) == 1) {
+    # allow unknown
+    # set low-confident (low ScType score) clusters to "unknown"
+    sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < 0] <- "Unknown"
+  }
+  score.list <- append(score.list, sctype_scores)
+  x@meta.data$scType <- ""
+  for (j in unique(sctype_scores$cluster)) {
+    cl_type <- sctype_scores[sctype_scores$cluster == j, ]
+    x@meta.data$scType[x@meta.data$seurat_clusters == j] <- as.character(cl_type$type[1])
+  }
+  return(list(sctype_scores = sctype_scores, x = x))
+})
+```
+
+
+
+
 
 
 ```{r}
 score.list <- lapply(gbm.list.res, "[[", 1)
 gbm.list.res <- lapply(gbm.list.res, "[[", 2)
+score.list
 ```
 
 ```{r}
 each.meta.all <- list()
 for (i in gbm.list.res) {
   each.meta <- i@meta.data[c("scType")]
-  each.meta.all <- rbind(each.meta.all,each.meta)
+  each.meta.all <- rbind(each.meta.all, each.meta)
 }
 ```
 
@@ -205,80 +244,73 @@ for (i in gbm.list.res) {
 table(each.meta.all$scType)
 ```
 
+
 ```{r}
-write.csv(each.meta.all,paste0("./../output/scType_",object,"_",sig,".csv"),row.names = TRUE)
+write.csv(each.meta.all, paste0("./../output/scType_", object, "_", sig, ".csv"), row.names = TRUE)
 ```
 
 
-#SCINA
-```{r}
-library(SCINA)
-library(preprocessCore)
+<!-- #SCINA -->
+<!-- ```{r} -->
+<!-- library(SCINA) -->
+<!-- library(preprocessCore) -->
 
-#marker based
-#normalized by quantile + log1p
-#Expectation-maximization inference
-```
+<!-- #marker based -->
+<!-- #normalized by quantile + log1p -->
+<!-- #Expectation-maximization inference -->
+<!-- ``` -->
 
 
+<!-- ```{r} -->
+<!-- gbm <- readRDS("./../output/seurat_gbm_qc") -->
 
-```{r}
-gbm <- readRDS("./../output/seurat_gbm_qc")
-
-gbm.list <- SplitObject(gbm, split.by = "split")
-gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
-gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
-gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
-gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
-gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
-
+<!-- gbm.list <- SplitObject(gbm, split.by = "split") -->
+<!-- gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]]) -->
+<!-- gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]]) -->
+<!-- gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]]) -->
+<!-- gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]]) -->
+<!-- gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL -->
 
 
 
 
-gbm.list.res <- list()
-rm(gbm)
-gc()
 
-for (i in 1:length(gbm.list)) {
-  exp  <- gbm.list[[i]]
-  exp <- log(exp@assays$RNA@counts + 1)
-  exp[] = normalize.quantiles(as.matrix(exp))
-  results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=TRUE)
-
-  gbm.list.res <- append(gbm.list.res,list(results))
-  print(paste("finish",names(gbm.list)[i]))
-  
-}
-
-gbm.list.res <- mclapply(gbm.list,mc.cores = 4, FUN = function(x){
-  exp <- log(x@assays$RNA@counts + 1)
-  exp[] = normalize.quantiles(as.matrix(exp))
-  results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=FALSE)
-  return(results)
-})
-```
-
-```{r}
-names(gbm.list.res) <- names(gbm.list)
-```
+<!-- gbm.list.res <- list() -->
+<!-- rm(gbm) -->
+<!-- gc() -->
+<!-- ``` -->
 
 
-```{r}
-res.df <- data.frame()
-for (i in gbm.list.res) {
-  cell_labels <- data.frame(SCINA = i$cell_labels,stringsAsFactors = TRUE)
-  props <- data.frame(t(i$probabilities))
-  res.each.df <- add_column(props,cell_labels, .before = 1)
-  res.df <- rbind(res.df, res.each.df)
-}
-```
+<!-- ```{r} -->
+<!-- gbm.list.res <- mclapply(gbm.list,mc.cores = 4, FUN = function(x){ -->
+<!--   exp <- log(x@assays$RNA@counts + 1) -->
+<!--   exp[] = normalize.quantiles(as.matrix(exp)) -->
+<!--   results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=TRUE) -->
+<!--   return(results) -->
+<!-- }) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- names(gbm.list.res) <- names(gbm.list) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- res.df <- data.frame() -->
+<!-- for (i in gbm.list.res) { -->
+<!--   cell_labels <- data.frame(SCINA = i$cell_labels,stringsAsFactors = TRUE) -->
+<!--   props <- data.frame(t(i$probabilities)) -->
+<!--   res.each.df <- add_column(props,cell_labels, .before = 1) -->
+<!--   res.df <- rbind(res.df, res.each.df) -->
+<!-- } -->
+<!-- ``` -->
 
 
 
-```{r}
-write.csv(res.df,paste0("./../output/SCINA_",object,"_",sig,".csv"),row.names = TRUE)
-```
+
+<!-- ```{r} -->
+<!-- write.csv(res.df,paste0("./../output/SCINA_",object,"_",sig,".csv"),row.names = TRUE) -->
+<!-- ``` -->
 
 
 
