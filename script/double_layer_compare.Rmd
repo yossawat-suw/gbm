@@ -1,4 +1,9 @@
+
+
+
+
 ```{r}
+library(here)
 library(tibble)
 library(dplyr)
 ```
@@ -11,17 +16,16 @@ library(dplyr)
 object <- "all"
 
 sigs <- c("6metamodules", "4metamodules_new_50", "3metamodules_new_50", "4metamodules_new_50_mes")
-sig <- sigs[6]
 
 
 
 # For reference based
 merges <- c("6metamodules", "4_merge_metamodules", "4_merge_metamodules_3celltypes", "4_merge_metamodules_mes")
-merge <- merges[4]
+
 # pick which celltype to be analyse
 
-all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
-chosen_celltypes <- all_celltypes[c(2)]
+# all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
+# chosen_celltypes <- all_celltypes[c(2)]
 ```
 
 
