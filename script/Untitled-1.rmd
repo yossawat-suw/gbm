@@ -1,5 +1,0 @@
-```{r}
-print("This will run")
-stop("This is an error")
-print("This should not run")
-```

@@ -1,0 +1,2391 @@
+```{r}
+library(here)
+library(tibble)
+library(dplyr)
+library(data.table)
+
+```
+
+```{r}
+#Set working directory
+setwd(here())
+source("script/function.R")
+```
+```{r}
+# Parameter
+# cell input to be analyse
+
+object <- "all"
+
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50")
+
+
+
+# For reference based
+merges <- c("4_merge_metamodules_mes","2_merge_metamodules",  "4_merge_metamodules_3celltypes","4_merge_metamodules")
+
+
+unknowns <- c("","_no_unknown")
+# pick which celltype to be analyse
+
+# all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
+# chosen_celltypes <- all_celltypes[c(2)]
+
+run_eachs <- c(TRUE,FALSE)
+runs <- c("each","whole")
+
+```
+```{r}
+#set unknown 
+unknown <- unknowns[1]
+
+#set whole vs each
+run_each <- run_eachs[2]
+```
+```{r}
+#3 celltype
+
+pick <- 3
+sig <- sigs[pick]
+merge <- merges[pick]
+
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+possible_3celltpyes <- c("AClike","NPClike","OPClike","unknown","tie")
+```
+
+
+
+```{r}
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE]
+
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
+
+
+# # add full option
+# sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
+# sc.sorter$scSorter_no_unknown <- NA
+# sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+```
+
+
+```{r}
+#unknown <- unknowns[1]
+# ref-based
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run,".csv"), row.names = 1)
+#clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE]
+clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
+
+scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned","_",run,".csv"), row.names = 1)
+scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+```
+
+
+```{r}
+# # Add Full option
+# sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# sc.pred <- sc.pred[,2:1]
+# colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+# sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+# 
+# single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# single.r <- single.r[,2:1]
+# colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+# single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+# single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+# 
+# scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scibet$scibet_no_unknown <- scibet$scibet #no unknown by default
+# scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+# 
+# chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# chetah$CHETAH_no_unknown <- chetah$CHETAH
+# chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+# 
+# scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
+# scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+# 
+# scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
+# scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+```
+
+```{r}
+#sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
+```
+
+
+```{r}
+anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid)
+
+#full option
+#anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+
+#colnames(anno_3subtype) <- paste(colnames(anno_3subtype), sig, sep = "_")
+
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("\\.new$", "like", x))
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("Unknown", "unknown", x))
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("unassigned", "unknown", x))
+```
+
+```{r}
+anno_3subtype
+```
+
+
+
+
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+
+all.sankey <- anno_3subtype
+colnames(all.sankey) <- gsub("_no_unknown","",colnames(all.sankey))
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object, sig,run, unknown,sep = "; "))
+pl <- pl + labs(fill = "Nodes")
+pl
+```
+```{r}
+# MES
+pick <- 1
+#run_each <- run_eachs[1]
+
+sig <- sigs[pick]
+merge <- merges[pick]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig, "_",run,".csv"), row.names = 1)
+sc.type <- sc.type[,paste0("scType") ,drop = FALSE]
+sc.type[] <- lapply(sc.type, function(x) gsub("Unknown", "Non_MESlike", x))
+
+
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig,  "_",run,".csv"), row.names = 1)
+scina <- scina[,paste0("SCINA") ,drop = FALSE]
+scina[] <- lapply(scina, function(x) gsub("unknown", "Non_MESlike", x))
+
+# ref-based
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+#clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE]
+clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
+clustify.r[] <- lapply(clustify.r, function(x) gsub("not_labeled", "Non_MESlike", x))
+
+scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned", "_",run,".csv"), row.names = 1)
+scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+#scid <- scid[,paste0("scID",unknowns[2]) ,drop = FALSE]
+
+scid[] <- lapply(scid, function(x) gsub("not_labeled", "Non_MESlike", x))
+
+#scid[] <- lapply(scid, function(x) gsub("unassigned", "unknown", x))
+scid[] <- lapply(scid, function(x) gsub("unassigned", "Non_MESlike", x))
+```
+
+```{r}
+# add full option
+# sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
+# sc.sorter$scSorter_no_unknown <- NA
+# sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+
+
+# # Add Full option
+# sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# sc.pred <- sc.pred[,2:1]
+# colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+# sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+# 
+# single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# single.r <- single.r[,2:1]
+# colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+# single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+# single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+# 
+# scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scibet$scibet_no_unknown <- scibet$scibet
+# scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+# 
+# chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# chetah$CHETAH_no_unknown <- chetah$CHETAH
+# chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+# 
+# scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cluster$scmap_cluster_no_unknown <- NA
+# scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+# 
+# scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cell$scmap_cell_no_unknown <- NA
+# scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+```
+```{r}
+anno_mes <- bind_cols(sc.type, scina, clustify.r,scid)
+
+#full option
+
+#anno_mes <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+
+
+anno_mes[] <- lapply(anno_mes, function(x) gsub("\\.new$", "like", x))
+
+
+anno_mes[] <- lapply(anno_mes, function(x) gsub("not_labeled", "Non_MESlike", x))
+
+#anno_mes[] <- lapply(anno_mes, function(x) gsub("unassigned", "unknown", x))
+anno_mes[] <- lapply(anno_mes, function(x) gsub("unassigned", "Non_MESlike", x))
+
+anno_mes
+```
+
+
+
+
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+
+all.sankey <- anno_mes
+
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object, sig, run,sep = "; "))
+pl <- pl + labs(fill = "Nodes")
+pl
+```
+
+
+
+```{r}
+# Merge information
+anno_3subtype <- anno_3subtype[order(rownames(anno_3subtype)), ]
+anno_mes <- anno_mes[order(rownames(anno_mes)), ]
+
+annon_mes_edited <- anno_mes %>% mutate(across(everything(), ~na_if(., "Non_MESlike")))
+anno_merge <- mapply(paste, anno_3subtype, annon_mes_edited, MoreArgs = list(sep = "_"))
+
+
+anno_merge <- as.data.frame(anno_merge)
+rownames(anno_merge) <- rownames(anno_mes)
+
+anno_merge[] <- lapply(anno_merge, function(x) gsub("_NA", "", x))
+
+
+```
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+
+
+all.sankey <- anno_merge
+
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+df
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object, sig, sep = "; "))
+pl <- pl + labs(fill = "Nodes")
+pl
+```
+
+```{r}
+#add gbm metadata
+gbm.meta <- read.csv("output/gbm_meta.csv",row.names = 1)
+gbm.meta
+anno_merge_radiation <- cbind(anno_merge,gbm.meta[,"radiation"])
+
+anno_merge_radiation
+```
+
+```{r}
+# Sankey on control
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+
+
+all.sankey <- anno_merge_radiation[anno_merge_radiation$`gbm.meta[, "radiation"]` == "control",1:4]
+
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+df
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object, sig, sep = "; "),
+                subtitle = "control")
+pl <- pl + labs(fill = "Nodes")
+pl
+```
+```{r}
+# Sankey on control
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+
+
+all.sankey <- anno_merge_radiation[anno_merge_radiation$`gbm.meta[, "radiation"]` == "radiated",1:4]
+
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+df
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object, sig, sep = "; "),
+                subtitle = "radiated")
+pl <- pl + labs(fill = "Nodes")
+pl
+```
+# Consistant analysis
+
+```{r}
+library(foreach)
+library(doParallel)
+library(irr)
+
+anno_3subtype_subtools <- anno_3subtype[,1:4]
+
+col_names <- names(anno_3subtype_subtools)
+
+anno_3subtype_subtools[] <- lapply(seq_along(anno_3subtype_subtools), function(i) {
+  ifelse(anno_3subtype_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_3subtype_subtools[[i]])
+})
+names(anno_3subtype_subtools) <- col_names
+
+
+tool_names <- colnames(anno_3subtype_subtools)
+max_num_of_tools <- length(tool_names)
+
+numCores <- detectCores() - 5
+registerDoParallel(numCores)
+
+# Initialize dataframe with columns for kappa and each tool
+column_names <- c("Kappa", tool_names)
+results <- data.frame(matrix(ncol = max_num_of_tools + 1, nrow = 0))
+
+
+# Perform the analysis
+results <- foreach(i = 2:max_num_of_tools, .combine = rbind) %:% 
+  foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% {
+    kappa_val <- calculate_kappa_for_combination(anno_3subtype_subtools, comb)
+    # Initialize a row with zeros for each tool
+    tool_presence <- rep(0, max_num_of_tools)
+    # Set 1 for tools present in the combination
+    tool_presence[which(tool_names %in% comb)] <- 1
+    # Combine kappa value with tool presence
+    data.frame(Kappa = kappa_val, t(tool_presence))
+  }
+
+stopImplicitCluster()
+colnames(results) <- column_names
+# Extracting the best combination based on the highest kappa value
+best_combination <- results[which.max(results$Kappa), ]
+results
+```
+
+
+```{r}
+library(ggplot2)
+results_sorted <- results[order(results$Kappa, decreasing = TRUE), ]
+rownames(results_sorted) <- NULL
+
+
+# Assuming your tool columns are everything except the first (Kappa) and last (NumOfTools)
+tool_columns <- 2:(ncol(results_sorted))
+
+# Convert each row to a binary string
+results_sorted$BinaryCode <- as.factor(apply(results_sorted[, tool_columns], 1, function(x) paste(x, collapse = "")))
+
+results_sorted$BinaryCode <- factor(results_sorted$BinaryCode, levels = unique(results_sorted$BinaryCode))
+
+limits <- 1
+# Lollipop Plot
+p_1 <- ggplot(results_sorted, aes(x = BinaryCode, y = Kappa)) +
+  geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = Kappa), color = "grey") +
+  geom_point(color = "blue", size = 3, alpha = 0.6) +
+  scale_y_continuous(limits = c(-limits, limits)) +
+  coord_flip() +
+  labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Add a legend or annotation for tool names
+# Example: Replace this with your actual tool names
+tool_names <- colnames(results_sorted[, tool_columns])
+legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n")
+p_1 <- p_1 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3)
+
+p_1
+```
+
+
+```{r}
+#donor_id wise
+
+library(parallel)
+
+
+anno_3subtype_subtools <- anno_3subtype[,1:4]
+
+col_names <- names(anno_3subtype_subtools)
+
+anno_3subtype_subtools[] <- lapply(seq_along(anno_3subtype_subtools), function(i) {
+  ifelse(anno_3subtype_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_3subtype_subtools[[i]])
+})
+names(anno_3subtype_subtools) <- col_names
+
+
+n_tool <- ncol(anno_3subtype_subtools)
+#n_tool <- 4
+anno_3subtype_meta <- (merge(anno_3subtype_subtools,gbm.meta,by = "row.names"))
+
+calculate_kappa_for_donor <- function(donor_id, data,n_tool) { 
+  # Correctly subset the data for the specific donor_id
+  subset_data <- data[data$donor_id == donor_id, 2:(n_tool +1)] #not include the first column as it is the rowname
+  # Calculate Fleiss' Kappa
+  kappa_result <- kappam.fleiss(subset_data)
+  return(kappa_result$value) # Returning just the Kappa value
+}
+# List of unique donor IDs
+donor_ids <- as.list(unique(anno_3subtype_meta$donor_id))
+
+# Parallel computation of kappa values
+kappa_values <- mclapply(donor_ids, function(id) calculate_kappa_for_donor(id, anno_3subtype_meta,n_tool), mc.cores = detectCores() - 1)
+
+# Combine the results into a named list or another preferred format
+names(kappa_values) <- donor_ids
+
+kappa_values_df <- data.frame(kappa_value = t(as.data.frame(kappa_values)))
+kappa_values_df
+```
+
+```{r}
+library(ggplot2)
+
+# Ensure kappa_values_df is in the correct format with donor_id and kappa_value
+kappa_values_df$donor_id <- rownames(kappa_values_df)
+
+# Convert donor_id to a factor and reorder its levels based on kappa_value
+kappa_values_df$donor_id <- factor(kappa_values_df$donor_id, levels = kappa_values_df$donor_id[order(kappa_values_df$kappa_value, decreasing = TRUE)])
+
+limits <- 0.5
+# Lollipop Plot
+ggplot(kappa_values_df, aes(x = donor_id, y = kappa_value)) +
+  geom_segment(aes(x = donor_id, xend = donor_id, y = 0, yend = kappa_value), color = "grey") +
+  geom_point(color = "blue", size = 3, alpha = 0.6) +
+  scale_y_continuous(limits = c(-limits, limits)) +
+  coord_flip() +
+  labs(x = "Donor ID", y = "Kappa Value", title = "Kappa Values by Donor ID", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+```{r}
+library(parallel)
+library(foreach)
+library(doParallel)
+
+#donor wise with combination
+
+
+anno_3subtype_subtools <- anno_3subtype[,1:4]
+
+col_names <- names(anno_3subtype_subtools)
+
+anno_3subtype_subtools[] <- lapply(seq_along(anno_3subtype_subtools), function(i) {
+  ifelse(anno_3subtype_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_3subtype_subtools[[i]])
+})
+names(anno_3subtype_subtools) <- col_names
+
+# Assuming anno_3subtype is already defined
+anno_3subtype_meta <- merge(anno_3subtype_subtools, gbm.meta, by = "row.names")
+
+
+
+
+
+tool_names <- colnames(anno_3subtype[,1:4])
+max_num_of_tools <- length(tool_names)
+
+# Function to calculate kappa for a specific donor and combination of tools
+calculate_kappa_for_donor_combination <- function(donor_id, tools, data) {
+  subset_data <- data[data$donor_id == donor_id, tools]
+  kappa_result <- kappam.fleiss(subset_data)
+  return(kappa_result$value)
+}
+
+# List of unique donor IDs
+donor_ids <- unique(anno_3subtype_meta$donor_id)
+
+# Register Parallel Backend
+numCores <- detectCores() - 1
+registerDoParallel(numCores)
+
+# Perform the analysis for each donor
+results_all <- foreach(donor_id = donor_ids, .combine = rbind) %do% {
+  foreach(i = 2:max_num_of_tools, .combine = rbind) %:% 
+    foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% {
+      kappa_val <- calculate_kappa_for_donor_combination(donor_id, comb, anno_3subtype_meta)
+      # Initialize a row with zeros for each tool
+      tool_presence <- rep(0, max_num_of_tools)
+      # Set 1 for tools present in the combination
+      tool_presence[which(tool_names %in% comb)] <- 1
+      # Combine kappa value with tool presence and donor_id
+      data.frame(DonorID = donor_id, Kappa = kappa_val, t(tool_presence))
+    }
+}
+
+stopImplicitCluster()
+
+# Setting the column names
+column_names <- c("DonorID", "Kappa", tool_names)
+colnames(results_all) <- column_names
+
+# View the results
+results_all
+
+```
+
+
+```{r}
+# Calculate the mean (or another aggregate measure) of Kappa for each tool combination
+library(dplyr)
+aggregated_results <- results_all %>%
+  group_by_at(vars(-DonorID, -Kappa)) %>%
+  summarize(MeanKappa = mean(Kappa, na.rm = TRUE)) %>%
+  arrange(desc(MeanKappa)) %>%
+  ungroup
+
+library(dplyr)
+library(ggplot2)
+
+# Prepare the data
+aggregated_results$BinaryCode <- apply(aggregated_results[,1:4], 1, function(x) {
+  paste0(x, collapse = "")
+})
+
+# Consider taking the top N combinations for a clearer plot
+
+
+# # Bar Plot
+# ggplot(aggregated_results, aes(x =BinaryCode, y = MeanKappa)) +
+#   geom_bar(stat = "identity", fill = "steelblue") +
+#   coord_flip() +  # Flips the axes for better readability of combination names
+#   labs(x = "Tool Combination", y = "Mean Kappa Value", title = "Top Tool Combinations Across Donors") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+aggregated_results$BinaryCode <- factor(aggregated_results$BinaryCode, levels = unique(results_sorted$BinaryCode))
+
+limits <- 1
+# Lollipop Plot
+p_2 <- ggplot(aggregated_results, aes(x = BinaryCode, y = MeanKappa)) +
+  geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = MeanKappa), color = "grey") +
+  geom_point(color = "blue", size = 3, alpha = 0.6) +
+  scale_y_continuous(limits = c(-limits, limits)) +
+  coord_flip() +
+  labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value",subtitle =  paste( "unweighted by cell numbers\n ","with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Add a legend or annotation for tool names
+# Example: Replace this with your actual tool names
+tool_names <- colnames(results_sorted[, tool_columns])
+legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n")
+
+p_2 <- p_2 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3)
+
+```
+```{r}
+library(patchwork)
+p_1 + p_2
+```
+
+```{r}
+# Assuming 'results_all' is your dataframe
+# Convert donor ID to a factor for better plotting
+results_all$DonorID <- as.factor(results_all$DonorID)
+
+# Box Plot
+ggplot(results_all, aes(x = DonorID, y = Kappa)) +
+  geom_boxplot() +
+  labs(x = "Donor ID", y = "Kappa Value", title = "Distribution of Kappa Values Across Donors") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x labels for better readability
+```
+
+
+
+
+
+
+
+
+
+
+
+#calculate score
+```{r}
+# convert the 4 tools into 4 dimention of subtype 
+library(data.table)
+
+# First defined MES score range from 0 to 1
+anno_mes_score <- as.data.table(anno_mes,keep.rownames = TRUE)
+
+# Replace MESlike and Non-MESLike with 1 and 0
+anno_mes_score[, (2:5) := lapply(.SD, function(x) fifelse(x == "MESlike", 1, fifelse(x == "Non-MESLike", 0, NA_integer_))), .SDcols = 2:5]
+
+# Rowwise summation of columns 2 to 5
+
+anno_mes_score[, sum_col := rowSums(.SD, na.rm = TRUE)/ncol(anno_mes), .SDcols = 2:5]
+
+# Creating a new data table with the first column and the summation
+anno_mes_score <- anno_mes_score[, .(rn = rn, MESlike = sum_col)]
+```
+
+
+```{r}
+anno_3subtype
+anno_3subtype_wide <- as.data.table(anno_3subtype,keep.rownames = TRUE)
+
+anno_3subtype_score_long <- melt(anno_3subtype_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types")
+
+anno_3subtype_score_long <- anno_3subtype_score_long[,c(1,3)]
+anno_3subtype_score_long[,binary := 1]
+anno_3subtype_score <- dcast(anno_3subtype_score_long,formula = rn ~cell_types ,value.var = "binary")
+
+anno_3subtype_score[, 2:4 := .SD/rowSums(.SD), .SDcols = 2:4]
+anno_3subtype_score[,unknown := unknown/ncol(anno_3subtype)]
+anno_3subtype_score
+```
+
+
+
+```{r}
+anno_4subtype_score <- merge(anno_3subtype_score,anno_mes_score,by = "rn")
+anno_4subtype_score
+```
+<!-- # ```{r} -->
+<!-- # library(uwot) -->
+<!-- # set.seed(123) -->
+<!-- # -->
+<!-- # umap_res <- umap(anno_4subtype_score[,2:5],n_threads = parallel::detectCores()) -->
+<!-- # -->
+<!-- # umap_res <- as.data.frame(umap_res,row.names = anno_4subtype_score$rn) -->
+<!-- # colnames(umap_res) <- c("UMAP_1","UMAP_2") -->
+<!-- # -->
+<!-- # library(Rtsne) -->
+<!-- # set.seed(123) -->
+<!-- # tsne_res <- Rtsne(anno_4subtype_score[,2:5], dims = 2, perplexity = 30, theta = 0.5, check_duplicates = FALSE) -->
+<!-- # tsne_res <- as.data.frame(tsne_res$Y,row.names = anno_4subtype_score$rn) -->
+<!-- # colnames(tsne_res) <- c("tSNE_1","tSNE_2") -->
+<!-- # -->
+<!-- # #MDS -->
+<!-- # set.seed(123) -->
+<!-- # dist_mat <- dist(anno_4subtype_score[,2:5])  # Euclidean distance is the default -->
+<!-- # mds_res <- cmdscale(dist_mat, k = 2) -->
+<!-- # mds_res <- as.data.frame(mds_res,row.names = anno_4subtype_score$rn) -->
+<!-- # colnames(mds_res) <- c("MDS_1","MDS_2") -->
+<!-- # ``` -->
+<!-- # -->
+<!-- # ```{r} -->
+<!-- # tsne_res -->
+<!-- # map_list <- list(umap_res,tsne_res) -->
+<!-- # reduced_map <- do.call(cbind,map_list) -->
+<!-- # -->
+<!-- # reduced_map <- cbind(reduced_map,gbm.meta) -->
+<!-- # reduced_map -->
+<!-- # ``` -->
+<!-- # ```{r} -->
+<!-- # library(bigmemory) -->
+<!-- # library(biganalytics) -->
+<!-- # install.packages("biganalytics") -->
+<!-- # anno_4subtype_score_big <- as.big.matrix(anno_4subtype_score[,2:5]) -->
+<!-- # anno_4subtype_score_big -->
+<!-- # ``` -->
+<!-- # -->
+<!-- # ```{r} -->
+<!-- # library(cluster) -->
+<!-- # -->
+<!-- # # Perform K-means clustering -->
+<!-- # set.seed(42) -->
+<!-- # kmeans_result <- bigkmeans(anno_4subtype_score_big,centers = 3) -->
+<!-- # -->
+<!-- # # Calculate silhouette scores -->
+<!-- # silhouette_scores <- silhouette(kmeans_result$cluster, dist(anno_4subtype_score[,2:5])) -->
+<!-- # -->
+<!-- # # Plot silhouette scores -->
+<!-- # plot(silhouette_scores) -->
+<!-- # -->
+<!-- # -->
+<!-- # wcss <- sapply(1:10, function(k) { -->
+<!-- #   sum(bigkmeans(anno_4subtype_score_big,centers = k)$withinss) -->
+<!-- # }) -->
+<!-- # wcss -->
+<!-- # # Plot the elbow method -->
+<!-- # plot(1:10, wcss, type = "b", xlab = "Number of Clusters", ylab = "WCSS") -->
+<!-- # ``` -->
+<!-- # -->
+<!-- # ```{r} -->
+<!-- # ggplot(reduced_map, aes(x = UMAP_1, y = UMAP_2)) + -->
+<!-- #   geom_point(size = 0.1) -->
+<!-- # ``` -->
+<!-- # -->
+<!-- # ```{r} -->
+<!-- # ggplot(reduced_map, aes(x = tSNE_1, y = tSNE_2,color = radiation)) + -->
+<!-- #   geom_point(size = 0.1) -->
+<!-- # ``` -->
+```{r}
+
+# 
+# library(data.table)
+# library(scatterplot3d)
+# 
+# # Assuming 'anno_4subtype_score' and 'gbm.meta' are data.tables
+# score_4subtype_meta <- cbind(anno_4subtype_score, gbm.meta)
+# score_4subtype_meta[, radiation := as.factor(radiation)]
+# score_4subtype_meta[, c("AClike", "NPClike", "OPClike") := lapply(.SD, as.numeric), .SDcols = c("AClike", "NPClike", "OPClike")]
+# score_4subtype_meta[, rank := frank(score_4subtype_meta$MESlike, ties.method = "dense")]
+# 
+# # Calculate the frequency of each unique combination of AClike, NPClike, and OPClike
+# freq_table <- score_4subtype_meta[, .N, by = .(AClike, NPClike, OPClike)]
+# score_4subtype_meta <- merge(score_4subtype_meta, freq_table, by = c("AClike", "NPClike", "OPClike"))
+# 
+# # Color by MES
+# colors <- colorRampPalette(c("blue", "white"))(ncol(anno_merge)+1)
+# colors <- colors[as.numeric(score_4subtype_meta$rank)]
+# 
+# # Shape by radiation
+# shapes <- c(16, 17)
+# shapes <- shapes[as.numeric(score_4subtype_meta$radiation)]
+# 
+# 
+# 
+# # Create 3D scatter plot
+# scatterplot3d(score_4subtype_meta$AClike, score_4subtype_meta$NPClike, score_4subtype_meta$OPClike,
+#               color = colors,
+#               pch = shapes,
+#               grid = TRUE, box = FALSE,
+#               xlab = "AClike", ylab = "NPClike", zlab = "OPClike",
+#               type = "h")
+# 
+# text(x = 7, y = 0.5, "NPClike", srt = 25)
+# 
+# legend("top", legend = levels(score_4subtype_meta$radiation),
+#        pch = shapes,
+#        inset = -0.25, xpd = TRUE, horiz = TRUE)
+```
+```{r}
+# Better plot into python as i can manage to adjust the size
+# 
+# library(feather)
+# score_4subtype_meta
+# # Save the data.table as a feather file
+# write_feather(score_4subtype_meta, "output/score_4subtype_meta.feather")
+```
+
+
+```{r}
+#try rgl
+# 
+# library(rgl)
+# 
+# score_4subtype_meta <- cbind(anno_4subtype_score, gbm.meta)
+# score_4subtype_meta[, radiation := as.factor(radiation)]
+# score_4subtype_meta[, c("AClike", "NPClike", "OPClike") := lapply(.SD, as.numeric), .SDcols = c("AClike", "NPClike", "OPClike")]
+# score_4subtype_meta[, rank := frank(score_4subtype_meta$MESlike, ties.method = "dense")]
+# 
+# # Calculate the frequency of each unique combination of AClike, NPClike, and OPClike
+# freq_table <- score_4subtype_meta[, .N, by = .(AClike, NPClike, OPClike)]
+# score_4subtype_meta <- merge(score_4subtype_meta, freq_table, by = c("AClike", "NPClike", "OPClike"))
+# 
+# # Color by MES
+# colors <- colorRampPalette(c("blue", "white"))(ncol(anno_merge)+1)
+# colors <- colors[as.numeric(score_4subtype_meta$rank)]
+# 
+# # Shape by radiation
+# shapes <- c(16, 17)
+# shapes <- shapes[as.numeric(score_4subtype_meta$radiation)]
+# 
+# 
+# # Normalize the 'N' column for point sizes
+# max_size <- 10  # Maximum size for a point
+# min_size <- 3   # Minimum size for a point
+# 
+# # Add a new column for the scaled size
+# score_4subtype_meta[, size_factor := ((N - min(N)) / (max(N) - min(N))) * (max_size - min_size) + min_size]
+# 
+# 
+# # Open a new 3D plotting device
+# rgl.open()
+# 
+# # Plot the points
+# with(score_4subtype_meta, plot3d(x = AClike, y = NPClike, z = OPClike,
+#                                 col = colors, pch = shapes, size = size_factor,
+#                                 xlab = "AClike", ylab = "NPClike", zlab = "OPClike"))
+# # Add axes
+# axes3d(edges = c("x--", "y--", "z--"))
+# 
+# # Add legend (Note: rgl does not have a built-in legend function, so this is a workaround)
+# legend3d("top", legend = levels(score_4subtype_meta$radiation), pch = shapes, col = colors)
+# 
+# # Optionally, add a title
+# title3d("3D Scatter Plot")
+# 
+# # To interact with the plot, you can use the mouse to rotate, zoom, and pan.
+
+```
+
+
+#Terny plot -->
+```{r}
+library(ggplot2)
+library(patchwork)
+library(ggh4x)
+library(ggtern)
+```
+
+
+
+```{r}
+anno_3subtype_score_per <- anno_3subtype_score
+anno_3subtype_score_per[,2:4] <- anno_3subtype_score[,2:4]
+
+# source("script/function.R")
+# anno_3subtype_score_per <- as.data.table(t(apply(anno_3subtype_score_per[,2:4], 1, function(x) adjust_composition_center(x, 0.1))))
+
+score_meta_4subtypes <- Reduce(function(x, y) merge(x, y, by = "rn"),
+                    list(anno_3subtype_score_per, anno_mes_score, rownames_to_column(gbm.meta,var = "rn")))
+
+score_meta_4subtypes[, count := .N, by = .(AClike, NPClike, OPClike)]
+```
+
+
+```{r}
+library(extraDistr)
+library(tibble)
+set.seed(123)  # For reproducibility
+
+# Define the offset size
+offset_range = 0
+scaling_size = 100
+
+# Calculate a random offset for each group
+offsets <- score_meta_4subtypes[, .(offset1 = rdunif(1, -offset_range, offset_range)/scaling_size,
+                  offset2 = rdunif(1, -offset_range, offset_range)/scaling_size,
+                  offset3 = rdunif(1, -offset_range, offset_range)/scaling_size), by = radiation]
+#offsets[2,2:4] <- 0
+offsets
+# Join the offsets back to the original data
+score_meta_4subtypes <- merge(score_meta_4subtypes, offsets, by = "radiation")
+
+#First, adjust the values with the offsets
+score_meta_4subtypes[, `:=` (AClike = AClike + offset1,
+                             NPClike = NPClike + offset2,
+                             OPClike = OPClike + offset3)]
+
+
+
+# Then, calculate the total
+score_meta_4subtypes[, total := AClike + NPClike+ OPClike]
+
+# Finally, normalize the adjusted values
+score_meta_4subtypes[, `:=` (AClike = round(AClike / total,digits = 3)*100,
+                             NPClike = round(NPClike / total,digits = 3)*100,
+                             OPClike = round(OPClike / total,digits = 3)*100)]
+
+
+```
+
+```{r}
+#filter out unknown
+
+score_meta_4subtypes_no_unknown <- score_meta_4subtypes[unknown == 0]
+
+score_meta_4subtypes[, count := .N, by = .(AClike, NPClike, OPClike,radiation,donor_id)]
+
+min_value <- min(score_meta_4subtypes$count, na.rm = TRUE)
+max_value <- max(score_meta_4subtypes$count, na.rm = TRUE)
+# Custom labels for min and max
+min_label <- paste("Min (", min_value, ")", sep = "")
+max_label <- paste("Max (", max_value, ")", sep = "")
+plot_no_unknown <- ggtern(data = score_meta_4subtypes, aes(x = AClike, y = NPClike, z = OPClike)) +
+  geom_mask() +
+  geom_point(aes(size = count, color = MESlike)) +
+  xlab("") + ylab("") + zlab("") +
+  scale_color_gradient(low = "white", high = "purple",guide = "none") +
+  scale_size_continuous(range = c(0.5, 2),
+                        breaks = c(min_value, max_value),
+                        labels = c(min_label, max_label))  +
+  labs(title = "Ternary Plot of Cell Types") +
+  ggh4x::facet_nested_wrap(~ donor_id + radiation, strip = strip_nested(size = "variable")) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 4),
+        strip.background = element_blank(),
+        tern.plot.background = element_rect(fill = "white"),
+        tern.panel.background = element_rect(fill = "grey"),
+        tern.axis.text = element_text(size = 0))
+# Display the plot
+print(plot_no_unknown)
+```
+
+
+```{r}
+#Weight the count for unknown
+# install.packages("ggh4x")
+
+score_meta_4subtypes[, weight := 1 - unknown]
+score_meta_4subtypes[, weighted_count := sum(weight), by = .(AClike, NPClike, OPClike,radiation)]
+
+min_value <- min(score_meta_4subtypes$weighted_count, na.rm = TRUE)
+max_value <- max(score_meta_4subtypes$weighted_count, na.rm = TRUE)
+# Custom labels for min and max
+min_label <- paste("Min (", min_value, ")", sep = "")
+max_label <- paste("Max (", max_value, ")", sep = "")
+
+plot_control <- ggtern(data = score_meta_4subtypes[radiation == "control",], aes(x = AClike, y = NPClike, z = OPClike)) +
+  geom_mask() +
+  geom_point(aes(size = weighted_count, color = MESlike)) +
+   scale_color_gradient(low = "white", high = "purple",guide = "none") +
+  scale_size_continuous(range = c(1, 3),
+                        breaks = c(min_value, max_value),
+                        labels = c(min_label, max_label))  +
+  labs(title = "Ternary Plot of  Cell Types") +
+  theme(legend.position = "right",
+        tern.plot.background = element_rect(fill = "white"),
+        tern.panel.background = element_rect(fill = "grey")
+        )
+
+plot_control
+
+```
+
+
+```{r}
+
+score_meta_4subtypes[, weight := 1 - unknown]
+score_meta_4subtypes[, weighted_count := sum(weight), by = .(AClike, NPClike, OPClike,radiation,donor_id)]
+
+min_value <- min(score_meta_4subtypes$weighted_count, na.rm = TRUE)
+max_value <- max(score_meta_4subtypes$weighted_count, na.rm = TRUE)
+# Custom labels for min and max
+min_label <- paste("Min (", min_value, ")", sep = "")
+max_label <- paste("Max (", max_value, ")", sep = "")
+plot_each <- ggtern(data = score_meta_4subtypes, aes(x = AClike, y = NPClike, z = OPClike)) +
+  geom_mask() +
+  geom_point(aes(size = weighted_count, color = MESlike)) +
+  xlab("") + ylab("") + zlab("") +
+  scale_color_gradient(low = "white", high = "purple",guide = "none") +
+  scale_size_continuous(range = c(1, 3),
+                        breaks = c(min_value, max_value),
+                        labels = c(min_label, max_label))  +
+  labs(title = "Ternary Plot of Cell Types") +
+  ggh4x::facet_nested_wrap(~ donor_id + radiation, strip = strip_nested(size = "variable")) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 4),
+        strip.background = element_blank(),
+        tern.plot.background = element_rect(fill = "white"),
+        tern.panel.background = element_rect(fill = "grey"),
+        tern.axis.text = element_text(size = 0))
+# Display the plot
+print(plot_each)
+
+```
+
+```{r}
+score_meta_4subtypes[, weight := 1 - unknown]
+score_meta_4subtypes[, weighted_count := sum(weight), by = .(AClike, NPClike, OPClike,radiation)]
+
+score_meta_4subtypes_radiation <-  score_meta_4subtypes[radiation == "radiated"]
+min_value <- min(score_meta_4subtypes_radiation$weighted_count, na.rm = TRUE)
+max_value <- max(score_meta_4subtypes_radiation$weighted_count, na.rm = TRUE)
+# Custom labels for min and max
+min_label <- paste("Min (", min_value, ")", sep = "")
+max_label <- paste("Max (", max_value, ")", sep = "")
+
+plot_each <- ggtern(data = score_meta_4subtypes_radiation, aes(x = AClike, y = NPClike, z = OPClike)) +
+  geom_mask() +
+  geom_point(aes(size = weighted_count, color = MESlike)) +
+  scale_color_gradient(low = "white", high = "purple") +
+  scale_size_continuous(range = c(1, 10),
+                        breaks = c(min_value, max_value),
+                        labels = c(min_label, max_label))  +
+  labs(title = "radiated")
+  #ggh4x::facet_wrap(~radiation)
+  # theme(legend.position = "bottom",
+  #       strip.text = element_text(size = 4),
+  #       strip.background = element_blank(),
+  #       tern.plot.background = element_rect(fill = "white"),
+  #       tern.panel.background = element_rect(fill = "grey"),
+  #       tern.axis.text = element_text(size = 0))
+# Display the plot
+print(plot_each)
+
+#grid.arrange(plot_each,plot_all,ncol = 2)
+```
+
+```{r}
+#3cell_types
+anno_3subtype_wide <- as.data.table(anno_3subtype,keep.rownames = TRUE)
+
+anno_3subtype_score_long <- melt(anno_3subtype_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types")
+
+anno_3subtype_score_long <- anno_3subtype_score_long[,c(1,3)]
+anno_3subtype_score_long[,binary := 1]
+anno_3subtype_score <- dcast(anno_3subtype_score_long,formula = rn ~cell_types ,value.var = "binary")
+
+
+anno_3subtype_score[,unknown := unknown/ncol(anno_3subtype)]
+anno_3subtype_score[, confidence := apply(.SD, 1, max)/ncol(anno_3subtype), .SDcols = 2:4]
+
+anno_3subtype_score_unknown <- anno_3subtype_score[,.(rn,unknown,confidence)]
+
+anno_3subtype_score <-  anno_3subtype_score[,c("AClike", "NPClike", "OPClike")]
+anno_3subtype_score[, c("Rank_AClike", "Rank_NPClike", "Rank_OPClike") :=
+  as.data.table(t(apply(.SD, 1, function(x) frank(-x, ties.method = "dense")))),
+  .SDcols = c("AClike", "NPClike", "OPClike")]
+
+
+anno_3subtype_score <- cbind(anno_3subtype_score_unknown,anno_3subtype_score)
+
+
+anno_3subtype_score[, Tie := (Rank_AClike == 1 & Rank_NPClike == 1) | (Rank_AClike == 1 & Rank_OPClike == 1) |
+            (Rank_NPClike == 1 & Rank_OPClike == 1)]
+
+anno_3subtype_score
+```
+
+
+
+```{r}
+#3cell_types: radiation
+
+
+anno_3subtype_score_meta <- merge(anno_3subtype_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_3subtype_count_sum <- anno_3subtype_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
+                                    .SDcols = c("AClike", "NPClike", "OPClike"),
+                                    by = c("radiation")]
+
+anno_3subtype_count_sum_long <-  melt(anno_3subtype_count_sum,id.vars = c("radiation","confidence_mean","n_cell"), measure.vars = c("AClike", "NPClike", "OPClike"),variable.name = "consensus",value.name = "count")
+
+anno_3subtype_count_sum_long[,per := count/sum(count),by = c("radiation")]
+
+anno_3subtype_count_sum_long <- anno_3subtype_count_sum_long[order( radiation,consensus)]
+
+anno_3subtype_count_sum_long[,n_cell := as.integer(n_cell)]
+anno_3subtype_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+
+
+
+# # Visualisation
+# ggplot(anno_3subtype_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#   geom_col() +
+#   facet_wrap(~ radiation, ncol = 6) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+#   # geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) +
+#   labs(title = "All donors", subtitle = "consensus")
+
+library(grid)
+library(randomcoloR)
+
+set.seed(167)
+n <-  length(unique(anno_3subtype_count_sum_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot(anno_3subtype_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus, width = n_cell)) +
+  geom_col() +
+  facet_nested_wrap(~ rad_con,strip = strip_nested(size = "variable")) +
+  #facet_wrap(~ donor_id + rad_con) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = "all donors; control vs radiated\n (confidence score)",
+       fill = "Cell type") +
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette)
+
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- textGrob("pie size based on  the number of cells in each group",
+                    x = unit(1, "npc"), y = unit(0.05, "npc"),
+                    hjust = 2, vjust = -5,
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+# label_data <- anno_3subtype_count_sum_long %>%
+#   group_by(radiation) %>%
+#   summarize(confidence_label = paste0("(",round(mean(confidence_mean, na.rm = TRUE),2),")")) %>%
+#   ungroup()
+# label_data$consensus <- NA
+# # Create the plot
+# p_bar <- ggplot(anno_3subtype_count_sum_long,
+#             aes(x = radiation, y = per, fill = consensus)) +
+#   geom_bar(stat = "identity", position = "fill") +
+#   coord_flip() +
+#   labs(title = "Cell types proportion",
+#        subtitle = "All donors; Control vs Radiated\n(confidence score)",
+#        x = "Donor ID",
+#        y = "Proportion",
+#        fill = "Cell type") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_blank()) +
+#   scale_fill_manual(values = palette) +
+#   #coord_cartesian(clip="off", ylim=c(10, 40)) +
+#   geom_text(data = label_data, aes(x = radiation, y = 0.9, label = confidence_label),size = 2,
+#             position = position_dodge(width = 0), check_overlap = TRUE)
+#
+#
+#  # coord_cartesian(clip="off", ylim=c(10, 40)) +
+#  #  geom_text(
+#  #    data=caption_df, y=5, x=min(mtcars$qsec),
+#  #    mapping=aes(label=txt), hjust=0,
+#  #    fontface="italic", color="red"
+#  #  ) +
+#  #  theme(plot.margin = margin(b=25))
+#
+# p_bar
+```
+#3cell_types: radiation + donor_id
+```{r}
+
+anno_3subtype_score_meta <- merge(anno_3subtype_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_3subtype_count_sum <- anno_3subtype_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
+                                    .SDcols = c("AClike", "NPClike", "OPClike"), 
+                                    by = c("radiation", "donor_id")]
+
+anno_3subtype_count_sum_long <-  melt(anno_3subtype_count_sum,id.vars = c("radiation","donor_id","confidence_mean","n_cell"), measure.vars = c("AClike", "NPClike", "OPClike"),variable.name = "consensus",value.name = "count")
+
+anno_3subtype_count_sum_long[,per := count/sum(count),by = c("radiation","donor_id")]
+
+anno_3subtype_count_sum_long <- anno_3subtype_count_sum_long[order(donor_id, radiation,consensus)]
+
+anno_3subtype_count_sum_long[,n_cell := as.integer(n_cell)]
+anno_3subtype_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_3subtype_count_sum_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+# # Visualisation
+# ggplot(anno_3subtype_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#   geom_col() +
+#   facet_wrap(~ donor_id + radiation, ncol = 6) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+#   # geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) +
+#   labs(title = "All donors", subtitle = "consensus")
+
+library(grid)
+library(randomcoloR)
+
+set.seed(167)
+n <-  length(unique(anno_3subtype_count_sum_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot(anno_3subtype_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#p <- ggplot(anno_3subtype_count_sum_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +  
+# p <- ggplot(anno_3subtype_count_sum_long, aes(x = (n_cell)/2, y = per, fill = consensus, width = (n_cell))) +  
+  geom_col() +
+  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+  #facet_wrap(~ donor_id + rad_con) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
+       fill = "Cell type") + 
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette) 
+
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- 
+  textGrob("", 
+  #textGrob("pie size based on squre root of the number of cells in each group", 
+  #textGrob("pie size based on of the number of cells in each group",   
+                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
+                    hjust = 2, vjust = -5, 
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+# label_data <- anno_3subtype_count_sum_long %>%
+#   group_by(donor_id, radiation) %>%
+#   summarize(confidence_label = paste0("(",round(mean(confidence_mean, na.rm = TRUE),2),")")) %>%
+#   ungroup()
+# label_data$consensus <- NA
+# # Create the plot
+# p_bar <- ggplot(anno_3subtype_count_sum_long, 
+#             aes(x = radiation, y = per, fill = consensus)) +
+#   geom_bar(stat = "identity", position = "fill") +
+#   coord_flip() +
+#   labs(title = "Cell types proportion",
+#        subtitle = "All donors; Control vs Radiated\n(confidence score)",
+#        x = "Donor ID",
+#        y = "Proportion",
+#        fill = "Cell type") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_blank()) +
+#   scale_fill_manual(values = palette) +
+#   #coord_cartesian(clip="off", ylim=c(10, 40)) +
+#   facet_wrap(~ donor_id) +
+#   geom_text(data = label_data, aes(x = radiation, y = 0.9, label = confidence_label),size = 2,
+#             position = position_dodge(width = 0), check_overlap = TRUE) 
+# 
+# 
+#  # coord_cartesian(clip="off", ylim=c(10, 40)) +
+#  #  geom_text(
+#  #    data=caption_df, y=5, x=min(mtcars$qsec),
+#  #    mapping=aes(label=txt), hjust=0,
+#  #    fontface="italic", color="red"
+#  #  ) +
+#  #  theme(plot.margin = margin(b=25))
+# 
+# p_bar
+```
+
+#MES
+```{r}
+anno_mes_wide <- as.data.table(anno_mes,keep.rownames = TRUE)
+
+anno_mes_score_long <- melt(anno_mes_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types")
+
+anno_mes_score_long <- anno_mes_score_long[,c(1,3)]
+anno_mes_score_long[,binary := 1]
+anno_mes_score <- dcast(anno_mes_score_long,formula = rn ~cell_types ,value.var = "binary")
+
+
+#anno_mes_score[,unknown := unknown/ncol(anno_mes)]
+anno_mes_score[, confidence := apply(.SD, 1, max)/ncol(anno_mes), .SDcols = 2:3]
+
+
+anno_mes_score
+
+anno_mes_score
+```
+#MES: facet radiation
+```{r}
+
+
+anno_mes_score_meta <- merge(anno_mes_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_mes_count_sum <- anno_mes_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
+                                    .SDcols = c("MESlike","Non_MESlike"), 
+                                    by = c("radiation")]
+
+anno_mes_count_sum_long <-  melt(anno_mes_count_sum,id.vars = c("radiation","confidence_mean","n_cell"), measure.vars = c("MESlike","Non_MESlike"),variable.name = "consensus",value.name = "count")
+
+anno_mes_count_sum_long[,per := count/sum(count),by = c("radiation")]
+
+anno_mes_count_sum_long <- anno_mes_count_sum_long[order(radiation,consensus)]
+
+anno_mes_count_sum_long[,n_cell := as.integer(n_cell)]
+anno_mes_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+
+
+# # Visualisation
+# ggplot(anno_mes_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#   geom_col() +
+#   facet_wrap(~ donor_id + radiation, ncol = 6) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+#   # geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) +
+#   labs(title = "All donors", subtitle = "consensus")
+
+
+# library(grid)
+# library(randomcoloR)
+# 
+# set.seed(167)
+# n <-  length(unique(anno_mes_count_sum_long$consensus))
+# palette <- distinctColorPalette(n)
+# 
+# p <- ggplot(anno_mes_count_sum_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
+#   geom_col() +
+#   facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+#   #facet_wrap(~ donor_id + rad_con) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+# 
+#   labs(title = "Cell types proportion", subtitle = "all donors; control vs radiated\n (confidence score)", 
+#        fill = "Cell type") + 
+#   theme(strip.text = element_text(size = 6)) +
+#   scale_fill_manual(values = palette) 
+# 
+# 
+# # Convert the plot to a grob
+# g <- ggplotGrob(p)
+# 
+# # Define the caption
+# caption <- textGrob("pie size based on squre root of the number of cells in each group", 
+#                     x = unit(1, "npc"), y = unit(0.05, "npc"), 
+#                     hjust = 2, vjust = -5, 
+#                     gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+# 
+# # Draw the plot and then the caption
+# grid.newpage()
+# grid.draw(g)
+# grid.draw(caption)
+
+label_data <- anno_mes_count_sum_long %>%
+  group_by(radiation) %>%
+  summarize(confidence_label = paste0("(",round(mean(confidence_mean, na.rm = TRUE),2),")")) %>%
+  ungroup()
+label_data$consensus <- NA
+# Create the plot
+p_bar <- ggplot(anno_mes_count_sum_long, 
+            aes(x = radiation, y = per, fill = consensus)) +
+  geom_bar(stat = "identity", position = "fill") +
+  coord_flip() +
+  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "),
+       x = "Donor ID",
+       y = "Proportion",
+       fill = "Cell type") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_manual(values = palette) +
+
+  geom_text(data = label_data, aes(x = radiation, y = 0.9, label = confidence_label),size = 2,
+            position = position_dodge(width = 0), check_overlap = TRUE) 
+
+
+ # coord_cartesian(clip="off", ylim=c(10, 40)) +
+ #  geom_text(
+ #    data=caption_df, y=5, x=min(mtcars$qsec),
+ #    mapping=aes(label=txt), hjust=0,
+ #    fontface="italic", color="red"
+ #  ) +
+ #  theme(plot.margin = margin(b=25))
+
+p_bar
+```
+
+#MES: facet radiation + donor_id
+```{r}
+anno_mes_score_meta <- merge(anno_mes_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_mes_count_sum <- anno_mes_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
+                                    .SDcols = c("MESlike","Non_MESlike"), 
+                                    by = c("radiation", "donor_id")]
+
+anno_mes_count_sum_long <-  melt(anno_mes_count_sum,id.vars = c("radiation","donor_id","confidence_mean","n_cell"), measure.vars = c("MESlike","Non_MESlike"),variable.name = "consensus",value.name = "count")
+
+anno_mes_count_sum_long[,per := count/sum(count),by = c("radiation","donor_id")]
+
+anno_mes_count_sum_long <- anno_mes_count_sum_long[order(donor_id, radiation,consensus)]
+
+anno_mes_count_sum_long[,n_cell := as.integer(n_cell)]
+anno_mes_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_mes_count_sum_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+
+# # Visualisation
+# ggplot(anno_mes_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#   geom_col() +
+#   facet_wrap(~ donor_id + radiation, ncol = 6) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+#   # geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) +
+#   labs(title = "All donors", subtitle = "consensus")
+
+
+# library(grid)
+# library(randomcoloR)
+# 
+# set.seed(167)
+# n <-  length(unique(anno_mes_count_sum_long$consensus))
+# palette <- distinctColorPalette(n)
+# 
+# p <- ggplot(anno_mes_count_sum_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
+#   geom_col() +
+#   facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+#   #facet_wrap(~ donor_id + rad_con) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+# 
+#   labs(title = "Cell types proportion", subtitle = "all donors; control vs radiated\n (confidence score)", 
+#        fill = "Cell type") + 
+#   theme(strip.text = element_text(size = 6)) +
+#   scale_fill_manual(values = palette) 
+# 
+# 
+# # Convert the plot to a grob
+# g <- ggplotGrob(p)
+# 
+# # Define the caption
+# caption <- textGrob("pie size based on squre root of the number of cells in each group", 
+#                     x = unit(1, "npc"), y = unit(0.05, "npc"), 
+#                     hjust = 2, vjust = -5, 
+#                     gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+# 
+# # Draw the plot and then the caption
+# grid.newpage()
+# grid.draw(g)
+# grid.draw(caption)
+
+label_data <- anno_mes_count_sum_long %>%
+  group_by(donor_id, radiation) %>%
+  summarize(confidence_label = paste0("(",round(mean(confidence_mean, na.rm = TRUE),2),")")) %>%
+  ungroup()
+label_data$consensus <- NA
+# Create the plot
+p_bar <- ggplot(anno_mes_count_sum_long, 
+            aes(x = radiation, y = per, fill = consensus)) +
+  geom_bar(stat = "identity", position = "fill") +
+  coord_flip() +
+ labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "),
+       x = "Donor ID",
+       y = "Proportion",
+       fill = "Cell type") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_manual(values = palette) +
+  #coord_cartesian(clip="off", ylim=c(10, 40)) +
+  facet_wrap(~ donor_id) +
+  geom_text(data = label_data, aes(x = radiation, y = 0.9, label = confidence_label),size = 2,
+            position = position_dodge(width = 0), check_overlap = TRUE) 
+
+
+ # coord_cartesian(clip="off", ylim=c(10, 40)) +
+ #  geom_text(
+ #    data=caption_df, y=5, x=min(mtcars$qsec),
+ #    mapping=aes(label=txt), hjust=0,
+ #    fontface="italic", color="red"
+ #  ) +
+ #  theme(plot.margin = margin(b=25))
+
+p_bar
+```
+
+
+<!-- #Consensus  -->
+<!-- ```{r} -->
+<!-- #### you can start here if you want only dataframe to further use -->
+<!-- library(here) -->
+<!-- library(tibble) -->
+<!-- library(dplyr) -->
+<!-- library(data.table) -->
+
+
+
+
+<!-- #Set working directory -->
+<!-- setwd(here()) -->
+<!-- source("script/function.R") -->
+
+
+<!-- # Parameter -->
+<!-- # cell input to be analyse -->
+
+<!-- object <- "all" -->
+
+<!-- sigs <- c( "4metamodules_new_50_mes","6metamodules", "3metamodules_new_50", "4metamodules_new_50") -->
+
+
+
+<!-- # For reference based -->
+<!-- merges <- c("4_merge_metamodules_mes","6metamodules","4_merge_metamodules_3celltypes", "4_merge_metamodules" ) -->
+
+
+<!-- unknowns <- c("","_no_unknown") -->
+<!-- # pick which celltype to be analyse -->
+
+<!-- cell_types <- c("mes","","3celltypes","4celltypes") -->
+
+
+<!-- # all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike") -->
+<!-- # chosen_celltypes <- all_celltypes[c(2)] -->
+
+<!-- run_eachs <- c(TRUE,FALSE) -->
+<!-- runs <- c("each","whole") -->
+
+<!-- for (p in unknowns[1]) { -->
+<!--   for (q in run_eachs) { -->
+<!--     #set unknown  -->
+<!--     unknown <- p -->
+
+<!--     #set whole vs each -->
+<!--     run_each <-q -->
+
+
+<!--     #3 celltype -->
+
+<!--     pick <- 3 -->
+<!--     sig <- sigs[pick] -->
+<!--     merge <- merges[pick] -->
+
+<!--     cell_type <- cell_types[pick] -->
+
+
+
+
+<!--     #run_each <- run_eachs[2] -->
+<!--     if (run_each) { -->
+<!--       run <- runs[1] -->
+<!--     } else { -->
+<!--       run <- runs[2] -->
+<!--     } -->
+
+
+
+
+
+
+<!--     # import all data -->
+<!--     # marker.based -->
+<!--     sc.type <- read.csv(paste0("output/scType_", object, "_", sig,"_",run, ".csv"), row.names = 1) -->
+<!--     sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE] -->
+
+<!--     scina <- read.csv(paste0("output/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1) -->
+<!--     scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE] -->
+
+
+<!--     # # add full option -->
+<!--     # sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1) -->
+<!--     # sc.sorter$scSorter_no_unknown <- NA -->
+<!--     # sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE] -->
+
+
+
+
+<!--     #unknown <- unknowns[1] -->
+<!--     # ref-based -->
+<!--     clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run,".csv"), row.names = 1) -->
+<!--     #clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE] -->
+<!--     clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE] -->
+
+<!--     scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned","_",run,".csv"), row.names = 1) -->
+<!--     scid <- scid[,paste0("scID",unknown) ,drop = FALSE] -->
+
+
+
+
+<!--     # # Add Full option -->
+<!--     # sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     # sc.pred <- sc.pred[,2:1] -->
+<!--     # colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2])) -->
+<!--     # sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     # single.r <- single.r[,2:1] -->
+<!--     # colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2])) -->
+<!--     # single.r[is.na(single.r$singleR),"singleR"] <- "unknown" -->
+<!--     # single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1) -->
+<!--     # scibet$scibet_no_unknown <- scibet$scibet #no unknown by default -->
+<!--     # scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     # chetah$CHETAH_no_unknown <- chetah$CHETAH -->
+<!--     # chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1) -->
+<!--     # scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown -->
+<!--     # scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1) -->
+<!--     # scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown -->
+<!--     # scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE] -->
+<!--     #  -->
+
+<!--     #sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster -->
+
+<!--     anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid) -->
+
+<!--     #full option -->
+<!--     #anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell) -->
+
+<!--     #colnames(anno_3subtype) <- paste(colnames(anno_3subtype), sig, sep = "_") -->
+
+<!--     anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("\\.new$", "like", x)) -->
+<!--     anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("Unknown", "unknown", x)) -->
+<!--     anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("unassigned", "unknown", x)) -->
+
+
+<!--     #3cell_types -->
+<!--     anno_3subtype_wide <- as.data.table(anno_3subtype,keep.rownames = TRUE) -->
+
+<!--     anno_3subtype_score_long <- melt(anno_3subtype_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types") -->
+
+<!--     anno_3subtype_score_long <- anno_3subtype_score_long[,c(1,3)] -->
+<!--     anno_3subtype_score_long[,binary := 1] -->
+<!--     anno_3subtype_score <- dcast(anno_3subtype_score_long,formula = rn ~cell_types ,value.var = "binary") -->
+
+
+<!--     anno_3subtype_score[,unknown := unknown/ncol(anno_3subtype)] -->
+<!--     anno_3subtype_score[, confidence := apply(.SD, 1, max)/ncol(anno_3subtype), .SDcols = 2:4] -->
+
+<!--     anno_3subtype_score_unknown <- anno_3subtype_score[,.(rn,unknown,confidence)] -->
+
+<!--     anno_3subtype_score <-  anno_3subtype_score[,c("AClike", "NPClike", "OPClike")] -->
+<!--     anno_3subtype_score[, c("Rank_AClike", "Rank_NPClike", "Rank_OPClike") := -->
+<!--                           as.data.table(t(apply(.SD, 1, function(x) frank(-x, ties.method = "dense")))), -->
+<!--                         .SDcols = c("AClike", "NPClike", "OPClike")] -->
+
+
+<!--     anno_3subtype_score <- cbind(anno_3subtype_score_unknown,anno_3subtype_score) -->
+
+
+<!--     anno_3subtype_score[, Tie := (Rank_AClike == 1 & Rank_NPClike == 1) | (Rank_AClike == 1 & Rank_OPClike == 1) | -->
+<!--                           (Rank_NPClike == 1 & Rank_OPClike == 1)] -->
+
+
+<!--     # MES -->
+<!--     pick <- 1 -->
+<!--     #run_each <- run_eachs[1] -->
+
+<!--     sig <- sigs[pick] -->
+<!--     merge <- merges[pick] -->
+<!--     if (run_each) { -->
+<!--       run <- runs[1] -->
+<!--     } else { -->
+<!--       run <- runs[2] -->
+<!--     } -->
+
+<!--     # import all data -->
+<!--     # marker.based -->
+<!--     sc.type <- read.csv(paste0("output/scType_", object, "_", sig, "_",run,".csv"), row.names = 1) -->
+<!--     sc.type <- sc.type[,paste0("scType") ,drop = FALSE] -->
+<!--     sc.type[] <- lapply(sc.type, function(x) gsub("Unknown", "Non_MESlike", x)) -->
+
+
+<!--     scina <- read.csv(paste0("output/SCINA_", object, "_", sig,  "_",run,".csv"), row.names = 1) -->
+<!--     scina <- scina[,paste0("SCINA") ,drop = FALSE] -->
+<!--     scina[] <- lapply(scina, function(x) gsub("unknown", "Non_MESlike", x)) -->
+
+<!--     # ref-based -->
+<!--     clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     #clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE] -->
+<!--     clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE] -->
+<!--     clustify.r[] <- lapply(clustify.r, function(x) gsub("not_labeled", "Non_MESlike", x)) -->
+
+<!--     scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned", "_",run,".csv"), row.names = 1) -->
+<!--     scid <- scid[,paste0("scID",unknown) ,drop = FALSE] -->
+<!--     #scid <- scid[,paste0("scID",unknowns[2]) ,drop = FALSE] -->
+
+<!--     scid[] <- lapply(scid, function(x) gsub("not_labeled", "Non_MESlike", x)) -->
+
+<!--     #scid[] <- lapply(scid, function(x) gsub("unassigned", "unknown", x)) -->
+<!--     scid[] <- lapply(scid, function(x) gsub("unassigned", "Non_MESlike", x)) -->
+
+
+
+<!--     # add full option -->
+<!--     # sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1) -->
+<!--     # sc.sorter$scSorter_no_unknown <- NA -->
+<!--     # sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE] -->
+
+
+<!--     # # Add Full option -->
+<!--     # sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     # sc.pred <- sc.pred[,2:1] -->
+<!--     # colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2])) -->
+<!--     # sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     # single.r <- single.r[,2:1] -->
+<!--     # colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2])) -->
+<!--     # single.r[is.na(single.r$singleR),"singleR"] <- "unknown" -->
+<!--     # single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1) -->
+<!--     # scibet$scibet_no_unknown <- scibet$scibet -->
+<!--     # scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1) -->
+<!--     # chetah$CHETAH_no_unknown <- chetah$CHETAH -->
+<!--     # chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1) -->
+<!--     # scmap_cluster$scmap_cluster_no_unknown <- NA -->
+<!--     # scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE] -->
+<!--     #  -->
+<!--     # scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1) -->
+<!--     # scmap_cell$scmap_cell_no_unknown <- NA -->
+<!--     # scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE] -->
+
+
+<!--     anno_mes <- bind_cols(sc.type, scina, clustify.r,scid) -->
+
+<!--     #full option -->
+
+<!--     #anno_mes <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell) -->
+
+
+<!--     anno_mes[] <- lapply(anno_mes, function(x) gsub("\\.new$", "like", x)) -->
+
+
+<!--     anno_mes[] <- lapply(anno_mes, function(x) gsub("not_labeled", "Non_MESlike", x)) -->
+
+<!--     #anno_mes[] <- lapply(anno_mes, function(x) gsub("unassigned", "unknown", x)) -->
+<!--     anno_mes[] <- lapply(anno_mes, function(x) gsub("unassigned", "Non_MESlike", x)) -->
+
+
+
+
+
+<!--     anno_mes_wide <- as.data.table(anno_mes,keep.rownames = TRUE) -->
+
+<!--     anno_mes_score_long <- melt(anno_mes_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types") -->
+
+<!--     anno_mes_score_long <- anno_mes_score_long[,c(1,3)] -->
+<!--     anno_mes_score_long[,binary := 1] -->
+<!--     anno_mes_score <- dcast(anno_mes_score_long,formula = rn ~cell_types ,value.var = "binary") -->
+
+
+<!--     #anno_mes_score[,unknown := unknown/ncol(anno_mes)] -->
+<!--     anno_mes_score[, confidence := apply(.SD, 1, max)/ncol(anno_mes), .SDcols = 2:3] -->
+
+
+
+<!--     #New code here -->
+<!--     anno_mes_score[, Tie := (MESlike == Non_MESlike)] -->
+<!--     anno_mes_score[,consensus := NA_character_] -->
+<!--     anno_mes_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = c("MESlike", "Non_MESlike")] -->
+
+<!--     anno_3subtype_score[,consensus := NA_character_] -->
+<!--     anno_3subtype_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = c("AClike", "NPClike", "OPClike")] -->
+
+<!--     # fwrite(anno_3subtype_score, file = paste("output/annotation/annotation_3celltypes",run,unknown,".csv",sep = "_")) -->
+<!--     # fwrite(anno_mes_score, file = paste("output/annotation/annotation_mes",run,unknown,".csv",sep = "_")) -->
+
+
+<!--   } -->
+<!-- }  -->
+<!-- ``` -->
+#Tamir version
+```{r}
+
+
+
+#### you can start here if you want only dataframe to further use
+library(here)
+library(tibble)
+library(dplyr)
+library(data.table)
+
+
+
+
+#Set working directory
+setwd(here())
+
+
+
+# Parameter
+# cell input to be analyse
+
+object <- "all"
+
+sigs <- c( "4metamodules_new_50_mes","6metamodules", "3metamodules_new_50", "4metamodules_new_50")
+
+
+
+# For reference based
+merges <- c("4_merge_metamodules_mes","6metamodules","4_merge_metamodules_3celltypes", "4_merge_metamodules" )
+
+
+unknowns <- c("","_no_unknown")
+# pick which celltype to be analyse
+
+cell_types <- c("mes","","3celltypes","4celltypes")
+
+
+# all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
+# chosen_celltypes <- all_celltypes[c(2)]
+
+run_eachs <- c(TRUE,FALSE)
+runs <- c("each","whole")
+
+
+#set unknown
+unknown <- unknowns[1]
+
+#set whole vs each
+run_each <- run_eachs[2]
+
+
+
+#3 celltype
+
+pick <- 3
+sig <- sigs[pick]
+merge <- merges[pick]
+
+cell_type <- cell_types[pick]
+
+
+
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+
+
+
+
+
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE]
+
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
+
+
+# # add full option
+# sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
+# sc.sorter$scSorter_no_unknown <- NA
+# sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+
+
+
+
+#unknown <- unknowns[1]
+# ref-based
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run,".csv"), row.names = 1)
+#clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE]
+clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
+
+scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned","_",run,".csv"), row.names = 1)
+scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+
+
+
+
+# # Add Full option
+# sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# sc.pred <- sc.pred[,2:1]
+# colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+# sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+#
+# single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# single.r <- single.r[,2:1]
+# colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+# single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+# single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+#
+# scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scibet$scibet_no_unknown <- scibet$scibet #no unknown by default
+# scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+#
+# chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# chetah$CHETAH_no_unknown <- chetah$CHETAH
+# chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+#
+# scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
+# scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+#
+# scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
+# scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+#
+
+#sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
+
+anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid)
+
+#full option
+#anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+
+#colnames(anno_3subtype) <- paste(colnames(anno_3subtype), sig, sep = "_")
+
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("\\.new$", "like", x))
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("Unknown", "unknown", x))
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("unassigned", "unknown", x))
+
+
+#3cell_types
+anno_3subtype_wide <- as.data.table(anno_3subtype,keep.rownames = TRUE)
+
+anno_3subtype_score_long <- melt(anno_3subtype_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types")
+
+anno_3subtype_score_long <- anno_3subtype_score_long[,c(1,3)]
+anno_3subtype_score_long[,binary := 1]
+anno_3subtype_score <- dcast(anno_3subtype_score_long,formula = rn ~cell_types ,value.var = "binary")
+
+
+anno_3subtype_score[,unknown := unknown/ncol(anno_3subtype)]
+anno_3subtype_score[, confidence := apply(.SD, 1, max)/ncol(anno_3subtype), .SDcols = 2:4]
+
+anno_3subtype_score_unknown <- anno_3subtype_score[,.(rn,unknown,confidence)]
+
+anno_3subtype_score <-  anno_3subtype_score[,c("AClike", "NPClike", "OPClike")]
+anno_3subtype_score[, c("Rank_AClike", "Rank_NPClike", "Rank_OPClike") :=
+                      as.data.table(t(apply(.SD, 1, function(x) frank(-x, ties.method = "dense")))),
+                    .SDcols = c("AClike", "NPClike", "OPClike")]
+
+
+anno_3subtype_score <- cbind(anno_3subtype_score_unknown,anno_3subtype_score)
+
+
+
+
+
+# MES
+pick <- 1
+#run_each <- run_eachs[1]
+
+sig <- sigs[pick]
+merge <- merges[pick]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig, "_",run,".csv"), row.names = 1)
+sc.type <- sc.type[,paste0("scType") ,drop = FALSE]
+sc.type[] <- lapply(sc.type, function(x) gsub("Unknown", "Non_MESlike", x))
+
+
+
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig,  "_",run,".csv"), row.names = 1)
+scina <- scina[,paste0("SCINA") ,drop = FALSE]
+scina[] <- lapply(scina, function(x) gsub("unknown", "Non_MESlike", x))
+
+# ref-based
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+#clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE]
+clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
+clustify.r[] <- lapply(clustify.r, function(x) gsub("not_labeled", "Non_MESlike", x))
+
+scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned", "_",run,".csv"), row.names = 1)
+scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+#scid <- scid[,paste0("scID",unknowns[2]) ,drop = FALSE]
+
+scid[] <- lapply(scid, function(x) gsub("not_labeled", "Non_MESlike", x))
+
+scid[] <- lapply(scid, function(x) gsub("unassigned", "unknown", x))
+#scid[] <- lapply(scid, function(x) gsub("unassigned", "Non_MESlike", x))
+
+
+
+# add full option
+# sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
+# sc.sorter$scSorter_no_unknown <- NA
+# sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+
+
+# # Add Full option
+# sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# sc.pred <- sc.pred[,2:1]
+# colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+# sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+#
+# single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# single.r <- single.r[,2:1]
+# colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+# single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+# single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+#
+# scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scibet$scibet_no_unknown <- scibet$scibet
+# scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+#
+# chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# chetah$CHETAH_no_unknown <- chetah$CHETAH
+# chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+#
+# scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cluster$scmap_cluster_no_unknown <- NA
+# scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+#
+# scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cell$scmap_cell_no_unknown <- NA
+# scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+
+
+anno_mes <- bind_cols(sc.type, scina, clustify.r,scid)
+
+#full option
+
+#anno_mes <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+
+
+anno_mes[] <- lapply(anno_mes, function(x) gsub("\\.new$", "like", x))
+
+
+anno_mes[] <- lapply(anno_mes, function(x) gsub("not_labeled", "Non_MESlike", x))
+
+#anno_mes[] <- lapply(anno_mes, function(x) gsub("unassigned", "unknown", x))
+anno_mes[] <- lapply(anno_mes, function(x) gsub("unassigned", "Non_MESlike", x))
+
+
+
+anno_mes_wide <- as.data.table(anno_mes,keep.rownames = TRUE)
+
+anno_mes_score_long <- melt(anno_mes_wide, id.vars = "rn", variable.name = "tools", value.name = "cell_types")
+
+anno_mes_score_long <- anno_mes_score_long[,c(1,3)]
+anno_mes_score_long[,binary := 1]
+anno_mes_score <- dcast(anno_mes_score_long,formula = rn ~cell_types ,value.var = "binary")
+
+
+#anno_mes_score[,unknown := unknown/ncol(anno_mes)]
+anno_mes_score[, confidence := apply(.SD, 1, max)/ncol(anno_mes), .SDcols = 2:3]
+
+
+
+#Consensus
+#MES
+threshold_mes <- 0.75
+anno_mes_score[, Tie := (MESlike == Non_MESlike)] #create tie column
+#assign consensus
+anno_mes_score[,consensus := NA_character_] #create consensus column
+anno_mes_score[(MESlike)/ncol(anno_mes) >= threshold_mes, consensus := "MESlike" ] #assign  MES
+anno_mes_score[(Non_MESlike)/ncol(anno_mes) >= threshold_mes, consensus := "Non_MESlike" ] #assign non_mes
+anno_mes_score[Tie == TRUE, consensus:= "tie"] #assign unknown to Tie condition
+anno_mes_score[is.na(consensus),consensus:= "unknown"]
+#anno_mes_score[Tie == FALSE, mode := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = c("MESlike", "Non_MESlike")] #assign mode
+
+#3celltype
+
+threshold_3subtypes <- 0.5
+
+anno_3subtype_score[, Tie := (Rank_AClike == 1 & Rank_NPClike == 1) | (Rank_AClike == 1 & Rank_OPClike == 1) |
+                      (Rank_NPClike == 1 & Rank_OPClike == 1)] #create tie column
+#assign consensus
+anno_3subtype_score[,consensus := NA_character_] #create consensus column
+anno_3subtype_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = c("AClike", "NPClike", "OPClike")]
+anno_3subtype_score[confidence < threshold_3subtypes,consensus:= "unknown"]
+anno_3subtype_score[Tie == TRUE, consensus:= "tie"] #assign unknown to Tie condition
+anno_3subtype_score[unknown == 1, consensus:= "unknown"] #assign unknown to Tie condition
+
+
+
+
+
+
+
+table(anno_mes_score$consensus)
+table(anno_3subtype_score$consensus)
+
+anno_3subtype_score
+# fwrite(anno_3subtype_score, file = paste("output/annotation/annotation_3celltypes",run,unknown,".csv",sep = "_"))
+# fwrite(anno_mes_score, file = paste("output/annotation/annotation_mes",run,unknown,".csv",sep = "_"))
+```
+```{r}
+
+anno_3subtype_score_meta <- merge(anno_3subtype_score,data.table(gbm.meta,keep.rownames = TRUE), by = "rn")
+anno_3subtype_confidence_mean <- anno_3subtype_score_meta[, c(confidence_mean = mean(confidence)),
+                                    by = c("radiation", "donor_id")]
+
+anno_3subtype_consensus_count <- dcast(anno_3subtype_score_meta, formula = donor_id + radiation ~ consensus)
+anno_3subtype_consensus_count[, n_cell:= rowSums(.SD),.SDcols = c("AClike","NPClike","OPClike","tie","unknown")]
+anno_3subtype_consensus_count <- merge(anno_3subtype_consensus_count,anno_3subtype_confidence_mean,by = c("donor_id","radiation"))
+
+setnames(anno_3subtype_consensus_count, "V1", "confidence_mean")
+anno_3subtype_consensus_count_long <- melt(anno_3subtype_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean"), measure.vars = c("AClike","NPClike","OPClike","tie","unknown"),variable.name = "consensus",value.name = "count")
+
+anno_3subtype_consensus_count_long[,per := count/sum(count),by = c("radiation","donor_id")]
+anno_3subtype_consensus_count_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_3subtype_consensus_count_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+# # Visualisation
+# ggplot(anno_3subtype_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#   geom_col() +
+#   facet_wrap(~ donor_id + radiation, ncol = 6) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+#   # geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) +
+#   labs(title = "All donors", subtitle = "consensus")
+
+
+library(grid)
+library(randomcoloR)
+anno_3subtype_consensus_count_long$consensus <- factor(anno_3subtype_consensus_count_long$consensus ,
+                                                       levels = 
+                                                         sort(union(levels(anno_3subtype_consensus_count_long$consensus),possible_3celltpyes)))
+
+
+dummy_data <- data.frame(consensus = levels(anno_3subtype_consensus_count_long$consensus))
+
+
+set.seed(167)
+n <-  length(levels(anno_3subtype_consensus_count_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot() +
+    geom_blank(data = dummy_data, aes(fill = consensus)) +
+    geom_col(data = anno_3subtype_consensus_count_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
+  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+  #facet_wrap(~ donor_id + rad_con) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
+       fill = "Cell type") + 
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette) 
+
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- 
+  #textGrob("", 
+  textGrob("pie size based on square root of the number of cells in each group", 
+  #textGrob("pie size based on of the number of cells in each group",   
+                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
+                    hjust = 2, vjust = -5, 
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+
+
+```
+```{r}
+
+anno_3subtype_score_meta <- merge(anno_3subtype_score,data.table(gbm.meta,keep.rownames = TRUE), by = "rn")
+anno_3subtype_score_meta[consensus == "tie",consensus:= "unknown"]
+anno_3subtype_confidence_mean <- anno_3subtype_score_meta[, c(confidence_mean = mean(confidence)),
+                                    by = c("radiation", "donor_id")]
+
+anno_3subtype_consensus_count <- dcast(anno_3subtype_score_meta, formula = donor_id + radiation ~ consensus)
+anno_3subtype_consensus_count[, n_cell:= rowSums(.SD),.SDcols = c("AClike","NPClike","OPClike","unknown")]
+anno_3subtype_consensus_count <- merge(anno_3subtype_consensus_count,anno_3subtype_confidence_mean,by = c("donor_id","radiation"))
+
+setnames(anno_3subtype_consensus_count, "V1", "confidence_mean")
+anno_3subtype_consensus_count_long <- melt(anno_3subtype_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean"), measure.vars = c("AClike","NPClike","OPClike","unknown"),variable.name = "consensus",value.name = "count")
+
+anno_3subtype_consensus_count_long[,per := count/sum(count),by = c("radiation","donor_id")]
+anno_3subtype_consensus_count_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_3subtype_consensus_count_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+# # Visualisation
+# ggplot(anno_3subtype_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#   geom_col() +
+#   facet_wrap(~ donor_id + radiation, ncol = 6) +
+#   ggtitle("") +
+#   coord_polar("y", start = 0) +
+#   theme_void() +
+#   # geom_text(aes(label = per_round), position = position_stack(vjust = 0.5), size = 1) +
+#   labs(title = "All donors", subtitle = "consensus")
+
+library(grid)
+library(randomcoloR)
+anno_3subtype_consensus_count_long$consensus <- factor(anno_3subtype_consensus_count_long$consensus ,
+                                                       levels = 
+                                                         sort(union(levels(anno_3subtype_consensus_count_long$consensus),possible_3celltpyes)))
+
+
+dummy_data <- data.frame(consensus = levels(anno_3subtype_consensus_count_long$consensus))
+
+
+set.seed(167)
+n <-  length(levels(anno_3subtype_consensus_count_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot() +
+    geom_blank(data = dummy_data, aes(fill = consensus)) +
+    geom_col(data = anno_3subtype_consensus_count_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
+  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+  #facet_wrap(~ donor_id + rad_con) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
+       fill = "Cell type") + 
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette) 
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- 
+  #textGrob("", 
+  textGrob("pie size based on square root of the number of cells in each group", 
+  #textGrob("pie size based on of the number of cells in each group",   
+                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
+                    hjust = 2, vjust = -5, 
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+```
+
+

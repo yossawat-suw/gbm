@@ -1,0 +1,60 @@
+```{r}
+merges <- c("6metamodules", "4_merge_metamodules", "4_merge_metamodules_3celltypes", "4_merge_metamodules_mes")
+merge <- merges[3]
+gbm.list.res <- readRDS(file = paste0("output/scID_", object, "_", merge, "_allassigned"))
+```
+
+
+
+```{r}
+for (i in 1:length(gbm.list.res)) {
+  concatenated <- sapply(gbm.list.res[[i]]$labels, function(strings) paste(strings, collapse = " "))
+  print(table(concatenated))
+}
+```
+
+
+
+```{r}
+res.df <- data.frame()
+for (i in gbm.list.res) {
+  res.each.df <- cbind(as.data.frame(i$labels, stringsAsFactors = TRUE), as.data.frame(i$labels_edited, stringsAsFactors = TRUE), data.frame(t(i$scores)))
+  res.df <- rbind(res.df, res.each.df)
+}
+colnames(res.df)[1] <- "scID"
+colnames(res.df)[2] <- "scID_edited"
+```
+
+
+```{r}
+# gbm.meta <- read.csv("./../output/gbm_meta.csv",row.names = 1)
+```
+
+
+```{r}
+# scid <- merge(res.df, gbm.meta, by = 'row.names', all = TRUE)
+```
+
+
+```{r}
+print("save result")
+#write.csv(res.df, paste0("output/scID_", object, "_", merge, "_allassigned", ".csv"), row.names = TRUE)
+```
+
+```{r}
+gc()
+```
+
+```{r}
+for (i in 1:length(gbm.list.res)) {
+  concatenated <- sapply(gbm.list.res[[i]]$labels_edited, function(strings) paste(strings, collapse = " "))
+  print(table(concatenated))
+}
+```
+
+```{r}
+res.df.mes <- read.csv(file = paste0("output/scID_", "all", "_", "4_merge_metamodules_mes", "_allassigned.csv"))
+
+
+```
+

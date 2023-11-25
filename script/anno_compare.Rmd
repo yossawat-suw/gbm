@@ -7,47 +7,49 @@ library(patchwork)
 ```
 
 ```{r}
-source_rmd <- function(rmd_file) {
-  knitr::knit(rmd_file, output = tempfile())
-}
+setwd(here::here())
+# source_rmd <- function(rmd_file) {
+#   knitr::knit(rmd_file, output = tempfile())
+# }
 
-source_rmd("./../script/parameter.Rmd")
+source("script/parameter.R")
+
 ```
 
 
 #Combine
 ```{r}
 # Import metadata
-gbm.meta <- read.csv("./../output/gbm_meta.csv", row.names = 1)
+gbm.meta <- read.csv("output/gbm_meta.csv", row.names = 1)
 
 
 # import all data
 # marker.based
-sc.sorter <- read.csv(paste0("./../output/scsorter_", object, "_", sig, ".csv"), row.names = 1)
-marker.count <- read.csv(paste0("./../output/markercount_", object, "_", sig, ".csv"), row.names = 1)
-u.cell <- read.csv(paste0("./../output/UCell_", object, "_", sig, ".csv"), row.names = 1)
-sc.type <- read.csv(paste0("./../output/scType_", object, "_", sig, ".csv"), row.names = 1)
-# scid.marker <- read.csv(paste0("./../output/scID_markers_",object,"_",sig,".csv"),row.names = 1)
-scina <- read.csv(paste0("./../output/SCINA_", object, "_", sig, ".csv"), row.names = 1)
+sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, ".csv"), row.names = 1)
+marker.count <- read.csv(paste0("output/markercount_", object, "_", sig, ".csv"), row.names = 1)
+u.cell <- read.csv(paste0("output/UCell_", object, "_", sig, ".csv"), row.names = 1)
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig, ".csv"), row.names = 1)
+# scid.marker <- read.csv(paste0("output/scID_markers_",object,"_",sig,".csv"),row.names = 1)
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig, ".csv"), row.names = 1)
 
 # ref-based
-sc.pred <- read.csv(paste0("./../output/scpred_", object, "_", merge, ".csv"), row.names = 1)
-clustify.r <- read.csv(paste0("./../output/clustifyr_", object, "_", merge, ".csv"), row.names = 1)
-single.r <- read.csv(paste0("./../output/singleR_", object, "_", merge, ".csv"), row.names = 1)
-# scid <- read.csv(paste0("./../output/scID_",object,"_",merge,".csv"),row.names = 1)
-scid <- read.csv(paste0("./../output/scID_", object, "_", merge, "_allassigned", ".csv"), row.names = 1)
+sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, ".csv"), row.names = 1)
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, ".csv"), row.names = 1)
+single.r <- read.csv(paste0("output/singleR_", object, "_", merge, ".csv"), row.names = 1)
+# scid <- read.csv(paste0("output/scID_",object,"_",merge,".csv"),row.names = 1)
+scid <- read.csv(paste0("output/scID_", object, "_", merge, "_allassigned", ".csv"), row.names = 1)
 scid <- scid[, "scID_edited", drop = FALSE]
-scibet <- read.csv(paste0("./../output/scibet_", object, "_", merge, ".csv"), row.names = 1)
-chetah <- read.csv(paste0("./../output/CHETAH_", object, "_", merge, ".csv"), row.names = 1)
+scibet <- read.csv(paste0("output/scibet_", object, "_", merge, ".csv"), row.names = 1)
+chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, ".csv"), row.names = 1)
 
-scmap_cluster <- read.csv(paste0("./../output/scmap_cluster_", object, "_", merge, ".csv"), row.names = 1)
+scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge, ".csv"), row.names = 1)
 
-scmap_cell <- read.csv(paste0("./../output/scmap_cell_", object, "_", merge, ".csv"), row.names = 1)
+scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge, ".csv"), row.names = 1)
 # Remove singlecellnet as it requires ref as count matrix only
-# single.cell.net <- read.csv("./../output/singleCellNet_all_4metamodules.csv",row.names = 1)
+# single.cell.net <- read.csv("output/singleCellNet_all_4metamodules.csv",row.names = 1)
 
 # Remove scClassify as it results in intermediate hiera and cannot adjust to give only final celltype
-# sc.classify <- read.csv("./../output/scClassify_all_6metamodules.csv",row.names = 1)
+# sc.classify <- read.csv("output/scClassify_all_6metamodules.csv",row.names = 1)
 ```
 
 ```{r}
@@ -429,9 +431,6 @@ test <- data.frame(consensus = vals, frequency_of_mode = freqs, the_number_of_ti
 # all.consensus$consensus <- vals
 ```
 
-```{r}
-tie.label
-```
 
 ```{r}
 ggplot(data = test, aes(x = frequency_of_mode)) +
@@ -898,7 +897,7 @@ table(each.meta.all[each.meta.all$donor_id == "E62N" & each.meta.all$radiation =
 <!-- ## transform_data -->
 
 <!-- colnames(gbm@meta.data) -->
-<!-- gbm <- readRDS("./../output/temp") -->
+<!-- gbm <- readRDS("output/temp") -->
 
 <!-- all <- gbm@meta.data -->
 <!-- all$celltype <- paste0(all$celltype,"_neftel") -->
@@ -959,19 +958,19 @@ table(each.meta.all[each.meta.all$donor_id == "E62N" & each.meta.all$radiation =
 <!-- ``` -->
 
 <!-- ```{r} -->
-<!-- #write.csv(all.consistent, file = paste0("./../output/",object,"_",sig,"_",names(anno.pick),"_onlyconsistent",".csv" )) -->
+<!-- #write.csv(all.consistent, file = paste0("output/",object,"_",sig,"_",names(anno.pick),"_onlyconsistent",".csv" )) -->
 <!-- ``` -->
 
 <!-- ```{r} -->
 <!-- #Save for future -->
-<!-- # write.csv(all.consensus, file = paste0("./../output/consensus_",object,"_",sig,"_",names(anno.pick),".csv"), row.names = TRUE) -->
+<!-- # write.csv(all.consensus, file = paste0("output/consensus_",object,"_",sig,"_",names(anno.pick),".csv"), row.names = TRUE) -->
 
 <!-- ``` -->
 
 <!-- ```{r} -->
 <!-- all.consensus -->
 <!-- #Save for future -->
-<!-- #write.csv(all.consensus, file = paste0("./../output/consensus_",object,"_",sig,"_",names(anno.pick),"_newscID.csv"), row.names = TRUE) -->
+<!-- #write.csv(all.consensus, file = paste0("output/consensus_",object,"_",sig,"_",names(anno.pick),"_newscID.csv"), row.names = TRUE) -->
 <!-- ``` -->
 
 #create consensus weighted
@@ -1007,6 +1006,7 @@ all.count.consensus <- data.frame(t(all.count.consensus))
 ```{r}
 all.consensus
 ```
+
 
 
 
@@ -1090,24 +1090,62 @@ ggplot(res.trans[res.trans$radiation == "control", ], aes(x = radiation, y = per
 
 res.trans.2 <- data.frame(t(matrix(res.trans$per, nrow = 4)), row.names = unique(paste0(res.trans$donor_id, "_", res.trans$radiation)))
 colnames(res.trans.2) <- res.trans$subtype[1:4]
-
+res.trans.2
 # Control
 d.c <- dist(res.trans.2[grep("control", rownames(res.trans.2)), ])
 hc.c <- hclust(d.c)
+
+```
+```{r}
+# Customized own code
+# Row is sample id, col is celltype 
+clr.modified <- function(x, base = exp(1), pseudo_count = 1e-5) {
+  # Adding pseudo-count to zeros
+  x[x == 0] <- pseudo_count
+  
+  if (dim(x)[2] == 1) {
+    res <- list(x.clr = x, gm = rep(1, dim(x)[1]))
+  } else {
+    geometricmean <- function(x) {
+      if (any(na.omit(x == 0))) {
+        0
+      } else {
+        exp(mean(log(unclass(x)[is.finite(x) & x > 0])))
+      }
+    }
+    gm <- apply(x, 1, geometricmean)
+    x.clr <- log(x / gm, base)
+    res <- x.clr
+  }
+  return(res)
+}
+
 ```
 
 
 ```{r}
+control.clr <-  clr.modified(res.trans.2[grep("control", rownames(res.trans.2)), ])
+ 
+radiate.clr <-  clr.modified(res.trans.2[grep("radiated", rownames(res.trans.2)), ])
+
+aitchison.dist <- dist(control.clr)
+```
+
+```{r}
 # Dendrogram
+hc.c <- hclust(aitchison.dist)
 par(mar = c(5, 6, 4, 15) + .1)
 plot(as.dendrogram(hc.c), horiz = T)
-abline(v = 30, lty = 2, col = "red")
+abline(v = 2.5, lty = 2, col = "red")
+```
+```{r}
+radiate.clr
+control.clr
 ```
 
 ```{r}
 # See change
-
-res.trans.2.diff <- res.trans.2[grep("radiated", rownames(res.trans.2)), ] - res.trans.2[grep("control", rownames(res.trans.2)), ]
+res.trans.2.diff <- radiate.clr - control.clr
 rownames(res.trans.2.diff) <- gsub("radiated", "diff", rownames(res.trans.2.diff))
 ```
 
@@ -1157,273 +1195,117 @@ ggplot(res.trans.all, aes(x = radiation, y = per, fill = subtype)) +
 ```
 
 
+<!-- #Not used yet -->
+<!-- ```{r} -->
+<!-- # 3in4 -->
 
-```{r}
-# 3in4
+<!-- all.3in4 <- all[all.consensus$res_0.75, ] -->
+<!-- # create consensus weighted -->
+<!-- all.3in4.count.consensus <- data.frame(matrix(nrow = 5, ncol = 0)) -->
+<!-- pb <- txtProgressBar(min = 0, max = nrow(all.3in4), initial = 0) -->
 
-all.3in4 <- all[all.consensus$res_0.75, ]
-# create consensus weighted
-all.3in4.count.consensus <- data.frame(matrix(nrow = 5, ncol = 0))
-pb <- txtProgressBar(min = 0, max = nrow(all.3in4), initial = 0)
-
-for (i in 1:nrow(all.3in4)) {
-  test5 <- as.factor(unname(unlist(all.3in4[i, ])))
-  levels(test5) <- c(levels(test5), "AC", "MES", "NPC", "OPC", "unknown")
-  library(forcats)
-  test5 <- fct_relevel(test5, "AC", "MES", "NPC", "OPC", "unknown")
-
-
-  test6 <- data.frame(table(test5), row.names = 1)
-  colnames(test6) <- rownames(all.3in4[i, ])
-  all.3in4.count.consensus <- cbind(all.3in4.count.consensus, test6)
+<!-- for (i in 1:nrow(all.3in4)) { -->
+<!--   test5 <- as.factor(unname(unlist(all.3in4[i, ]))) -->
+<!--   levels(test5) <- c(levels(test5), "AC", "MES", "NPC", "OPC", "unknown") -->
+<!--   library(forcats) -->
+<!--   test5 <- fct_relevel(test5, "AC", "MES", "NPC", "OPC", "unknown") -->
 
 
-  setTxtProgressBar(pb, i)
-}
-close(pb)
-```
-```{r}
-all.3in4.count.consensus <- data.frame(t(all.3in4.count.consensus))
-all.3in4.count.consensus
-```
+<!--   test6 <- data.frame(table(test5), row.names = 1) -->
+<!--   colnames(test6) <- rownames(all.3in4[i, ]) -->
+<!--   all.3in4.count.consensus <- cbind(all.3in4.count.consensus, test6) -->
 
 
-```{r}
-# visualization
-# Utilize old code
-
-each.meta.all <- merge(gbm.meta, all.3in4.count.consensus, by = 0)
-rownames(each.meta.all) <- each.meta.all[, 1]
-
-test10 <- each.meta.all %>%
-  group_by(donor_id, radiation) %>%
-  summarise(AC = sum(AC), MES = sum(MES), NPC = sum(NPC), OPC = sum(OPC), unknown = sum(unknown)) %>%
-  ungroup()
-```
+<!--   setTxtProgressBar(pb, i) -->
+<!-- } -->
+<!-- close(pb) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- all.3in4.count.consensus <- data.frame(t(all.3in4.count.consensus)) -->
+<!-- all.3in4.count.consensus -->
+<!-- ``` -->
 
 
+<!-- ```{r} -->
+<!-- # visualization -->
+<!-- # Utilize old code -->
 
-```{r}
-res.trans <- data.frame(matrix(ncol = 4, nrow = 0))
+<!-- each.meta.all <- merge(gbm.meta, all.3in4.count.consensus, by = 0) -->
+<!-- rownames(each.meta.all) <- each.meta.all[, 1] -->
 
-for (i in 1:nrow(test10)) {
-  donor.id.rep <- data.frame(donor_id = rep(test10[i, "donor_id", drop = TRUE], times = 5), radiation = rep(test10[i, "radiation", drop = TRUE], times = 5))
-  x <- data.frame(counts = t(test10[i, 3:7]))
-  x <- rownames_to_column(x, var = "subtype")
-  donor.id.rep <- cbind(donor.id.rep, x)
-  res.trans <- rbind(res.trans, donor.id.rep)
-}
-
-res.trans <- res.trans %>%
-  group_by(donor_id, radiation) %>%
-  mutate(per = 100 * counts / sum(counts)) %>%
-  ungroup()
-
-res.trans$per <- format(round(res.trans$per, 1), nsmall = 1)
-
-res.trans$subtype <- as.factor(res.trans$subtype)
-res.trans$per <- as.numeric(res.trans$per)
-res.trans$donor_id <- as.factor(res.trans$donor_id)
-res.trans$radiation <- as.factor(res.trans$radiation)
-```
+<!-- test10 <- each.meta.all %>% -->
+<!--   group_by(donor_id, radiation) %>% -->
+<!--   summarise(AC = sum(AC), MES = sum(MES), NPC = sum(NPC), OPC = sum(OPC), unknown = sum(unknown)) %>% -->
+<!--   ungroup() -->
+<!-- ``` -->
 
 
 
-```{r}
-# Visualisation
-ggplot(res.trans, aes(x = radiation, y = per, fill = subtype)) +
-  facet_wrap(~donor_id, ncol = 5) +
-  geom_bar(stat = "identity") +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-  geom_text(aes(label = paste(per, "%")), position = position_stack(vjust = 0.5), size = 1.5) +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
-  labs(title = "3in4")
-```
+<!-- ```{r} -->
+<!-- res.trans <- data.frame(matrix(ncol = 4, nrow = 0)) -->
 
-```{r}
-# all each donor no weight on donor_size
-res.trans.all <- res.trans %>%
-  group_by(radiation, subtype) %>%
-  summarise(sum = sum(per)) %>%
-  group_by(radiation) %>%
-  mutate(per = sum / sum(sum)) %>%
-  ungroup()
+<!-- for (i in 1:nrow(test10)) { -->
+<!--   donor.id.rep <- data.frame(donor_id = rep(test10[i, "donor_id", drop = TRUE], times = 5),  -->
+<!--   radiation = rep(test10[i, "radiation", drop = TRUE], times = 5)) -->
+<!--   x <- data.frame(counts = t(test10[i, 3:7])) -->
+<!--   x <- rownames_to_column(x, var = "subtype") -->
+<!--   donor.id.rep <- cbind(donor.id.rep, x) -->
+<!--   res.trans <- rbind(res.trans, donor.id.rep) -->
+<!-- } -->
 
-res.trans.all$per <- format(round(res.trans.all$per, 2), nsmall = 2)
+<!-- res.trans <- res.trans %>% -->
+<!--   group_by(donor_id, radiation) %>% -->
+<!--   mutate(per = 100 * counts / sum(counts)) %>% -->
+<!--   ungroup() -->
 
-res.trans.all$subtype <- as.factor(res.trans.all$subtype)
-res.trans.all$per <- as.numeric(res.trans.all$per)
-res.trans.all$radiation <- as.factor(res.trans.all$radiation)
+<!-- res.trans$per <- format(round(res.trans$per, 1), nsmall = 1) -->
 
-ggplot(res.trans.all, aes(x = radiation, y = per, fill = subtype)) +
-  geom_bar(stat = "identity") +
-  geom_text(aes(label = paste(per, "%")), position = position_stack(vjust = 0.5), size = 1.5) +
-  labs(title = "3in4", subtitle = "all each donor no weight on donor_size")
-```
+<!-- res.trans$subtype <- as.factor(res.trans$subtype) -->
+<!-- res.trans$per <- as.numeric(res.trans$per) -->
+<!-- res.trans$donor_id <- as.factor(res.trans$donor_id) -->
+<!-- res.trans$radiation <- as.factor(res.trans$radiation) -->
+<!-- ``` -->
 
 
 
-#Others
-```{r}
-all.count.consensus$merge <- paste0(all.count.consensus$AC, all.count.consensus$MES, all.count.consensus$NPC, all.count.consensus$OPC)
+<!-- ```{r} -->
+<!-- # Visualisation -->
+<!-- ggplot(res.trans, aes(x = radiation, y = per, fill = subtype)) + -->
+<!--   facet_wrap(~donor_id, ncol = 5) + -->
+<!--   geom_bar(stat = "identity") + -->
+<!--   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) + -->
+<!--   geom_text(aes(label = paste(per, "%")), position = position_stack(vjust = 0.5), size = 1.5) + -->
+<!--   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + -->
+<!--   labs(title = "3in4") -->
+<!-- ``` -->
 
-ggplot(all.count.consensus, aes(x = merge)) +
-  geom_bar() +
-  theme(axis.text.x = element_text(angle = 90, size = 5))
-```
-```{r}
-all.count.consensus.call34 <- all.count.consensus[
-  apply(all.count.consensus[1:4], 1, FUN = function(x) {
-    any(c(3, 4) %in% x)
-  }),
-]
-```
+<!-- ```{r} -->
+<!-- # all each donor no weight on donor_size -->
+<!-- res.trans.all <- res.trans %>% -->
+<!--   group_by(radiation, subtype) %>% -->
+<!--   summarise(sum = sum(per)) %>% -->
+<!--   group_by(radiation) %>% -->
+<!--   mutate(per = sum / sum(sum)) %>% -->
+<!--   ungroup() -->
 
-```{r}
-all.count.consensus
-```
+<!-- res.trans.all$per <- format(round(res.trans.all$per, 2), nsmall = 2) -->
 
-```{r}
-# try annotate subtype by subgroup
-all.count.consensus <- all.count.consensus %>% mutate(combined = paste0(AC, MES, NPC, OPC))
-# write.csv(all.count.consensus, file = "./../output/consensus_all_4metamodules_new_50_weighted.csv")
-```
+<!-- res.trans.all$subtype <- as.factor(res.trans.all$subtype) -->
+<!-- res.trans.all$per <- as.numeric(res.trans.all$per) -->
+<!-- res.trans.all$radiation <- as.factor(res.trans.all$radiation) -->
 
-#Do linear regression to check whether the consistency is explaning the
-```{r}
-library(Seurat)
-gbm <- readRDS(file = "./../output/seurat_gbm_qc")
-```
-
-
-```{r}
-library(UCell)
-signatures <- read.csv(file = paste0("./../output/signature_subtype_", sig, ".csv"))
-markers <- list()
-markers$MES <- signatures$MES.new
-markers$NPC <- signatures$NPC.new
-markers$OPC <- signatures$OPC.new
-markers$AC <- signatures$AC.new
-```
-
-```{r}
-gbm <- AddModuleScore_UCell(gbm, features = markers)
-signature.names <- paste0(names(markers), "_UCell")
-```
-
-```{r}
-gbm <- AddMetaData(gbm, all.count.consensus)
-```
-
-```{r}
-model.ac <- lm(AC_UCell ~ AC, gbm@meta.data)
-model.mes <- lm(MES_UCell ~ MES, gbm@meta.data)
-model.opc <- lm(OPC_UCell ~ OPC, gbm@meta.data)
-model.npc <- lm(NPC_UCell ~ NPC, gbm@meta.data)
-```
-
-```{r}
-ggplotRegression <- function(fit) {
-  require(ggplot2)
-
-  ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) +
-    geom_point() +
-    stat_smooth(method = "lm", col = "red") +
-    labs(subtitle = paste(
-      "Adj R2 = ", signif(summary(fit)$adj.r.squared, 5),
-      "Intercept =", signif(fit$coef[[1]], 5),
-      " Slope =", signif(fit$coef[[2]], 5),
-      " P =", signif(summary(fit)$coef[2, 4], 5)
-    ))
-}
-
-p.ac <- ggplotRegression(model.ac)
-p.npc <- ggplotRegression(model.npc)
-p.mes <- ggplotRegression(model.mes)
-p.opc <- ggplotRegression(model.opc)
-```
+<!-- ggplot(res.trans.all, aes(x = radiation, y = per, fill = subtype)) + -->
+<!--   geom_bar(stat = "identity") + -->
+<!--   geom_text(aes(label = paste(per, "%")), position = position_stack(vjust = 0.5), size = 1.5) + -->
+<!--   labs(title = "3in4", subtitle = "all each donor no weight on donor_size") -->
+<!-- ``` -->
 
 
-```{r}
-p.ac
-p.npc
-p.mes
-p.opc
-```
-```{r}
-# what if check only in control cell
-gbm.meta.control <- gbm@meta.data[gbm$radiation == "control", ]
-model.ac <- lm(AC_UCell ~ AC, gbm.meta.control)
-model.mes <- lm(MES_UCell ~ MES, gbm.meta.control)
-model.opc <- lm(OPC_UCell ~ OPC, gbm.meta.control)
-model.npc <- lm(NPC_UCell ~ NPC, gbm.meta.control)
-
-p.ac <- ggplotRegression(model.ac)
-p.npc <- ggplotRegression(model.npc)
-p.mes <- ggplotRegression(model.mes)
-p.opc <- ggplotRegression(model.opc)
-p.ac
-p.npc
-p.mes
-p.opc
-```
-```{r}
-kruskal.test(NPC_UCell ~ as.factor(NPC), data = gbm.meta.control)
-
-pair.wise <- pairwise.wilcox.test(gbm.meta.control$NPC_UCell, as.factor(gbm.meta.control$NPC),
-  p.adjust.method = "BH"
-)
-pair.wise
-```
-
-```{r}
-# Remove outlier
-
-subtype <- "NPC"
-subtype.ucell <- paste0(subtype, "_UCell")
-data <- gbm@meta.data[, c(subtype, subtype.ucell)]
-dim(data)
-## [1] 150   2
-
-list_quantiles <- tapply(data[, subtype.ucell], data[, subtype], quantile)
-
-Q1s <- sapply(1:3, function(i) list_quantiles[[i]][2])
-Q3s <- sapply(1:3, function(i) list_quantiles[[i]][4])
-
-IQRs <- tapply(data[, subtype.ucell], data[, subtype], IQR)
-
-Lowers <- Q1s - 1.5 * IQRs
-Uppers <- Q3s + 1.5 * IQRs
-
-datas <- split(data, data[, subtype])
-
-data_no_outlier <- NULL
-for (i in 1:4) {
-  out <- subset(datas[[i]], datas[[i]][, subtype.ucell] > Lowers[i] & datas[[i]][, subtype.ucell] < Uppers[i])
-  data_no_outlier <- rbind(data_no_outlier, out)
-}
-data_no_outlier
-
-
-
-model.sub <- lm(NPC_UCell ~ NPC, data_no_outlier)
-p.sub <- ggplotRegression(model.sub)
-p.sub
-
-
-
-kruskal.test(NPC_UCell ~ as.factor(NPC), data = data_no_outlier)
-
-pair.wise <- pairwise.wilcox.test(data_no_outlier$NPC_UCell, as.factor(data_no_outlier$NPC),
-  p.adjust.method = "BH"
-)
-pair.wise
-```
 
 
 #Add gene_mutation data
 ```{r}
-classification <- data.frame(readxl::read_xlsx("./../data/lucy_gene_classification.xlsx", sheet = 4))
+classification <- data.frame(readxl::read_xlsx("data/lucy_gene_classification.xlsx", sheet = 4))
 classification[is.na(classification)] <- "na"
 rownames(classification) <- classification[, 1, drop = TRUE]
 classification <- classification[, -1]
@@ -1446,14 +1328,17 @@ classification <- subset(classification, select = -c(Run1, Run2, Which.run.more)
 classification
 ```
 
+
+
+
 ```{r}
 diff <- res.trans.2.diff
 
-control <- data.frame(res.trans.2[grepl("control", rownames(res.trans.2)), ])
+control <- control.clr
 colnames(control) <- c("control_AC", "control_MES", "control_NPC", "control_OPC")
 rownames(control) <- unique(res.trans$donor_id)
 
-radiated <- data.frame(res.trans.2[grepl("radiated", rownames(res.trans.2)), ])
+radiated <- radiate.clr
 colnames(radiated) <- c("radiated_AC", "radiated_MES", "radiated_NPC", "radiated_OPC")
 rownames(radiated) <- unique(res.trans$donor_id)
 
@@ -1478,7 +1363,7 @@ library(cultevo)
 
 
 # "control.dis","radiated.dis","class.hamming"
-alpha <- c(0, 1, 0)
+alpha <- c(1, 0, 0)
 
 
 # Not include runs in hamming
@@ -1498,6 +1383,7 @@ diff.dis <- distance(donor.meta[, c("diff_AC", "diff_MES", "diff_NPC", "diff_OPC
 colnames(diff.dis) <- rownames(donor.meta)
 rownames(diff.dis) <- rownames(donor.meta)
 
+
 library(sidier)
 # distance.combined <- distance.comb(matrices=c("control.dis","diff.dis","class.hamming"),saveFile=FALSE,method="Corrected",alphas = alpha)
 # distance.combined <- as.dist(distance.combined, diag = TRUE)
@@ -1505,11 +1391,9 @@ library(sidier)
 distance.combined <- distance.comb(matrices = c("control.dis", "radiated.dis", "class.hamming"), saveFile = FALSE, method = "Corrected", alphas = alpha)
 distance.combined <- as.dist(distance.combined, diag = TRUE)
 
-cls.radiated <- hclust(as.dist(radiated.dis))
 cls <- hclust(distance.combined)
 
 donor.meta.ordered <- donor.meta[rownames(donor.meta)[cls$order], ]
-
 
 set.seed(7)
 col1 <- donor.meta.ordered[, 1]
@@ -1528,8 +1412,12 @@ names(col4) <- rownames(donor.meta.ordered)
 names(col5) <- rownames(donor.meta.ordered)
 names(col6) <- rownames(donor.meta.ordered)
 names(col7) <- rownames(donor.meta.ordered)
+donor.meta.ordered
 ```
 
+```{r}
+#write.csv(donor.meta.ordered,file = "output/consensus_all_4metamodules_new_50_weighted_bulk.csv")
+```
 
 
 
@@ -1677,16 +1565,15 @@ grid.arrange(dendro, p.subtype.control, p.subtype.radiated, gb,
 )
 ```
 
-```{r}
-donor.meta.cont.diff_pca$x
-```
+
 
 
 ```{r}
 # Try using from PCA
 library(ggfortify)
 pca.input <- list(
-  list("control & radiated", c("control_AC", "control_MES", "control_NPC", "control_OPC", "radiated_AC", "radiated_MES", "radiated_NPC", "radiated_OPC")),
+  list("control & radiated", c("control_AC", "control_MES", "control_NPC", "control_OPC", 
+"radiated_AC", "radiated_MES", "radiated_NPC", "radiated_OPC")),
   list("control", c("control_AC", "control_MES", "control_NPC", "control_OPC")),
   list("radiated", c("radiated_AC", "radiated_MES", "radiated_NPC", "radiated_OPC"))
 )
@@ -2050,6 +1937,164 @@ h.donor
 # define area for the stripchart
 par(fig = c(0.1, 0.67, 0.1, 0.25), new = TRUE)
 h.all
+```
+
+
+#Do linear regression to check whether the consistency is explaning the
+```{r}
+library(Seurat)
+gbm <- readRDS(file = "output/seurat_gbm_qc")
+```
+
+
+```{r}
+library(UCell)
+signatures <- read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
+markers <- list()
+markers$MES <- signatures$MES.new
+markers$NPC <- signatures$NPC.new
+markers$OPC <- signatures$OPC.new
+markers$AC <- signatures$AC.new
+```
+
+```{r}
+gbm <- AddModuleScore_UCell(gbm, features = markers)
+signature.names <- paste0(names(markers), "_UCell")
+```
+
+```{r}
+gbm <- AddMetaData(gbm, all.count.consensus)
+```
+
+```{r}
+model.ac <- lm(AC_UCell ~ AC, gbm@meta.data)
+model.mes <- lm(MES_UCell ~ MES, gbm@meta.data)
+model.opc <- lm(OPC_UCell ~ OPC, gbm@meta.data)
+model.npc <- lm(NPC_UCell ~ NPC, gbm@meta.data)
+```
+
+```{r}
+ggplotRegression <- function(fit) {
+  require(ggplot2)
+
+  ggplot(fit$model, aes_string(x = names(fit$model)[2], y = names(fit$model)[1])) +
+    geom_point() +
+    stat_smooth(method = "lm", col = "red") +
+    labs(subtitle = paste(
+      "Adj R2 = ", signif(summary(fit)$adj.r.squared, 5),
+      "Intercept =", signif(fit$coef[[1]], 5),
+      " Slope =", signif(fit$coef[[2]], 5),
+      " P =", signif(summary(fit)$coef[2, 4], 5)
+    ))
+}
+
+p.ac <- ggplotRegression(model.ac)
+p.npc <- ggplotRegression(model.npc)
+p.mes <- ggplotRegression(model.mes)
+p.opc <- ggplotRegression(model.opc)
+```
+
+
+```{r}
+p.ac
+p.npc
+p.mes
+p.opc
+```
+```{r}
+# what if check only in control cell
+gbm.meta.control <- gbm@meta.data[gbm$radiation == "control", ]
+model.ac <- lm(AC_UCell ~ AC, gbm.meta.control)
+model.mes <- lm(MES_UCell ~ MES, gbm.meta.control)
+model.opc <- lm(OPC_UCell ~ OPC, gbm.meta.control)
+model.npc <- lm(NPC_UCell ~ NPC, gbm.meta.control)
+
+p.ac <- ggplotRegression(model.ac)
+p.npc <- ggplotRegression(model.npc)
+p.mes <- ggplotRegression(model.mes)
+p.opc <- ggplotRegression(model.opc)
+p.ac
+p.npc
+p.mes
+p.opc
+```
+```{r}
+kruskal.test(NPC_UCell ~ as.factor(NPC), data = gbm.meta.control)
+
+pair.wise <- pairwise.wilcox.test(gbm.meta.control$NPC_UCell, as.factor(gbm.meta.control$NPC),
+  p.adjust.method = "BH"
+)
+pair.wise
+```
+
+```{r}
+# Remove outlier
+
+subtype <- "NPC"
+subtype.ucell <- paste0(subtype, "_UCell")
+data <- gbm@meta.data[, c(subtype, subtype.ucell)]
+dim(data)
+## [1] 150   2
+
+list_quantiles <- tapply(data[, subtype.ucell], data[, subtype], quantile)
+
+Q1s <- sapply(1:3, function(i) list_quantiles[[i]][2])
+Q3s <- sapply(1:3, function(i) list_quantiles[[i]][4])
+
+IQRs <- tapply(data[, subtype.ucell], data[, subtype], IQR)
+
+Lowers <- Q1s - 1.5 * IQRs
+Uppers <- Q3s + 1.5 * IQRs
+
+datas <- split(data, data[, subtype])
+
+data_no_outlier <- NULL
+for (i in 1:4) {
+  out <- subset(datas[[i]], datas[[i]][, subtype.ucell] > Lowers[i] & datas[[i]][, subtype.ucell] < Uppers[i])
+  data_no_outlier <- rbind(data_no_outlier, out)
+}
+data_no_outlier
+
+
+
+model.sub <- lm(NPC_UCell ~ NPC, data_no_outlier)
+p.sub <- ggplotRegression(model.sub)
+p.sub
+
+
+
+kruskal.test(NPC_UCell ~ as.factor(NPC), data = data_no_outlier)
+
+pair.wise <- pairwise.wilcox.test(data_no_outlier$NPC_UCell, as.factor(data_no_outlier$NPC),
+  p.adjust.method = "BH"
+)
+pair.wise
+```
+
+#Others
+```{r}
+all.count.consensus$merge <- paste0(all.count.consensus$AC, all.count.consensus$MES, all.count.consensus$NPC, all.count.consensus$OPC)
+
+ggplot(all.count.consensus, aes(x = merge)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90, size = 5))
+```
+```{r}
+all.count.consensus.call34 <- all.count.consensus[
+  apply(all.count.consensus[1:4], 1, FUN = function(x) {
+    any(c(3, 4) %in% x)
+  }),
+]
+```
+
+```{r}
+all.count.consensus
+```
+
+```{r}
+# try annotate subtype by subgroup
+all.count.consensus <- all.count.consensus %>% mutate(combined = paste0(AC, MES, NPC, OPC))
+# write.csv(all.count.consensus, file = "output/consensus_all_4metamodules_new_50_weighted.csv")
 ```
 
 

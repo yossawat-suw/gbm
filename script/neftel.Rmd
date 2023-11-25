@@ -16,7 +16,7 @@ set.seed(1)
 
 ```{r}
 # import smartseq
-smrt_mtx <- read.delim("./../data/neftel/IDHwtGBM.processed.SS2.logTPM.txt.gz")
+smrt_mtx <- read.delim("data/neftel/IDHwtGBM.processed.SS2.logTPM.txt.gz")
 rownames(smrt_mtx) <- smrt_mtx[, 1]
 smrt_mtx <- smrt_mtx[, -1]
 head(smrt_mtx)
@@ -24,7 +24,7 @@ colnames(smrt_mtx) <- gsub("\\.", "-", colnames(smrt_mtx))
 smrt_mtx <- smrt_mtx[, order(colnames(smrt_mtx))]
 head(smrt_mtx)
 
-meta <- read.delim("./../data/neftel/metadata.txt")
+meta <- read.delim("data/neftel/metadata.txt")
 meta <- meta[-1, ]
 rownames(meta) <- meta$NAME
 meta <- meta[order(rownames(meta)), ]
@@ -214,8 +214,8 @@ p0
 #feature plot sub-type signature and senescence
 ```{r}
 # load subtpye signature
-# signatures <- read_xlsx("./../data/gbm_subtype_genelist.xlsx",sheet = 2)
-signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx", sheet = 3)
+# signatures <- read_xlsx("data/gbm_subtype_genelist.xlsx",sheet = 2)
+signatures <- read_xlsx("data/gbm_subtype_genelist_original.xlsx", sheet = 3)
 
 colnames(signatures)[5] <- "G1_S"
 colnames(signatures)[6] <- "G2_M"
@@ -258,7 +258,7 @@ VlnPlot(smrt.mal, features = c("MES_UCell", "AC_UCell", "OPC_UCell", "NPC_UCell"
 #Senescence Lucy
 ```{r}
 # create senescence score
-signatures_sen <- list(senescence = scan("./../data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
+signatures_sen <- list(senescence = scan("data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
 signatures_sen
 ```
 ```{r}
@@ -456,17 +456,17 @@ p
 
 #Try annotation in several tools
 ```{r}
-gbm <- readRDS(paste0("./../output/temp"))
+gbm <- readRDS(paste0("output/temp"))
 
 library(scSorter)
 # Scsorter
-anno <- as.data.frame(read_xlsx("./../data/gbm_subtype_genelist_scsorter.xlsx", sheet = 2))
+anno <- as.data.frame(read_xlsx("data/gbm_subtype_genelist_scsorter.xlsx", sheet = 2))
 
 # Copied code >> and modified so that the each meta data is not the summation yet
 rts.list <- list()
 each.meta.list <- list()
 
-gbm <- readRDS(paste0("./../output/temp"))
+gbm <- readRDS(paste0("output/temp"))
 donor.id.list <- as.character(unique(gbm$Sample))
 Idents(gbm) <- "Sample"
 
@@ -559,7 +559,7 @@ source("https://raw.githubusercontent.com/IanevskiAleksandr/sc-type/master/R/sct
 
 
 # DB file
-db_ <- "./../data/gbm_subtype_genelist_sctype_4equal.xlsx"
+db_ <- "data/gbm_subtype_genelist_sctype_4equal.xlsx"
 tissue <- "gbm"
 
 # prepare gene sets
@@ -603,7 +603,7 @@ if (!require(devtools)) install.packages("devtools")
 devtools::install_github("yanlinlin82/ggvenn")
 
 # Load Dataset
-smrt.mal <- readRDS("./../output/smrt_mal")
+smrt.mal <- readRDS("output/smrt_mal")
 ```
 ```{r}
 smrt.mal@meta.data
@@ -659,7 +659,7 @@ vein
 ```{r}
 # compare with original
 library(readxl)
-signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx", sheet = 4)
+signatures <- read_xlsx("data/gbm_subtype_genelist_original.xlsx", sheet = 4)
 signatures
 ```
 
@@ -693,7 +693,7 @@ library(patchwork)
 
 ```{r}
 # Also compare to database
-markers.db <- read_excel("./../data/Cell_marker_Human.xlsx")
+markers.db <- read_excel("data/Cell_marker_Human.xlsx")
 
 
 markers.db.ac <- subset(markers.db, grepl("Astrocyte", cell_name, ignore.case = TRUE))[, c(7, 9, 10)]
@@ -784,7 +784,7 @@ signatures.new
 ```
 
 ```{r}
-saveRDS(signatures.new, file = "./../output/signature_subtype_new")
+saveRDS(signatures.new, file = "output/signature_subtype_new")
 ```
 
 ```{r}
@@ -797,7 +797,7 @@ colnames(signatures.new.df) <- names(signatures.new)
 signatures.new.df
 ```
 ```{r}
-write.csv(signatures.new.df, file = paste0("./../output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
+write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
 ```
 
 
@@ -841,13 +841,13 @@ library(nebula)
 
 
 ```{r}
-saveRDS(smrt.mal, "./../output/smrt_mal", compress = TRUE)
+saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
 ```
 
 
 #10X of Neftel
 ```{r}
-data.dir <- "./../data/neftel/"
+data.dir <- "data/neftel/"
 
 
 neftel.10x.1 <- Read10X(data.dir = paste0(data.dir, "1/"))
@@ -997,7 +997,7 @@ DimPlot(neftel.10x.mal, reduction = "umap", group.by = "orig.ident")
 library(UCell)
 
 # This list is 4 without reducing
-signatures <- read_xlsx("./../data/gbm_subtype_genelist_original.xlsx", sheet = 4)
+signatures <- read_xlsx("data/gbm_subtype_genelist_original.xlsx", sheet = 4)
 
 colnames(signatures)[5] <- "G1_S"
 colnames(signatures)[6] <- "G2_M"
@@ -1025,5 +1025,136 @@ ggviolin(neftel.10x.mal@meta.data, y = c("MES_UCell", "NPC_UCell", "OPC_UCell", 
 library(ggpubr)
 ggviolin(neftel.10x.mal@meta.data, y = c("MES1", "NPC4", "OPC3", "AC2"), merge = TRUE) + facet_wrap("orig.ident", ncol = 5) + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) + labs(title = "cellular state signatures", subtitle = "control & 2 runs; signatures = 4 signatures (merge without filter)", caption = "AddModuleScore(seurat)")
 ```
+
+
+#merge NPC/OPC then make new gene set
+
+```{r}
+library(ggvenn)
+
+if (!require(devtools)) install.packages("devtools")
+devtools::install_github("yanlinlin82/ggvenn")
+
+# Load Dataset
+smrt.mal <- readRDS("output/smrt_mal")
+```
+
+
+
+```{r}
+smrt.mal@meta.data$celltype_npc_opc <- as.character(smrt.mal$celltype_merge)
+smrt.mal@meta.data[smrt.mal$celltype_merge %in% c("NPClike","OPClike"),"celltype_npc_opc"] <- "NPC_OPClike"
+
+smrt.mal$celltype_npc_opc
+Idents(smrt.mal) <- "celltype_npc_opc"
+```
+
+
+
+
+
+
+```{r}
+# npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+
+npc_opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPC_OPClike", only.pos = TRUE)
+ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike", only.pos = TRUE)
+mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike", only.pos = TRUE)
+
+
+npc_opc.de.other.markers <- npc_opc.de.other.markers[order(npc_opc.de.other.markers$avg_log2FC, decreasing = TRUE), ]
+npc_opc.de.other.markers <- npc_opc.de.other.markers[1:50, ]
+
+
+
+ac.de.other.markers <- ac.de.other.markers[order(ac.de.other.markers$avg_log2FC, decreasing = TRUE), ]
+ac.de.other.markers <- ac.de.other.markers[1:50, ]
+
+mes.de.other.markers <- mes.de.other.markers[order(mes.de.other.markers$avg_log2FC, decreasing = TRUE), ]
+mes.de.other.markers <- mes.de.other.markers[1:50, ]
+# logfc.threshold and min.diff.pct are very arbitrary
+```
+
+
+
+```{r}
+x <- list(NPC_OPC = rownames(npc_opc.de.other.markers), AC = rownames(ac.de.other.markers), MES = rownames(mes.de.other.markers))
+
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "New")
+vein
+```
+```{r}
+# compare with original
+library(readxl)
+signatures <- read_xlsx("data/gbm_subtype_genelist_original.xlsx", sheet = 4)
+signatures <- read.csv("output/signature_subtype_4metamodules_new_50.csv")
+signatures
+```
+
+```{r}
+# Check intersection with each other
+x <- list(NPC = signatures$NPC.new, AC = signatures$AC.new, MES = signatures$MES.new, OPC = signatures$OPC.new)
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "original")
+vein
+```
+
+
+```{r}
+mes <- ggvenn(list(MES= signatures$MES.new, MES.npc_opc = rownames(mes.de.other.markers)), auto_scale = FALSE, set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "MESlike")
+mes
+
+
+
+npc_opc <- ggvenn(list(NPC = signatures$NPC.new,OPC= signatures$OPC.new ,NPC_OPC = rownames(npc_opc.de.other.markers)), auto_scale = FALSE, set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "NPClike")
+npc_opc
+
+ac <- ggvenn(list(AC = signatures$AC.new, AC.npc_opc = rownames(ac.de.other.markers)), auto_scale = FALSE, set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "AClike")
+ac
+
+library(patchwork)
+(mes | npc_opc | ac)
+```
+
+```{r}
+# Add metamodule based on new score
+signatures.new <- list()
+signatures.new <- append(signatures.new, list(NPC_OPC = rownames(npc_opc.de.other.markers)))
+signatures.new <- append(signatures.new, list(AC = rownames(ac.de.other.markers)))
+signatures.new
+```
+
+```{r}
+saveRDS(signatures.new, file = "output/signature_subtype_npc_opc")
+```
+
+```{r}
+library(stringi)
+data.frame(stri_list2matrix(signatures.new))
+
+signatures.new.df <- data.frame(stri_list2matrix(signatures.new))
+colnames(signatures.new.df) <- names(signatures.new)
+
+signatures.new.df
+```
+```{r}
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50")
+sig <- sigs[2]
+
+write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
+
+#read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
+```
+
+
+
+
+
 
 

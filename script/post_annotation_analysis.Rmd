@@ -1,0 +1,310 @@
+```{r}
+
+library(here)
+library(tibble)
+library(dplyr)
+library(data.table)
+library(Seurat)
+library(parallel)
+
+#Set working directory
+setwd(here())
+#source("script/function.R")
+```
+```{r}
+anno_mes_each <- fread(file = "output/annotation/annotation_mes_each__.csv")
+anno_mes_whole <- fread(file = "output/annotation/annotation_mes_whole__.csv")
+anno_3celltypes_each <-fread(file = "output/annotation/annotation_3celltypes_each__.csv")
+anno_3celltypes_whole <-fread(file = "output/annotation/annotation_3celltypes_whole__.csv")
+
+
+anno_all <- Reduce(function(x, y) merge(x, y, by = "rn"), 
+                   list(anno_mes_each[, .(consensus_mes_each = consensus, confidence_mes_each = confidence, rn)],
+                        anno_mes_whole[, .(consensus_mes_whole = consensus, confidence_mes_whole = confidence, rn)],
+                        anno_3celltypes_each[, .(consensus_3celltypes_each = consensus, confidence_3celltypes_each = confidence, rn)],
+                        anno_3celltypes_whole[, .(consensus_3celltypes_whole = consensus, confidence_3celltypes_whole = confidence, rn)]))
+gsub()
+anno_all[,.SD := gsub]
+
+anno_all
+
+
+```
+
+```{r}
+#load gbm data
+gbm <- readRDS("output/seurat_gbm_qc")
+```
+
+```{r}
+gbm <- AddMetaData(gbm,metadata = 
+              data.frame(anno_all,row.names = 1))
+```
+
+
+```{r}
+gbm <- AddMetaData(gbm, metadata = anno_3subtype)
+```
+```{r}
+gbm@meta.data
+```
+
+
+```{r}
+DimPlot(gbm,reduction = "umap",group.by = "scType",split.by = "radiation")
+DimPlot(gbm,reduction = "umap",group.by = "SCINA",split.by = "radiation")
+DimPlot(gbm,reduction = "umap",group.by = "clustifyr_ref",split.by = "radiation")
+DimPlot(gbm,reduction = "umap",group.by = "scID",split.by = "radiation")
+```
+
+```{r}
+
+```
+
+```{r}
+set.seed(123)
+#For seurat qc file
+gbm <- NormalizeData(gbm)
+gbm <- ScaleData(gbm)
+gbm <- FindVariableFeatures(gbm)
+gbm <- RunPCA(gbm)
+gbm <- RunUMAP(gbm,dims = 1:20)
+gbm <- RunTSNE(gbm,dims = 1:20)
+```
+
+
+
+```{r}
+DimPlot(gbm,reduction = "umap",group.by = "donor_id",split.by = "radiation")
+DimPlot(gbm,reduction = "umap",group.by = "consensus_3celltypes_each",split.by = "radiation")
+DimPlot(gbm,reduction = "umap",group.by = "consensus_3celltypes_whole",split.by = "radiation")
+```
+
+
+```{r}
+DimPlot(gbm,reduction = "umap",group.by = "consensus_3celltypes_whole",split.by = "donor_radiation")
+```
+
+```{r}
+#subset after 
+Idents(gbm) <- "consensus_3celltypes_each"
+gbm_filter_each <- subset(x = gbm, idents =c("AClike",  "OPClike", "NPClike"))
+gbm_filter_each <- subset(x = gbm_filter_each, subset = confidence_3celltypes_each >= 0.5)
+
+Idents(gbm) <- "consensus_3celltypes_whole"
+gbm_filter_whole <- subset(x = gbm, idents =c("AClike",  "OPClike", "NPClike"))
+gbm_filter_whole <- subset(x = gbm_filter_whole, subset = confidence_3celltypes_whole >= 0.5)
+```
+
+```{r}
+DimPlot(gbm_filter_each,reduction = "umap",split.by = "consensus_3celltypes_each",group.by = "radiation")
+DimPlot(gbm_filter_whole,reduction = "umap",split.by = "consensus_3celltypes_whole",group.by = "radiation")
+```
+```{r}
+#Do the analysis donor_wise
+gbm.list <- SplitObject(gbm, split.by = "donor_id")
+
+# gbm.list[["run2_radiated_E31N"]] <- merge(gbm.list[["run2_radiated_E31N"]], y=gbm.list[["run1_radiated_E31N"]])
+# gbm.list[["run2_control_E31N"]] <- merge(gbm.list[["run2_control_E31N"]], y=gbm.list[["run1_control_E31N"]])
+# gbm.list[["run2_radiated_E26N"]] <- merge(gbm.list[["run2_radiated_E26N"]], y=gbm.list[["run1_radiated_E26N"]])
+# gbm.list[["run2_radiated_E24N"]] <- merge(gbm.list[["run2_radiated_E24N"]], y=gbm.list[["run1_radiated_E24N"]])
+# gbm.list[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+
+n.cores <- detectCores() -3
+#gbm.list <- mclapply(gbm.list,mc.cores = n.cores,function(x) {
+gbm.list <- lapply(gbm.list,function(x) {
+  x <- NormalizeData(x)
+  x <- ScaleData(x)
+  x <- FindVariableFeatures(x)
+  x <- RunPCA(x)
+  x <- RunUMAP(x,dims = 1:20)
+  #x <- RunTSNE(x,dims = 1:20) 
+})
+
+#Filtering out
+#gbm.list.filtered <- mclapply(gbm.list,mc.cores = n.cores,function(x) {
+gbm.list.filtered <- lapply(gbm.list,function(x) {
+Idents(x) <- "consensus_3celltypes_each"
+x <- subset(x = x, idents =c(""), invert = TRUE)
+x <- subset(x = x, subset = confidence_3celltypes_each >= 0.5)
+})
+```
+
+
+```{r}
+for (i in gbm.list.filtered) {
+  print(DimPlot(i,reduction = "umap",split.by = "consensus_3celltypes_each",group.by = "radiation"))
+}
+```
+```{r}
+library(dplyr)
+library(tibble)
+library(metap) # for Fisher's method
+
+# Find DE features between AC raidated and AC control
+ac.de.markers.list <- lapply(gbm.list.filtered, function(x) {
+  x$consensus_radiation <- paste(x$consensus_3celltypes_each,x$radiation,sep = "_")
+  Idents(x) <- "consensus_radiation"
+  x <- FindMarkers(x, ident.1 = "AClike_radiated", ident.2 = "AClike_control")
+})
+
+
+
+# Assuming list_of_dfs is your list of dataframes
+significance_threshold <- 0.05
+consistency_threshold <- 0.5 # e.g., 70% replicates
+
+# Combine all dataframes
+combined_df <- bind_rows(lapply(ac.de.markers.list, rownames_to_column, var = "gene"))
+
+# Find the minimum non-zero p-value in the combined dataframe
+min_nonzero_p_val <- min(combined_df$p_val_adj[combined_df$p_val_adj > 0], na.rm = TRUE)
+
+# Replace zero p-values with the minimum non-zero p-value
+combined_df <- combined_df %>%
+               mutate(p_val_adj = ifelse(p_val_adj == 0, min_nonzero_p_val, p_val_adj))
+
+# Add a column to indicate the direction of change (upregulation or downregulation)
+combined_df <- combined_df %>%
+               mutate(direction = ifelse(avg_log2FC > 0, "up", "down"))
+
+# Filter for significant genes in the combined dataframe
+filtered_combined_df <- filter(combined_df, p_val_adj < significance_threshold)
+
+# Calculate the consistency of significance and direction across replicates for each gene
+consistency_df <- filtered_combined_df %>%
+                  group_by(gene) %>%
+                  summarize(total_significant = n(),
+                            consistency_ratio = total_significant / length(ac.de.markers.list),
+                            consistent_direction = n_distinct(direction) == 1) %>%
+                  filter(consistency_ratio >= consistency_threshold, consistent_direction)
+
+# Extract gene names of consistently significant genes with consistent direction
+consistently_significant_genes <- consistency_df$gene
+
+# Calculate combined p-value using Fisher's method for these genes
+combined_pval_df <- filtered_combined_df %>%
+                    filter(gene %in% consistently_significant_genes) %>%
+                    group_by(gene) %>%
+                    summarize(combined_pval = sumlog(p_val_adj)$p)
+
+# Merge consistency_df with combined_pval_df
+final_summary_df <- inner_join(consistency_df, combined_pval_df, by = "gene")
+
+# Sort the final summary dataframe first by consistency_ratio, then by combined_pval
+final_summary_df <- final_summary_df %>%
+                    arrange(desc(consistency_ratio), combined_pval)
+
+# Filter each original dataframe for consistently significant genes with consistent direction
+final_filtered_dfs <- lapply(ac.de.markers.list, function(df) {
+    df <- rownames_to_column(df, var = "gene")
+    filter(df, gene %in% consistently_significant_genes)
+})
+
+# Optionally, convert the 'gene' column back to rownames in final filtered dataframes
+final_dfs <- lapply(final_filtered_dfs, function(df) {
+    column_to_rownames(df, var = "gene")
+})
+
+
+```
+```{r}
+library(dplyr)
+library(tibble)
+library(metap) # for Fisher's method
+
+# Function to set consensus_radiation as Idents
+set_consensus_radiation <- function(data_list) {
+  lapply(data_list, function(x) {
+    x$consensus_radiation <- paste(x$consensus_3celltypes_each, x$radiation, sep = "_")
+    Idents(x) <- "consensus_radiation"
+    return(x)
+  })
+}
+
+# Function to perform DE analysis with error and warning handling
+perform_DE_analysis <- function(x, cell_type_1) {
+  ident1 <- paste(cell_type_1, "radiated", sep = "_")
+  ident2 <- paste(cell_type_1, "control", sep = "_")
+
+  if (ident1 %in% levels(Idents(x)) && ident2 %in% levels(Idents(x))) {
+    tryCatch({
+      FindMarkers(x, ident.1 = ident1, ident.2 = ident2)
+    }, error = function(e) {
+      warning(paste("Error in FindMarkers for:", cell_type_1, "\n", e))
+      return(NULL)
+    }, warning = function(w) {
+      warning(paste("Warning in FindMarkers for:", cell_type_1, "\n", w))
+      return(NULL)
+    })
+  } else {
+    warning(paste("Identities not found in the object for:", cell_type_1))
+    return(NULL)
+  }
+}
+
+# Function to process and combine DE results
+process_DE_results <- function(de_list, significance_threshold, consistency_threshold) {
+  # Filter out NULLs or non-dataframe elements
+  valid_de_list <- Filter(function(df) is.data.frame(df), de_list)
+
+  # Combine all valid dataframes
+  combined_df <- bind_rows(lapply(valid_de_list, rownames_to_column, var = "gene"))
+
+  # Check if combined_df is empty
+  if (nrow(combined_df) == 0) {
+    warning("No valid dataframes for analysis")
+    return(NULL)
+  }
+
+  # Find the minimum non-zero p-value
+  min_nonzero_p_val <- min(combined_df$p_val_adj[combined_df$p_val_adj > 0], na.rm = TRUE)
+
+  # Process combined dataframe
+  combined_df %>%
+    mutate(p_val_adj = ifelse(p_val_adj == 0, min_nonzero_p_val, p_val_adj),
+           direction = ifelse(avg_log2FC > 0, "up", "down")) %>%
+    filter(p_val_adj < significance_threshold) %>%
+    group_by(gene) %>%
+    summarize(total_significant = n(),
+              consistency_ratio = total_significant / length(valid_de_list),
+              consistent_direction = n_distinct(direction) == 1,
+              combined_pval = sumlog(p_val_adj)$p) %>%
+    filter(consistency_ratio >= consistency_threshold, consistent_direction) %>%
+    arrange(desc(consistency_ratio), combined_pval)
+}
+
+
+# Preprocess data list and maintain names
+gbm.list.filtered <- set_consensus_radiation(gbm.list.filtered)
+names_gbm <- names(gbm.list.filtered)
+
+# Apply the analysis for different cell types and maintain names
+run_analysis_and_maintain_names <- function(cell_type) {
+  result_list <- lapply(gbm.list.filtered, perform_DE_analysis, cell_type_1 = cell_type)
+  names(result_list) <- names_gbm
+  return(result_list)
+}
+
+
+
+ac_de_markers_list <- run_analysis_and_maintain_names("AClike")
+opc_de_markers_list <- run_analysis_and_maintain_names("OPClike")
+npc_de_markers_list <- run_analysis_and_maintain_names("NPClike")
+
+# Process and combine DE results
+final_summary_ac <- process_DE_results(ac_de_markers_list, 0.05, 0.5)
+opc_de_markers_list$E39N
+final_summary_opc <- process_DE_results(opc_de_markers_list, 0.05, 0.5)
+final_summary_npc <- process_DE_results(npc_de_markers_list, 0.05, 0.5)
+```
+
+```{r}
+final_dfs
+```
+
+
+
+
+
+
