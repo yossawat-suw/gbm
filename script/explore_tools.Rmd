@@ -1,4 +1,8 @@
 
+```{r}
+library(dplyr)
+library(here)
+```
 
 
 ```{r}
@@ -12,19 +16,16 @@ source("script/function.R")
 
 object <- "all"
 
-sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50")
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
 
 
 
 # For reference based
-merges <- c("4_merge_metamodules_mes","2_merge_metamodules",  "4_merge_metamodules_3celltypes","4_merge_metamodules")
+merges <- c("4_merge_metamodules_mes","2_merge_metamodules",  "4_merge_metamodules_3celltypes","4_merge_metamodules","npcopc_ac_mes","npcopc_acmes")
 
 
 unknowns <- c("","_no_unknown")
-# pick which celltype to be analyse
 
-# all_celltypes <- c("AClike", "MESlike", "NPClike", "OPClike")
-# chosen_celltypes <- all_celltypes[c(2)]
 
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
@@ -39,7 +40,8 @@ run_each <- run_eachs[1]
 
 #3 celltype
 
-pick <- 2
+pick <- 6
+
 sig <- sigs[pick]
 merge <- merges[pick]
 
@@ -90,32 +92,32 @@ scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
 
 ```{r}
 # Add Full option
-sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
-sc.pred <- sc.pred[,2:1]
-colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
-sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
-
-single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
-single.r <- single.r[,2:1]
-colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
-single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
-single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
-
-scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
-scibet$scibet_no_unknown <- scibet$scibet #no unknown by default
-scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
-
-chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
-chetah$CHETAH_no_unknown <- chetah$CHETAH
-chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
-
-scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
-scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
-scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
-
-scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
-scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
-scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+# sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# sc.pred <- sc.pred[,2:1]
+# colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+# sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+# 
+# single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# single.r <- single.r[,2:1]
+# colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+# single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+# single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+# 
+# scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scibet$scibet_no_unknown <- scibet$scibet #no unknown by default
+# scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+# 
+# chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+# chetah$CHETAH_no_unknown <- chetah$CHETAH
+# chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+# 
+# scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
+# scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+# 
+# scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+# scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
+# scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
 ```
 
 ```{r}
@@ -124,14 +126,16 @@ scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
 
 
 ```{r}
-#anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid)
+anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid)
 
 #full option
-anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+#anno_3subtype <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
 
 #colnames(anno_3subtype) <- paste(colnames(anno_3subtype), sig, sep = "_")
 anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("NPC_OPC$", "NPC_OPClike", x))
 anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("AC$", "AClike", x))
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("MES$", "MESlike", x))
+anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("AC_MES$", "AC_MESlike", x))
 anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("\\.new$", "like", x))
 anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("Unknown", "unknown", x))
 anno_3subtype[] <- lapply(anno_3subtype, function(x) gsub("unassigned", "unknown", x))
@@ -155,7 +159,7 @@ library(ggtext)
 
 
 
-my_colors <- c("red", "green", "blue", "gray", "yellow", "orange") 
+my_colors <- c("red", "green", "blue", "gray", "purple", "orange") 
 plots_list <- list()
 
 for (i in levels(anno_3subtype_meta$donor_radiation)) {
@@ -212,12 +216,13 @@ caption_text <- paste(sapply(names(color_mapping), function(node) {
 }), collapse = " ")
 
 combined_plot + plot_annotation(
-    title = paste("AC and (NPC/OPC) cell states",unknown,run,sep = "; "),
+    title = paste0(paste(setdiff(levels(factor(df$node)),"unknown"),collapse = ", ") ," cell states","; ",unknown,"; ",run),
     subtitle = caption_text,
     caption = paste(colnames(anno_3subtype),collapse = "; "),
     theme = theme(plot.subtitle = element_markdown())
 )
 
 ```
+
 
 

@@ -36,14 +36,14 @@ source("script/function.R")
 # Parameter
 # Select the signature to be used
 # if it is new one, can add into the list but keep in mind to run the preprocessing of the signatures in the next chunk because it need to be preprocessed into xlsx file first
-sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50")
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
 ```
 
 
 ```{r}
-sig <- sigs[2]
+sig <- sigs[6]
 
 
 # cell input to be analyse
@@ -51,7 +51,7 @@ sig <- sigs[2]
 object <- "all"
 
 
-run_each <- run_eachs[1]
+run_each <- run_eachs[2]
 
 if (run_each) {
   run <- runs[1]

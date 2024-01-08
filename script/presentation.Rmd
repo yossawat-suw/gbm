@@ -1,0 +1,221 @@
+
+
+```{r}
+#Draw decision tree
+# Install and load required packages
+install.packages("igraph")
+library(igraph)
+
+# Define the steps and options
+steps <- c("Split data or not", "Cell state", "Default or Adjust tools")
+options_step1 <- c("Each subject & each condition", "Each subject & both conditions", "All subjects & each condition", "All subjects & both conditions")
+options_step2 <- c("SL: NPC + OPC + AC + MES", "SL: NPC/OPC + AC + MES", "SL: NPC + OPC + AC/MES", "SL: NPC/OPC + AC/MES", "DL: (NPC + OPC + AC) + (MES)", "DL: (NPC/OPC + AC) + (MES)")
+options_step3 <- c("Default", "Adjust")
+
+# Create a data frame with all possible combinations
+combinations <- expand.grid(step1 = options_step1, step2 = options_step2, step3 = options_step3)
+
+# Generate a unique ID for each combination
+combinations$ID <- 1:nrow(combinations)
+
+# Create a directed graph
+graph <- graph_from_data_frame(d = combinations, directed = TRUE)
+
+# Plot the graph
+plot(graph, main = "Decision Tree", edge.arrow.size = 0.5, vertex.label.cex = 0.7)
+
+# Label nodes based on your criteria
+tried_nodes <- c(2, 5, 11)  # Replace with the node IDs you have already tried
+chosen_node <- 15  # Replace with the node ID you eventually choose
+
+V(graph)$label <- NA  # Clear existing labels
+V(graph)$label[tried_nodes] <- "Tried"
+V(graph)$label[chosen_node] <- "Chosen"
+
+# Update plot with labeled nodes
+plot(graph, main = "Decision Tree with Labels", edge.arrow.size = 0.5, vertex.label.cex = 0.7)
+
+```
+
+```{r}
+# Install and load required packages
+install.packages(c("graph", "DiagrammeR"))
+library(graph)
+library(DiagrammeR)
+
+# Create a list of nodes and edges
+nodes <- data.frame(id = 1:18, label = c(
+  "gbm",
+  "Split data or not", "Each subject & each condition", "Each subject & both conditions", "All subjects & each condition", "All subjects & both conditions",
+  "Cell state", "SL: NPC + OPC + AC + MES", "SL: NPC/OPC + AC + MES", "SL: NPC + OPC + AC/MES", "SL: NPC/OPC + AC/MES", "DL: (NPC + OPC + AC) + (MES)", "DL: (NPC/OPC + AC) + (MES)",
+  "Default or Adjust tools", "Default", "Adjust",
+  "Chosen Track"
+))
+edges <- data.frame(from = c(1, 2, 2, 2, 2, 3, 4, 4, 5, 6, 6, 6, 6, 7, 8, 8, 9, 10, 11), to = c(2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 18, 18))
+
+# Create a graph
+graph <- graph_from_data_frame(d = edges, vertices = nodes, directed = TRUE)
+
+# Plot the graph
+plot(graph, edge.arrow.size = 0.5, vertex.label.cex = 0.7)
+
+# Highlight nodes based on your criteria
+tried_nodes <- c(3, 8, 15)  # Replace with the node IDs you have already tried
+chosen_node <- 18  # Replace with the node ID you eventually choose
+
+V(graph)$label <- NA  # Clear existing labels
+V(graph)$label[tried_nodes] <- "Tried"
+V(graph)$label[chosen_node] <- "Chosen"
+
+# Update plot with labeled nodes
+plot(graph, edge.arrow.size = 0.5, vertex.label.cex = 0.7)
+```
+```{r}
+# Install and load required packages
+#install.packages("igraph")
+library(igraph)
+
+# Create a data frame with all possible combinations
+combinations <- expand.grid(step1 = options_step1, step2 = options_step2, step3 = options_step3)
+
+# Generate a unique ID for each combination
+combinations$ID <- 1:nrow(combinations)
+combinations
+# Create a directed graph
+graph <- graph_from_data_frame(d = combinations, directed = TRUE)
+graph
+# Plot the hierarchical tree
+plot(
+  graph,
+  layout = layout_as_tree(graph, root = 1, rootlevel = 1),
+  main = "Hierarchical Decision Tree",
+  vertex.label.cex = 0.7,
+  edge.arrow.size = 0.5
+)
+
+```
+```{r}
+install.packages("data.tree")
+```
+```{r}
+# Install and load required packages
+#install.packages("data.tree")
+library(data.tree)
+
+# Define the hierarchy
+root <- Node$new("gbm")
+
+split_data <- root$AddChild("Split data or not")
+split_data$AddChild("Each subject & each condition")
+split_data$AddChild("Each subject & both conditions")
+split_data$AddChild("All subjects & each condition")
+split_data$AddChild("All subjects & both conditions")
+
+cell_state <- root$AddChild("Cell state")
+cell_state$AddChild("SL: NPC + OPC + AC + MES")
+cell_state$AddChild("SL: NPC/OPC + AC + MES")
+cell_state$AddChild("SL: NPC + OPC + AC/MES")
+cell_state$AddChild("SL: NPC/OPC + AC/MES")
+cell_state$AddChild("DL: (NPC + OPC + AC) + (MES)")
+cell_state$AddChild("DL: (NPC/OPC + AC) + (MES)")
+
+tools <- root$AddChild("Default or Adjust tools")
+tools$AddChild("Default")
+tools$AddChild("Adjust")
+
+# Plot the hierarchy
+plot(root, layout = "s")
+
+```
+
+```{r}
+acme <- Node$new("Acme Inc.")
+  accounting <- acme$AddChild("Accounting")
+    software <- accounting$AddChild("New Software")
+    standards <- accounting$AddChild("New Accounting Standards")
+  research <- acme$AddChild("Research")
+    newProductLine <- research$AddChild("New Product Line")
+    newLabs <- research$AddChild("New Labs")
+  it <- acme$AddChild("IT")
+    outsource <- it$AddChild("Outsource")
+    agile <- it$AddChild("Go agile")
+    goToR <- it$AddChild("Switch to R")
+
+print(acme)
+```
+
+```{r}
+library(DiagrammeR)
+
+# Create a DiagrammeR graph for the decision tree
+graph <- create_graph()
+
+# Add nodes
+graph <- graph %>%
+  add_node("gbm") %>%
+  add_node("Split data or not") %>%
+  add_node("Each subject & each condition") %>%
+  add_node("Each subject & both conditions") %>%
+  add_node("All subjects & each condition") %>%
+  add_node("All subjects & both conditions") %>%
+  add_node("Cell state") %>%
+  add_node("SL: NPC + OPC + AC + MES") %>%
+  add_node("SL: NPC/OPC + AC + MES") %>%
+  add_node("SL: NPC + OPC + AC/MES") %>%
+  add_node("SL: NPC/OPC + AC/MES") %>%
+  add_node("DL: (NPC + OPC + AC) + (MES)") %>%
+  add_node("DL: (NPC/OPC + AC) + (MES)") %>%
+  add_node("Default or Adjust tools") %>%
+  add_node("Default") %>%
+  add_node("Adjust")
+
+# Add edges
+graph <- graph %>%
+  add_edge("gbm", "Split data or not") %>%
+  add_edge("Split data or not", "Each subject & each condition") %>%
+  add_edge("Split data or not", "Each subject & both conditions") %>%
+  add_edge("Split data or not", "All subjects & each condition") %>%
+  add_edge("Split data or not", "All subjects & both conditions") %>%
+  add_edge("gbm", "Cell state") %>%
+  add_edge("Cell state", "SL: NPC + OPC + AC + MES") %>%
+  add_edge("Cell state", "SL: NPC/OPC + AC + MES") %>%
+  add_edge("Cell state", "SL: NPC + OPC + AC/MES") %>%
+  add_edge("Cell state", "SL: NPC/OPC + AC/MES") %>%
+  add_edge("Cell state", "DL: (NPC + OPC + AC) + (MES)") %>%
+  add_edge("Cell state", "DL: (NPC/OPC + AC) + (MES)") %>%
+  add_edge("gbm", "Default or Adjust tools") %>%
+  add_edge("Default or Adjust tools", "Default") %>%
+  add_edge("Default or Adjust tools", "Adjust")
+
+# Plot the DiagrammeR graph
+render_graph(graph)
+```
+
+
+```{r}
+library(data.table)
+# Define the steps and options
+split <- 1:4
+names(split) <- c("Each subject & each condition", "Each subject & both conditions", "All subjects & each condition", "All subjects & both conditions")
+cell_state <- 1:6
+names(cell_state) <- c("SL: NPC + OPC + AC + MES", "SL: NPC/OPC + AC + MES", "SL: NPC + OPC + AC/MES", "SL: NPC/OPC + AC/MES", "DL: (NPC + OPC + AC) + (MES)", "DL: (NPC/OPC + AC) + (MES)")
+adjust_unknown <- 0:1
+names(adjust_unknown) <- c("no_adjust", "adjust")
+
+steps_list <- list(split,cell_state,adjust_unknown)
+combinations <- expand.grid(
+  split = split,
+  cell_state = cell_state,
+  adjust_unknown = adjust_unknown
+)
+
+combinations$Concatenated = paste0(combinations$split, combinations$cell_state, combinations$adjust_unknown)
+
+combinations <- as.data.table(combinations)
+combinations[split %in% c(1,4) | cell_state %in% c(1,2,4,5) | adjust_unknown == 0, done := 1]
+combinations[is.na(done), done:=0]
+
+combinations[split %in% c(2) | cell_state %in% c(1,2,4,5) | adjust_unknown == 0, done := 1]
+combinations[is.na(done), done:=0]
+```
+

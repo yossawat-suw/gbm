@@ -1158,3 +1158,170 @@ write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".c
 
 
 
+
+
+#merge NPC/OPC vs AC vs MES
+
+```{r}
+#No need for ref based
+```
+
+
+
+```{r}
+#marker based
+
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes")
+sig <- sigs[4]
+signatures.new.df_4 <- read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
+signatures.new.df_4
+
+sig <- sigs[2]
+signatures.new.df_2 <- read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
+signatures.new.df_2
+
+signatures.new.df_5 <- cbind(signatures.new.df_2,signatures.new.df_4[,"MES.new",drop = FALSE])
+colnames(signatures.new.df_5)[3] <- "MES"
+signatures.new.df_5
+
+sig <- sigs[5]
+write.csv(signatures.new.df_5, file = paste0("output/signature_subtype_", sig, ".csv"), row.names = FALSE)
+```
+#merge NPC/OPC vs AC/MES
+
+```{r}
+smrt.mal <- readRDS("output/smrt_mal")
+```
+
+
+
+```{r}
+smrt.mal@meta.data$npcopc_acmes <- as.character(smrt.mal$celltype_merge)
+smrt.mal@meta.data[smrt.mal$celltype_merge %in% c("NPClike","OPClike"),"npcopc_acmes"] <- "NPC_OPClike"
+smrt.mal@meta.data[smrt.mal$celltype_merge %in% c("AClike","MESlike"),"npcopc_acmes"] <- "AC_MESlike"
+Idents(smrt.mal) <- "npcopc_acmes"
+```
+
+```{r}
+saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
+```
+
+
+
+
+
+```{r}
+# npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+# mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
+
+npc_opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPC_OPClike", only.pos = TRUE)
+ac_mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AC_MESlike", only.pos = TRUE)
+
+
+npc_opc.de.other.markers <- npc_opc.de.other.markers[order(npc_opc.de.other.markers$avg_log2FC, decreasing = TRUE), ]
+npc_opc.de.other.markers <- npc_opc.de.other.markers[1:50, ]
+
+ac_mes.de.other.markers <- ac_mes.de.other.markers[order(ac_mes.de.other.markers$avg_log2FC, decreasing = TRUE), ]
+ac_mes.de.other.markers <- ac_mes.de.other.markers[1:50, ]
+
+# logfc.threshold and min.diff.pct are very arbitrary
+```
+
+
+
+```{r}
+x <- list(NPC_OPC = rownames(npc_opc.de.other.markers), AC_MES = rownames(ac_mes.de.other.markers))
+
+library(ggvenn)
+vein <- ggvenn(x)
+vein <- vein + labs(title = "New")
+vein
+```
+```{r}
+# compare with original
+library(readxl)
+signatures <- read_xlsx("data/gbm_subtype_genelist_original.xlsx", sheet = 4)
+signatures <- read.csv("output/signature_subtype_4metamodules_new_50.csv")
+signatures
+```
+
+```{r}
+# Check intersection with each other
+x <- list(NPC = signatures$NPC.new, AC = signatures$AC.new, MES = signatures$MES.new, OPC = signatures$OPC.new)
+
+vein <- ggvenn(x)
+vein <- vein + labs(title = "original")
+vein
+```
+
+
+```{r}
+
+
+
+npc_opc <- ggvenn(list(NPC = signatures$NPC.new,OPC= signatures$OPC.new ,NPC_OPC = rownames(npc_opc.de.other.markers)), auto_scale = FALSE, set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "NPC_OPClike")
+
+
+ac_mes <- ggvenn(list(AC = signatures$AC.new,MES= signatures$MES.new ,AC_MES = rownames(ac_mes.de.other.markers)), auto_scale = FALSE, set_name_size = 4, show_percentage = FALSE, text_size = 4) + labs(title = "AC_MESlike")
+
+all_npc_opc <- venn::venn(list(NPC = signatures$NPC.new,OPC= signatures$OPC.new, AC = signatures$AC.new,MES= signatures$MES.new  , NPC_OPC = rownames(npc_opc.de.other.markers)))
+
+all_ac_mes <- venn::venn(list(NPC = signatures$NPC.new,OPC= signatures$OPC.new, AC = signatures$AC.new,MES= signatures$MES.new, AC_MES = rownames(ac_mes.de.other.markers)))
+
+
+
+
+library(patchwork)
+(ac_mes | npc_opc)
+all_npc_opc
+all_ac_mes
+```
+
+```{r}
+# Add metamodule based on new score
+signatures.new <- list()
+signatures.new <- append(signatures.new, list(NPC_OPC = rownames(npc_opc.de.other.markers)))
+signatures.new <- append(signatures.new, list( AC_MES = rownames(ac_mes.de.other.markers)))
+signatures.new
+```
+
+```{r}
+#saveRDS(signatures.new, file = "output/signature_cellstate_npcopc_acmes")
+```
+
+```{r}
+library(stringi)
+data.frame(stri_list2matrix(signatures.new))
+
+signatures.new.df <- data.frame(stri_list2matrix(signatures.new))
+colnames(signatures.new.df) <- names(signatures.new)
+
+signatures.new.df
+```
+```{r}
+#marker based
+
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
+sig <- sigs[6]
+
+write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
+
+#read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

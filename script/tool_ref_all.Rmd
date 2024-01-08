@@ -23,16 +23,16 @@ print("set parameter")
 # input cell
 object <- "all"
 
-celltypes <- c("celltype", "celltype_merge","celltype_npc_opc")
+celltypes <- c("celltype", "celltype_merge","celltype_npc_opc","npcopc_acmes")
 
 
 # For reference based
-merges <- c("4_merge_metamodules_mes","2_merge_metamodules",  "4_merge_metamodules_3celltypes","4_merge_metamodules")
+merges <- c("4_merge_metamodules_mes","2_merge_metamodules",  "4_merge_metamodules_3celltypes","4_merge_metamodules","npcopc_ac_mes","npcopc_acmes")
 
 
-all_celltypes <- c("MESlike","AClike", "NPClike", "OPClike","NPC_OPClike")
+all_celltypes <- c("MESlike","AClike", "NPClike", "OPClike","NPC_OPClike","AC_MESlike")
 
-chosing <- list(c(1),c(2,5),c(2,3,4),c(1,2,3,4))
+chosing <- list(c(1),c(2,5),c(2,3,4),c(1,2,3,4),c(1,2,5),c(5,6))
 
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
@@ -40,14 +40,14 @@ runs <- c("each","whole")
 
 #choose parameter
 ```{r}
-celltype <- celltypes[3]
+celltype <- celltypes[4]
 
 #mes > 1
 # merge NPC with OPC and still calculate MES seperatly
 #3 celltype > 3
 #4 celltype > 4
 
-pick <- 2
+pick <- 6
 
 # pick which celltype to be analyse
 chosen_celltypes <- all_celltypes[chosing[[pick]]]
@@ -77,7 +77,6 @@ if (length(chosen_celltypes) > 1) {
  neftel.smt.original@meta.data[,celltype] <- as.character(neftel.smt.original@meta.data[,celltype]); neftel.smt.original@meta.data[!(neftel.smt.original@meta.data[,celltype] %in% chosen_celltypes  ),celltype] <- "not_labeled"; neftel.smt.original@meta.data[,celltype] <- neftel.smt.original@meta.data[,celltype];
 }
 
-neftel.smt.original@meta.data
 ```
 
 # load gbm
