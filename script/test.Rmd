@@ -1,4 +1,17 @@
 
+
+
+```{r}
+#diversify 
+#sd-of-cellstate-per-donor_mean_nounknown
+sd_mean_nounknown <- lapply(prob_all_nounknown, function(x) { # per tool
+  x <- apply(x,1,FUN = sd) # sd of cellstate per donor
+  x <- mean(x) # mean of sd
+  return(x)
+})
+
+```
+
 ```{r}
 # library(renv)
 # renv::init()
@@ -13,7 +26,6 @@ library(tibble)
 library(easyCODA)
 #library(zCompositions) it will interfere with dplyr select function
 library(topsis)
-library(ggplot2)
 ```
 
 
@@ -256,6 +268,7 @@ unique_donor_id <- unique(anno_cellstate_meta_control$donor_id)
 unique_tool_donor_id <- length(unique_tool)*length(unique_donor_id)
 
 count_all_list <- list()
+prob_all_list <- list()
 count_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
 prob_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
 for (i in 2:ncol(anno_cellstate_meta_control)) {
@@ -289,6 +302,11 @@ for (i in 2:ncol(anno_cellstate_meta_control)) {
     count_tool_alldonor_wide <- data.frame(t(count_tool_alldonor_wide))
     count_all_list[[tool_name]] <- count_tool_alldonor_wide
     
+    prob_tool_alldonor_wide <- spread(prob_tool_alldonor, donor_id, tool_name)
+    prob_tool_alldonor_wide <- column_to_rownames(prob_tool_alldonor_wide,var = "cellstate")
+    prob_tool_alldonor_wide <- data.frame(t(prob_tool_alldonor_wide))
+    prob_all_list[[tool_name]] <- prob_tool_alldonor_wide
+    
     
   }
   count_all <- cbind(count_all,count_tool_alldonor[,2,drop = FALSE])
@@ -299,19 +317,6 @@ count_all <- cbind(count_tool_alldonor[,c(1,3)],count_all)
 prob_all <- cbind(prob_tool_alldonor[,c(1,3)],prob_all)
 ```
 
-```{r}
-#exclude unknown
-count_all_nounknown_list <- lapply(count_all_list,function(x){
-  x <- x %>% select(-unknown)
-})
-
-prob_all_nounknown <- lapply(count_all_nounknown_list,function(x){
-  x <- x/rowSums(x) 
-})
-
-count_all_nounknown_list
-prob_all_nounknown
-```
 
 
 
@@ -328,87 +333,303 @@ prob_all_unknown_df <- as.data.frame(prob_all_unknown_list)
 prob_all_unknown_mean <- apply(prob_all_unknown_df,2,mean)
 prob_all_unknown_median <- apply(prob_all_unknown_df,2,median)
 
-prob_all_unknown_pooled <- lapply(count_all_list,function(x){
+prob_all_unknown_mean_weighted <- lapply(count_all_list,function(x){
   (sum(x$unknown))/sum(x)
+})
+
+
+
+```
+
+```{r}
+#exclude unknown
+
+count_all_nounknown_list <- lapply(count_all_list,function(x){
+  x <- x %>% select(-unknown)
+})
+
+prob_all_nounknown <- lapply(count_all_nounknown_list,function(x){
+  x <- x/rowSums(x) 
 })
 
 ```
 
-
-
 ```{r}
-impute_fn <- function(x) {
-  lapply(x, function(x){
+impute_fn <- function(y) {
+  lapply(y, function(x){
   if (any(x == 0)) {
-    return(zCompositions::cmultRepl(x,z.warning = 0.99,label = 0,method = "SQ",output = "p-counts"))
+    return(zCompositions::cmultRepl(x,z.warning = 1.01,method = "CZM",output = "p-counts"))
   } else {
     return(x)
   }
 })
-}
+} 
 
-count_all_list_imputed <- impute_fn(count_all_list)
-count_all_nounknown_list_imputed <- impute_fn(count_all_nounknown_list)
 ```
 ```{r}
-#convert count_imputed to prob_imputed
-count_to_prob_fn <- function(x) {
-  lapply(x, function(x) {
-  data.frame(t(apply(x,1,function(x) x/sum(x))))
+#check zero pattern
+lapply(count_all_list,function(x){
+  if (any(x == 0)) {
+    return(zCompositions::zPatterns(x,label = 0))
+  } else {
+    return(x)
+  }
+  
 })
-}
-prob_all_list_imputed <- count_to_prob_fn(count_all_list_imputed)
-prob_all_nounknown_list_imputed <- count_to_prob_fn(count_all_nounknown_list_imputed)
 ```
-
-
-
 ```{r}
-#calculate clr
-prob_all_list_imputed_clr <- lapply(prob_all_list_imputed, CLR)
-prob_all_nounknown_list_imputed_clr <- lapply(prob_all_nounknown_list_imputed, CLR)
+cmultRepl_edited <- function (X, label = 0, method = c("GBM", "SQ", "BL", "CZM", 
+    "user"), output = c("prop", "p-counts"), frac = 0.65, threshold = 0.5, 
+    adjust = TRUE, t = NULL, s = NULL, z.warning = 0.8, z.delete = TRUE, 
+    suppress.print = FALSE, delta = NULL) 
+{
+    if (any(X < 0, na.rm = T)) 
+        stop("X contains negative values")
+    if (is.vector(X) | is.character(X) | (nrow(X) == 1)) 
+        stop("X must be a data matrix")
+    if (!is.na(label)) {
+        if (!any(X == label, na.rm = T)) 
+            stop(paste("Label", label, "was not found in the data set"))
+        if (label != 0 & any(X == 0, na.rm = T)) 
+            stop("Zero values not labelled as count zeros were found in the data set")
+        if (any(is.na(X))) 
+            stop(paste("NA values not labelled as count zeros were found in the data set"))
+    }
+    if (is.na(label)) {
+        if (any(X == 0, na.rm = T)) 
+            stop("Zero values not labelled as count zeros were found in the data set")
+        if (!any(is.na(X), na.rm = T)) 
+            stop(paste("Label", label, "was not found in the data set"))
+    }
+    if (!missing("delta")) {
+        warning("The delta argument is deprecated, use frac instead: frac has been set equal to delta.")
+        frac <- delta
+    }
+    X <- as.data.frame(X, stringsAsFactors = TRUE)
+    X[X == label] <- NA
+    checkNumZerosCol <- apply(X, 2, function(x) sum(is.na(x)))
+    if (any(checkNumZerosCol/nrow(X) >= z.warning)) {
+        cases <- which(checkNumZerosCol/nrow(X) >= z.warning)
+        if (z.delete == TRUE) {
+            if (length(cases) > (ncol(X) - 2)) {
+                stop(paste("More than 2 columns contain >", z.warning * 
+                  100, "% zeros/unobserved values (see arguments z.warning and z.delete).", 
+                  sep = ""))
+            }
+            X <- X[, -cases]
+            action <- "deleted"
+            warning(paste("Column no. ", cases, " containing >", 
+                z.warning * 100, "% zeros/unobserved values ", 
+                action, " (see arguments z.warning and z.delete).\n", 
+                sep = ""))
+        }
+        else {
+            action <- "found"
+            stop(paste("Column no. ", cases, " containing >", 
+                z.warning * 100, "% zeros/unobserved values ", 
+                action, " (see arguments z.warning and z.delete. Check out with zPatterns()).\n", 
+                sep = ""))
+        }
+    }
+    checkNumZerosRow <- apply(X, 1, function(x) sum(is.na(x)))
+    if (any(checkNumZerosRow/ncol(X) >= z.warning)) {
+        cases <- which(checkNumZerosRow/ncol(X) >= z.warning)
+        if (z.delete == TRUE) {
+            if (length(cases) > (nrow(X) - 2)) {
+                stop(paste("More than 2 rows contain >", z.warning * 
+                  100, "% zeros/unobserved values (see arguments z.warning and z.delete).", 
+                  sep = ""))
+            }
+            X <- X[, -cases]
+            action <- "deleted"
+            warning(paste("Column no. ", cases, " containing >", 
+                z.warning * 100, "% zeros/unobserved values ", 
+                action, " (see arguments z.warning and z.delete).\n", 
+                sep = ""))
+        }
+        else {
+            action <- "found"
+            stop(paste("Column no. ", cases, " containing >", 
+                z.warning * 100, "% zeros/unobserved values ", 
+                action, " (see arguments z.warning and z.delete. Check out with zPatterns()).\n", 
+                sep = ""))
+        }
+    }
+    N <- nrow(X)
+    D <- ncol(X)
+    n <- apply(X, 1, sum, na.rm = TRUE)
+    method <- match.arg(method)
+    output <- match.arg(output)
+    if (method != "CZM") {
+        if (method == "user") {
+            t <- t
+        }
+        else {
+            alpha <- matrix(0, nrow = N, ncol = D)
+            for (i in 1:N) {
+                alpha[i, ] <- apply(X, 2, function(x) sum(x[-i], 
+                  na.rm = T))
+            }
+            t <- alpha/rowSums(alpha)
+            if ((method == "GBM") && (any(t == 0))) {
+                stop("GBM method: not enough information to compute t hyper-parameter,\n                                                probably there are columns with < 2 positive values.")
+            }
+        }
+        s <- switch(method, GBM = 1/apply(t, 1, function(x) exp(mean(log(x)))), 
+            SQ = sqrt(n), BL = D, user = s)
+        repl <- t * (s/(n + s))
+    }
+    if (method == "CZM") {
+        repl <- frac * matrix(1, ncol = D, nrow = N) * (threshold/n)
+    }
+    X2 <- t(apply(X, 1, function(x) x/sum(x, na.rm = T)))
+    colmins <- apply(X2, 2, function(x) min(x, na.rm = T))
+    adjusted <- 0
+    for (i in 1:N) {
+        if (any(is.na(X2[i, ]))) {
+            z <- which(is.na(X2[i, ]))
+            X2[i, z] <- repl[i, z]
+            if (adjust == TRUE) {
+                if (any(X2[i, z] > colmins[z])) {
+                  f <- which(X2[i, z] > colmins[z])
+                  X2[i, z][f] <- frac * colmins[z][f]
+                  adjusted <- adjusted + length(f)
+                }
+            }
+            X2[i, -z] <- (1 - (sum(X2[i, z]))) * X2[i, -z]
+        }
+    }
+    if (output == "p-counts") {
+        for (i in 1:N) {
+            if (any(is.na(X[i, ]))) {
+                zero <- which(is.na(X[i, ]))
+                pos <- setdiff(1:D, zero)[1]
+                X[i, zero] <- (X[i, pos]/X2[i, pos]) * X2[i, 
+                  zero]
+            }
+        }
+        res <- X
+    }
+    else {
+        res <- X2
+    }
+    if (suppress.print == FALSE) {
+        if ((adjust == TRUE) & (adjusted > 0)) {
+            cat(paste("No. adjusted imputations: ", adjusted, 
+                "\n"))
+        }
+    }
+    return(as.data.frame(res, stringsAsFactors = TRUE))
+}
+
+
 ```
-
-
-
 
 ```{r}
 #calculate log variance
-lrv_list <- lapply(prob_all_list_imputed_clr, LR.VAR)
-lrv_nounknown_list <- lapply(prob_all_nounknown_list_imputed_clr, LR.VAR)
+count_all_list_imputed <- impute_fn(count_all_list)
+#prob_all_list_imputed <- impute_fn(prob_all_list)
+```
+
+
+```{r}
+count_all_list
+```
+
+
+```{r}
+count_all_list_imputed
+```
+
+
+```{r}
+n <- 0
+for (i in 1:length(count_all_list)){
+  x <- count_all_list[[i]]
+  if (any(x == 0)) {
+    test <- (zCompositions::cmultRepl(x,z.warning = 0.99,method = "BL"))
+  } else {
+    test <- x
+  }
+  n <- n + i
+}
+n
+```
+
+
+```{r}
+zCompositions::cmultRepl(count_all_list[[6]],z.warning = 0.99)
+count_all_list[[6]]
+count_all_list_imputed[[7]]
+count_all_list_imputed
+```
+
+
+```{r}
+count_all_list_imputed_clr <- lapply(count_all_list_imputed, CLR)
+prob_all_list_imputed_clr <- lapply(prob_all_list_imputed, CLR)
+```
+
+```{r}
+
+count_all_list[[9]]
+prob_all_list[[9]]
+count_all_list_imputed[[9]]
+prob_all_list_imputed[[9]]
+
+```
+
+
+```{r}
+#include unknown
+tool_lrv <- lapply(count_all_list_imputed_clr, LR.VAR)
+```
+
+
+
+```{r}
+## no unknown
+#from count
+count_all_nounknown_imputed <- impute_fn(count_all_nounknown_list)
+
+#from prop
+prob_all_nounknown_imputed <- impute_fn(prob_all_nounknown)
+
+prob_all_nounknown_imputed_clr <- lapply(prob_all_nounknown_imputed, CLR)
+
+tool_nounknown_lrv <- lapply(prob_all_nounknown_imputed_clr, LR.VAR)
 ```
 
 ```{r}
 #diversify 
 #sd-of-cellstate-per-donor_mean_nounknown
-sd_mean_nounknown_list <- lapply(prob_all_nounknown_list_imputed, function(x) { # per tool
+sd_mean_nounknown <- lapply(prob_all_nounknown, function(x) { # per tool
   x <- apply(x,1,FUN = sd) # sd of cellstate per donor
   x <- mean(x) # mean of sd
   return(x)
 })
 
-prob_all_nounknown_list_imputed
-sd_mean_nounknown_list
 ```
 
 
 ```{r}
 #choose best tool
-lrv_vec <- unlist(lrv_list)
-names(lrv_vec) <- names(lrv_list)
+tool_lrv_vec <- unlist(tool_lrv)
+names(tool_lrv_vec) <- names(tool_lrv)
 
-lrv_nounknown_vec <- unlist(lrv_nounknown_list)
-names(lrv_nounknown_vec) <- names(lrv_nounknown_list)
+tool_lrv_nounknown_vec <- unlist(tool_nounknown_lrv)
+names(tool_lrv_nounknown_vec) <- names(tool_nounknown_lrv)
 
-sd_mean_nounknown_vec <- unlist(sd_mean_nounknown_list)
-names(sd_mean_nounknown_vec) <- names(sd_mean_nounknown_list)
+sd_mean_nounknown_vec <- unlist(sd_mean_nounknown)
+names(sd_mean_nounknown_vec) <- names(sd_mean_nounknown)
 
-tools_matric <- data.frame(lrv = lrv_vec, 
-                           lrv_nounknown = lrv_nounknown_vec,
+
+tools_matric <- data.frame(lrv = tool_lrv_vec, 
+                           lrv_nounknown = tool_lrv_nounknown_vec,
                            sd_mean_nounknown = sd_mean_nounknown_vec,
-                           prob_known_mean = (1-prob_all_unknown_mean),
-                           prob_known_median = (1-prob_all_unknown_median),
-                           prob_known_pooled = (1-unlist(prob_all_unknown_pooled)))
+                           unknown_mean = (1-prob_all_unknown_mean),
+                           unknown_median = (1 - prob_all_unknown_median),
+                           unknown_mean_weighted = (1- unlist(prob_all_unknown_mean_weighted)))
 
 
 tools_matric
@@ -416,14 +637,14 @@ tools_matric
 
 ```{r}
 library(MCDA)
-score_name <- colnames(tools_matric)
-score_name
+tool_name <- colnames(tools_matric)
+tool_name
 ```
 
 
 ```{r}
-weights <- setNames(c(1,1,19,1,1,1), colnames(tools_matric))
-impacts <- c("+","+","-","+","+","+") # For topsis
+weights <- setNames(c(1,1,1,1,1,1), colnames(tools_matric))
+impacts <- c("+","+","+","+","+","+") # For topsis
 
 pick <- c(2,3,4)
 ```
@@ -431,7 +652,7 @@ pick <- c(2,3,4)
 
 ```{r}
 #Topsis
-tools_topsis_score <- topsis(decision = as.matrix(tools_matric[,score_name[pick]]), weights = weights[pick], impacts = impacts[pick])
+tools_topsis_score <- topsis(decision = as.matrix(tools_matric[,tool_name[pick]]), weights = weights[pick], impacts = impacts[pick])
 
 tools_topsis_score$alt.row <- rownames(tools_matric)
 
@@ -451,17 +672,16 @@ topsis <- topsis[,-2,drop = FALSE]
 ```{r}
 # MCMD: weightedSum 
 normalizationtypes <- rep("rescaling",times = ncol(tools_matric))
-names(normalizationtypes) <- score_name
+names(normalizationtypes) <- tool_name
 
 tools_matric_norm <- normalizePerformanceTable(
   tools_matric, normalizationTypes = normalizationtypes,
-  criteriaIDs = score_name)
+  criteriaIDs = tool_name)
 
 weightedSum <- data.frame(weightedSum = weightedSum(tools_matric_norm,
             criteriaWeights = weights[pick],
-            criteriaIDs = score_name[pick]))
+            criteriaIDs = tool_name[pick]))
 
-weightedSum
 ```
 
 
@@ -472,7 +692,7 @@ library("waspasR")
 # tools_matric <- tools_matric %>% select(-unknown_mean_weighted_revert)
 # tools_matric$unknown_mean_weighted_revert <- 1 -tools_matric$unknown_mean_weighted
 
-flags_input <- ifelse(impacts == "+", "B", "C")
+flags_input <- rep("Benefit",times = ncol(tools_matric))
 
 waspas_df <- rbind(t(data.frame(F = flags_input[pick],
            W = weights[pick]/sum(weights[pick]))),
@@ -482,7 +702,7 @@ waspas_df <- rbind(t(data.frame(F = flags_input[pick],
 waspas_df <- as.tibble(rownames_to_column(waspas_df,var = "tool"))
 
 waspas_raw <- waspasR_edited(waspas_df,lambda = 0.5)
-waspas_raw
+
 waspas <- column_to_rownames(waspas_raw,var = "Alternative") 
 waspas <- waspas[!rownames(waspas)%in% c("W","F"),c("WSM_Rank","WPM_Rank","WASPAS_Rank")] 
 waspas
@@ -498,19 +718,29 @@ waspas
 ```{r}
 metric <- cbind(topsis,weightedSum,waspas)
 
-metric <- metric %>% arrange(desc(WASPAS_Rank))
+metric <- metric %>% arrange(desc(topsis))
 
-metric
+metric <- metric %>% arrange(desc(WASPAS_Rank))
 ```
 
 
-```{r}
-anno_cellstate_meta_control_sortcol <- 
-  cbind(anno_cellstate_meta_control[,1,drop = FALSE],
-        anno_cellstate_meta_control[,rownames(metric)])
-donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
 
-anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
+
+
+
+
+
+ 
+
+```{r}
+# library
+library(ggplot2)
+ 
+# create a dataset
+specie <- c(rep("sorgho" , 3) , rep("poacee" , 3) , rep("banana" , 3) , rep("triticum" , 3) )
+condition <- rep(c("normal" , "stress" , "Nitrogen") , 4)
+value <- abs(rnorm(12 , 0 , 15))
+data <- data.frame(specie,condition,value)
 ```
 
 
@@ -544,8 +774,6 @@ ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) +
   facet_wrap(~tool) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3))
 ```
-
-
 ```{r}
 # Do sankey
 library(ggsankey)
@@ -555,7 +783,12 @@ library(ggtext)
 my_colors <- c("red", "green", "blue", "gray", "purple", "orange")
 plots_list <- list()
 
+anno_cellstate_meta_control_sortcol <- 
+  cbind(anno_cellstate_meta_control[,1,drop = FALSE],
+        anno_cellstate_meta_control[,rownames(metric)])
+donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
 
+anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
 
 for (i in levels(anno_cellstate_meta_control_sortcol$donor_id)) {
   anno_cellstate_meta_each <- anno_cellstate_meta_control_sortcol[anno_cellstate_meta_control_sortcol$donor_id== i,]
@@ -619,10 +852,6 @@ combined_plot + plot_annotation(
 
 
 ```
-
-
-
- 
 #cv (unused)
 ```{r}
 # # Assuming count_all is your data frame with columns: cellstate, donor_id, tool1, tool2, ...
@@ -662,4 +891,3 @@ combined_plot + plot_annotation(
 # tool_cv
 
 ```
-
