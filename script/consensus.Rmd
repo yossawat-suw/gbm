@@ -5,6 +5,7 @@ library(dplyr)
 library(data.table)
 library(tidyr)
 library(entropy)
+library(qualvar)
 ```
 
 ```{r}
@@ -40,7 +41,6 @@ if (run_each) {
 } else {
   run <- runs[2]
 }
-
 
 
 
@@ -136,6 +136,9 @@ anno[] <- lapply(anno, function(x) gsub("unassigned", "unknown", x))
 ```{r}
 anno
 ```
+```{r}
+tool_names <- colnames(anno)
+```
 
 
 
@@ -186,153 +189,154 @@ pl
 
 # agreement analysis
 
-#test 
+#test  -->
+<!-- ```{r} -->
+<!-- tools <- c("tool1","tool2","tool3","tool4","tool5") -->
+<!-- anno.test <- data.frame(matrix(ncol = length(tools),nrow =0)) -->
+<!-- possible_cellstate_test <- c("a","b","c","d","e","f","g") -->
+<!-- cellstate_test <- possible_cellstate_test[1:5] -->
+
+<!-- colnames(anno.test) <- tools -->
+<!-- anno.test[1,] <- c("a","a","a","a","a") -->
+<!-- anno.test[2,] <- c("a","a","a","a","b") -->
+<!-- anno.test[3,] <- c("a","a","a","b","b") -->
+<!-- anno.test[4,] <- c("a","a","a","b","c") -->
+<!-- anno.test[5,] <- c("a","a","b","b","c") -->
+<!-- anno.test[6,] <- c("a","a","c","b","d") -->
+<!-- anno.test[7,] <- c("a","c","d","b","e") -->
+
+
+
+<!-- #Calculate frequency for each -->
+
+
+<!-- anno.count.test <- anno.test -->
+<!-- tool <- "tool" -->
+<!-- cellstate <- "cellstate" -->
+<!-- gathercols <- colnames(anno.count.test) -->
+
+
+
+<!-- anno.count.test <- rownames_to_column(anno.count.test,var = "cellname") -->
+
+
+<!-- anno.count.test <- gather(anno.count.test, tool, cellstate, gathercols) -->
+<!-- anno.count.test$cellstate <- factor(anno.count.test$cellstate, levels = cellstate_test) -->
+
+<!-- anno.count.test <- anno.count.test %>%  -->
+<!--   group_by(cellname) %>% -->
+<!--   count(cellstate, name = "count") %>% -->
+<!--   complete(cellstate, fill = list(count = 0))  -->
+
+<!-- anno.count.test <- spread(anno.count.test, cellstate, count) -->
+
+<!-- anno.count.test[is.na(anno.count.test)] <- 0 -->
+
+
+<!-- anno.count.test <- column_to_rownames(anno.count.test,var = "cellname") -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- anno.test -->
+<!-- anno.count.test -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- # 5 tools 5 cell states -->
+<!-- anno.count.test -->
+<!-- iqv <- c("DM" ,"MDA" ,"ADA" ,"VA" ,"HREL" ,"B") -->
+
+<!-- #IQV -->
+<!-- anno.agreement <- data.frame(matrix(nrow = nrow(anno.count.test),ncol = length(iqv))) -->
+<!-- rownames(anno.agreement) <- rownames(anno.count.test) -->
+<!-- colnames(anno.agreement) <- iqv -->
+
+
+<!-- anno.agreement$DM <- apply(anno.count.test, 1, DM) -->
+<!-- anno.agreement$MDA <- apply(anno.count.test, 1, MDA) -->
+<!-- anno.agreement$ADA <- apply(anno.count.test, 1, ADA) -->
+<!-- anno.agreement$VA <- apply(anno.count.test, 1, VA) -->
+<!-- anno.agreement$HREL <- apply(anno.count.test, 1, HREL) -->
+<!-- anno.agreement$B <- apply(anno.count.test, 1, B) -->
+
+
+<!-- # 0 mean more consistence; 1 mean zero agreement -->
+
+<!-- anno.agreement <- format(round(anno.agreement, 3), nsmall = 3) -->
+
+<!-- for (i in 1:ncol(anno.agreement)) { -->
+<!--   anno.agreement[,i] <- as.numeric(anno.agreement[,i]) -->
+<!-- } -->
+<!-- ``` -->
+
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- #Fleiss -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- anno.agreement -->
+<!-- ``` -->
+
+
+
+
+#agreement analysis
+
 
 ```{r}
-tools <- c("tool1","tool2","tool3","tool4","tool5")
-anno.test <- data.frame(matrix(ncol = length(tools),nrow =0))
-possible_cellstate_test <- c("a","b","c","d","e","f","g")
-cellstate_test <- possible_cellstate_test[1:5]
+library(data.table)
 
-colnames(anno.test) <- tools
-anno.test[1,] <- c("a","a","a","a","a")
-anno.test[2,] <- c("a","a","a","a","b")
-anno.test[3,] <- c("a","a","a","b","b")
-anno.test[4,] <- c("a","a","a","b","c")
-anno.test[5,] <- c("a","a","b","b","c")
-anno.test[6,] <- c("a","a","c","b","d")
-anno.test[7,] <- c("a","c","d","b","e")
+# Convert to data.table
 
+anno.count <- setDT(rownames_to_column(anno,var = "cellname"))
 
+tool_names <- setdiff(names(anno.count), "cellname")
 
-#Calculate frequency for each
+anno.count[] <- lapply(seq_along(anno.count), function(i) {
+   ifelse(anno.count[[i]] == "unknown", paste("unknown", i-1, sep = "_"), anno.count[[i]]) 
+ })
+# Melt the data.table to long format
+anno_long <- melt(anno.count, id.vars = "cellname", variable.name = "tool", value.name = "cellstate")
 
 
-anno.count.test <- anno.test
-tool <- "tool"
-cellstate <- "cellstate"
-gathercols <- colnames(anno.count.test)
+anno.count <- dcast(anno_long, cellname ~ cellstate, fun.aggregate = length)
 
-
-
-anno.count.test <- rownames_to_column(anno.count.test,var = "cellname")
-
-
-anno.count.test <- gather(anno.count.test, tool, cellstate, gathercols)
-anno.count.test$cellstate <- factor(anno.count.test$cellstate, levels = cellstate_test)
-
-anno.count.test <- anno.count.test %>% 
-  group_by(cellname) %>%
-  count(cellstate, name = "count") %>%
-  complete(cellstate, fill = list(count = 0)) 
-
-anno.count.test <- spread(anno.count.test, cellstate, count)
-
-anno.count.test[is.na(anno.count.test)] <- 0
-
-
-anno.count.test <- column_to_rownames(anno.count.test,var = "cellname")
-```
-
-
-```{r}
-anno.test
-anno.count.test
-```
-
-
-
-
-```{r}
-# 5 tools 5 cell states
-anno.count.test
-iqv <- c("DM" ,"MDA" ,"ADA" ,"VA" ,"HREL" ,"B")
-
-#IQV
-anno.agreement <- data.frame(matrix(nrow = nrow(anno.count.test),ncol = length(iqv)))
-rownames(anno.agreement) <- rownames(anno.count.test)
-colnames(anno.agreement) <- iqv
-
-
-anno.agreement$DM <- apply(anno.count.test, 1, DM)
-anno.agreement$MDA <- apply(anno.count.test, 1, MDA)
-anno.agreement$ADA <- apply(anno.count.test, 1, ADA)
-anno.agreement$VA <- apply(anno.count.test, 1, VA)
-anno.agreement$HREL <- apply(anno.count.test, 1, HREL)
-anno.agreement$B <- apply(anno.count.test, 1, B)
-
-
-# 0 mean more consistence; 1 mean zero agreement
-
-anno.agreement <- format(round(anno.agreement, 3), nsmall = 3)
-
-for (i in 1:ncol(anno.agreement)) {
-  anno.agreement[,i] <- as.numeric(anno.agreement[,i])
-}
-
-
-
-#entropy
-anno.agreement$entropy <- apply(anno.count.test,1,entropy,unit = "log2")
-
-#Fleiss
-kappam.fleiss(anno.test[,])
-
-anno.test
-```
-
-
-
-
-#agreement analysis: IQV
-
-
-
-
-
-```{r}
-#Calculate frequency for each
-
-
-anno.count <- anno
-tool <- "tool"
-cellstate <- "cellstate"
-gathercols <- colnames(anno.count)
-
-
-
-anno.count <- rownames_to_column(anno.count,var = "cellname")
-
-
-anno.count <- gather(anno.count, tool, cellstate, gathercols)
-
-anno.count$cellstate <- factor(anno.count$cellstate, levels = possible_cellstate_with_unknown)
-
-anno.count <- anno.count %>% 
-  group_by(cellname) %>%
-  count(cellstate, name = "count") %>%
-  complete(cellstate, fill = list(count = 0)) 
-
-anno.count <- spread(anno.count, cellstate, count)
-anno.count
 anno.count[is.na(anno.count)] <- 0
-
 
 anno.count <- column_to_rownames(anno.count,var = "cellname")
 
-anno.count
-```
+rm(anno_long)
 
 
 
-
-
-
-```{r}
 
 anno.agreement <- data.frame(matrix(nrow = nrow(anno.count),ncol = 0))
 rownames(anno.agreement) <- rownames(anno.count)
 
+
+anno.count
+```
+
+
+
+#IQV
+
+
+
+
+
+```{r}
 
 
 anno.agreement$DM <- apply(anno.count, 1, DM)
@@ -351,103 +355,143 @@ for (i in 1:ncol(anno.agreement)) {
   anno.agreement[,i] <- as.numeric(anno.agreement[,i])
 }
 
-
+anno.agreement
 ```
 
-
-```{r}
-all.iqv <- anno.agreement
-```
-
-
-```{r}
-#Check the range of
-unique(all.iqv[,1])
-test <- list()
-for (i in 1:ncol(all.iqv)) {
-  test <- append(test,list(unique(all.iqv[,i])))
-}
-test
-```
+#(archieve explore the iqv) -->
+<!-- ```{r} -->
+<!-- all.iqv <- anno.agreement -->
+<!-- ``` -->
 
 
-
-```{r}
-library(GGally)
-all.iqv %>%
-  ggpairs(progress = FALSE) +
-  theme_bw()
-```
-
-```{r}
-
-#calculate bin width
+<!-- ```{r} -->
+<!-- #Check the range of -->
+<!-- unique(all.iqv[,1]) -->
+<!-- test <- list() -->
+<!-- for (i in 1:ncol(all.iqv)) { -->
+<!--   test <- append(test,list(unique(all.iqv[,i]))) -->
+<!-- } -->
+<!-- test -->
+<!-- ``` -->
 
 
-bin_num <- 10
 
-p1 <- ggplot(all.iqv, aes(x=DM)) + geom_histogram(bins =  bin_num)
-p2 <- ggplot(all.iqv, aes(x=MDA)) + geom_histogram(bins =  bin_num)
-p3 <- ggplot(all.iqv, aes(x=ADA)) + geom_histogram(bins =  bin_num)
-p4 <- ggplot(all.iqv, aes(x=VA)) + geom_histogram(bins =  bin_num)
-p5 <- ggplot(all.iqv, aes(x=HREL)) + geom_histogram(bins =  bin_num)
-p6 <- ggplot(all.iqv, aes(x=B)) + geom_histogram(bins =  bin_num)
+<!-- ```{r} -->
+<!-- library(GGally) -->
+<!-- all.iqv %>% -->
+<!--   ggpairs(progress = FALSE) + -->
+<!--   theme_bw() -->
+<!-- ``` -->
 
-(p1 + p2 + p3) / (p4 + p5 + p6)
-```
+<!-- ```{r} -->
 
-```{r}
-#color_by resolution
-all.iqv.con <- data.frame()
-all.iqv.con <- cbind(all.iqv,all.consensus)
-
-p1 <- ggplot(all.iqv.con, aes(x=DM, fill = res_0.6)) + geom_histogram(bins = bin_num)
-p1
-```
+<!-- #calculate bin width -->
 
 
-```{r}
-#Plot lolipop
-all.iqv.freq <- data.frame()
-for (i in 1:ncol(all.iqv)){
-  all.iqv.freq.each <- data.frame(table(all.iqv[,i]))
-  all.iqv.freq.each <- cbind(all.iqv.freq.each, data.frame(method = rep(colnames(all.iqv)[i],nrow(all.iqv.freq.each))))
-  all.iqv.freq <- rbind(all.iqv.freq,all.iqv.freq.each)
-}
+<!-- bin_num <- 10 -->
 
-colnames(all.iqv.freq)[1] <- "score"
+<!-- p1 <- ggplot(all.iqv, aes(x=DM)) + geom_histogram(bins =  bin_num) -->
+<!-- p2 <- ggplot(all.iqv, aes(x=MDA)) + geom_histogram(bins =  bin_num) -->
+<!-- p3 <- ggplot(all.iqv, aes(x=ADA)) + geom_histogram(bins =  bin_num) -->
+<!-- p4 <- ggplot(all.iqv, aes(x=VA)) + geom_histogram(bins =  bin_num) -->
+<!-- p5 <- ggplot(all.iqv, aes(x=HREL)) + geom_histogram(bins =  bin_num) -->
+<!-- p6 <- ggplot(all.iqv, aes(x=B)) + geom_histogram(bins =  bin_num) -->
 
-all.iqv.freq$score <- as.numeric(as.character(all.iqv.freq$score))
+<!-- (p1 + p2 + p3) / (p4 + p5 + p6) -->
+<!-- ``` -->
 
-all.iqv.freq
+<!-- ```{r} -->
+<!-- #color_by resolution -->
+<!-- all.iqv.con <- data.frame() -->
+<!-- all.iqv.con <- cbind(all.iqv,all.consensus) -->
 
-#also for log scale
-all.iqv.freq <- all.iqv.freq %>%
-  mutate(logFreq = log(Freq))
+<!-- p1 <- ggplot(all.iqv.con, aes(x=DM, fill = res_0.6)) + geom_histogram(bins = bin_num) -->
+<!-- p1 -->
+<!-- ``` -->
 
-all.iqv.freq
-```
-```{r}
-ggplot(all.iqv.freq, aes(x=score, y=Freq)) +
-#ggplot(all.iqv.freq, aes(x=score, y=logFreq)) +
-  geom_point(size=0.2) +
-  geom_segment( aes(x=score, xend=score, y=0, yend=Freq)) +
-  facet_wrap(~ method)
-```
 
-```{r}
-#ggplot(all.iqv.freq, aes(x=score, y=Freq)) +
-ggplot(all.iqv.freq, aes(x=score, y=logFreq)) +
-  geom_point(size=0.2) +
-  geom_segment( aes(x=score, xend=score, y=0, yend=logFreq)) +
-  facet_wrap(~ method)
-```
+<!-- ```{r} -->
+<!-- #Plot lolipop -->
+<!-- all.iqv.freq <- data.frame() -->
+<!-- for (i in 1:ncol(all.iqv)){ -->
+<!--   all.iqv.freq.each <- data.frame(table(all.iqv[,i])) -->
+<!--   all.iqv.freq.each <- cbind(all.iqv.freq.each, data.frame(method = rep(colnames(all.iqv)[i],nrow(all.iqv.freq.each)))) -->
+<!--   all.iqv.freq <- rbind(all.iqv.freq,all.iqv.freq.each) -->
+<!-- } -->
+
+<!-- colnames(all.iqv.freq)[1] <- "score" -->
+
+<!-- all.iqv.freq$score <- as.numeric(as.character(all.iqv.freq$score)) -->
+
+<!-- all.iqv.freq -->
+
+<!-- #also for log scale -->
+<!-- all.iqv.freq <- all.iqv.freq %>% -->
+<!--   mutate(logFreq = log(Freq)) -->
+
+<!-- all.iqv.freq -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- ggplot(all.iqv.freq, aes(x=score, y=Freq)) + -->
+<!-- #ggplot(all.iqv.freq, aes(x=score, y=logFreq)) + -->
+<!--   geom_point(size=0.2) + -->
+<!--   geom_segment( aes(x=score, xend=score, y=0, yend=Freq)) + -->
+<!--   facet_wrap(~ method) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #ggplot(all.iqv.freq, aes(x=score, y=Freq)) + -->
+<!-- ggplot(all.iqv.freq, aes(x=score, y=logFreq)) + -->
+<!--   geom_point(size=0.2) + -->
+<!--   geom_segment( aes(x=score, xend=score, y=0, yend=logFreq)) + -->
+<!--   facet_wrap(~ method) -->
+<!-- ``` -->
+
 
 #agreement analysis: Entropy
+
 ```{r}
+#entropy
 anno.agreement$entropy <- apply(anno.count,1,entropy,unit = "log2")
 ```
 
+
+```{r}
+# create max min value for entropy for normalization
+library(gtools)
+
+possible_cellstate_with_multi_unknown <- colnames(anno.count)
+
+combinations <- as.data.frame(combinations(length(possible_cellstate_with_multi_unknown),length(tool_names),possible_cellstate_with_multi_unknown,repeats=TRUE))
+
+colnames(combinations) <- tool_names
+rownames(combinations) <- 1:nrow(combinations)
+
+# Convert to data.table
+combinations <- setDT(rownames_to_column(combinations,var = "cellname"))
+
+# Melt the data.table to long format
+anno_long <- melt(combinations, id.vars = "cellname", variable.name = "tool", value.name = "cellstate")
+
+
+combinations <- dcast(anno_long, cellname ~ cellstate, fun.aggregate = length)
+
+combinations[is.na(combinations)] <- 0
+
+combinations <- column_to_rownames(combinations,var = "cellname")
+
+rm(anno_long)
+
+
+combinations.entropy <- apply(combinations,1,entropy,unit = "log2")
+
+combinations_max <- max(combinations.entropy)
+combinations_min <- min(combinations.entropy)
+
+#combinations.entropy.norm <- (combinations.entropy - combinations_min) / (combinations_max - combinations_min)
+anno.agreement$entropy.norm <- (anno.agreement$entropy - combinations_min) / (combinations_max - combinations_min)
+anno.agreement$agreement <- 1- anno.agreement$entropy.norm
+```
 #(archive) agrement analysis:pick best tool combination (now is Fleiss kappa **cannot do it per cell) -->
 <!-- ```{r} -->
 
@@ -810,231 +854,25 @@ anno_score$consensus_with_stochastic_of_tie <- as.factor(anno_score$consensus_wi
 
 anno_score
 ```
-
-
-
+#combind all score
 ```{r}
-#plot radiation
+#gbm.meta <- read.csv("output/gbm_meta.csv", row.names = 1)
 
-anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
-anno_count_sum <- anno_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
-                                    .SDcols = possible_cellstate,
-                                    by = c("radiation")]
-
-anno_count_sum_long <-  melt(anno_count_sum,id.vars = c("radiation","confidence_mean","n_cell"), measure.vars = possible_cellstate,variable.name = "consensus",value.name = "count")
-
-anno_count_sum_long[,per := count/sum(count),by = c("radiation")]
-
-anno_count_sum_long <- anno_count_sum_long[order( radiation,consensus)]
-
-anno_count_sum_long[,n_cell := as.integer(n_cell)]
-anno_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+# Import metadata
+anno.agreement.chosen <- rownames_to_column(anno.agreement,var = "rn")
+anno.agreement.chosen <- anno.agreement.chosen %>% select(rn,agreement)
+anno.all <- merge(anno_score,anno.agreement.chosen,
+                  by = "rn")
 
 
+fwrite(anno.all, file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
 
 
-
-library(grid)
-library(randomcoloR)
-
-set.seed(167)
-n <-  length(unique(anno_count_sum_long$consensus))
-palette <- distinctColorPalette(n)
-
-p <- ggplot(anno_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus, width = n_cell)) +
-  geom_col() +
-  facet_nested_wrap(~ rad_con,strip = strip_nested(size = "variable")) +
-  ggtitle("") +
-  coord_polar("y", start = 0) +
-  theme_void() +
-
-  labs(title = "Cell types proportion", subtitle = "all donors; control vs radiated\n (confidence score)",
-       fill = "Cell type") +
-  theme(strip.text = element_text(size = 6)) +
-  scale_fill_manual(values = palette)
-
-
-# Convert the plot to a grob
-g <- ggplotGrob(p)
-
-# Define the caption
-caption <- textGrob("pie size based on  the number of cells in each group",
-                    x = unit(1, "npc"), y = unit(0.05, "npc"),
-                    hjust = 2, vjust = -5,
-                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
-
-# Draw the plot and then the caption
-grid.newpage()
-grid.draw(g)
-grid.draw(caption)
-
-
+anno.all
 ```
 
 
-```{r}
-# plot radiation + donor_id
-anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
-anno_count_sum <- anno_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
-                                    .SDcols = c(possible_cellstate), 
-                                    by = c("radiation", "donor_id")]
 
-anno_count_sum_long <-  melt(anno_count_sum,id.vars = c("radiation","donor_id","confidence_mean","n_cell"), measure.vars = c(possible_cellstate),variable.name = "consensus",value.name = "count")
-
-anno_count_sum_long[,per := count/sum(count),by = c("radiation","donor_id")]
-
-anno_count_sum_long <- anno_count_sum_long[order(donor_id, radiation,consensus)]
-
-anno_count_sum_long[,n_cell := as.integer(n_cell)]
-anno_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
-anno_count_sum_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
-
-
-
-library(grid)
-library(randomcoloR)
-
-set.seed(167)
-n <-  length(unique(anno_count_sum_long$consensus))
-palette <- distinctColorPalette(n)
-
-p <- ggplot(anno_count_sum_long, aes(x = "", y = per, fill = consensus)) +
-#p <- ggplot(anno_count_sum_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +  
-# p <- ggplot(anno_count_sum_long, aes(x = (n_cell)/2, y = per, fill = consensus, width = (n_cell))) +  
-  geom_col() +
-  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
-  #facet_wrap(~ donor_id + rad_con) +
-  ggtitle("") +
-  coord_polar("y", start = 0) +
-  theme_void() +
-
-  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
-       fill = "Cell type") + 
-  theme(strip.text = element_text(size = 6)) +
-  scale_fill_manual(values = palette) 
-
-
-# Convert the plot to a grob
-g <- ggplotGrob(p)
-
-# Define the caption
-caption <- 
-  textGrob("", 
-  #textGrob("pie size based on squre root of the number of cells in each group", 
-  #textGrob("pie size based on of the number of cells in each group",   
-                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
-                    hjust = 2, vjust = -5, 
-                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
-
-# Draw the plot and then the caption
-grid.newpage()
-grid.draw(g)
-grid.draw(caption)
-
-```
-#consensus
-```{r}
-
-thresholds <- 0.5
-
-
-
-#Option 0
-anno_score[,consensus := NA_character_] #create consensus column
-anno_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = possible_cellstate]
-anno_score[confidence < thresholds,consensus:= "unknown"]
-anno_score[Tie == TRUE, consensus:= "tie"] #assign unknown to Tie condition
-anno_score[unknown == 1, consensus:= "unassigned"] #assign unknown to Tie condition
-
-#Option 1: 1. call unknown only when all tool are unknown 2. stocastic tie
-anno_score[,consensus := consensus_with_stochastic_of_tie] #create consensus column
-anno_score[unknown == 1, consensus:= "unassigned"]
-anno_score[confidence < thresholds,consensus:= "unassign"]
-
-
-
-anno_score$consensus <- as.factor(anno_score$consensus)
-
-
-
-table(anno_score$consensus)
-
-
-# fwrite(anno_score, file = paste("output/annotation/annotation_3celltypes",run,unknown,".csv",sep = "_"))
-# fwrite(anno_mes_score, file = paste("output/annotation/annotation_mes",run,unknown,".csv",sep = "_"))
-```
-```{r}
-
-consensus_unique <- as.vector(unique(anno_score$consensus))
-
-anno_score_meta <- merge(anno_score,data.table(gbm.meta,keep.rownames = TRUE), by = "rn")
-anno_confidence_mean <- anno_score_meta[, c(confidence_mean = mean(confidence)),
-                                    by = c("radiation", "donor_id")]
-
-anno_consensus_count <- dcast(anno_score_meta, formula = donor_id + radiation ~ consensus)
-
-
-anno_consensus_count[, n_cell:= rowSums(.SD),.SDcols = consensus_unique]
-anno_consensus_count <- merge(anno_consensus_count,anno_confidence_mean,by = c("donor_id","radiation"))
-
-setnames(anno_consensus_count, "V1", "confidence_mean")
-anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean"), measure.vars = consensus_unique,variable.name = "consensus",value.name = "count")
-
-
-#common
-anno_consensus_count_long[,per := count/sum(count),by = c("radiation","donor_id")]
-anno_consensus_count_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
-anno_consensus_count_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
-
-
-
-
-library(grid)
-library(randomcoloR)
-anno_consensus_count_long$consensus <- factor(anno_consensus_count_long$consensus ,
-                                                       levels = 
-                                                         sort(union(levels(anno_consensus_count_long$consensus),possible_cellstate_with_unassign)))
-
-
-dummy_data <- data.frame(consensus = levels(anno_consensus_count_long$consensus))
-
-
-set.seed(167)
-n <-  length(levels(anno_consensus_count_long$consensus))
-palette <- distinctColorPalette(n)
-
-p <- ggplot() +
-    geom_blank(data = dummy_data, aes(fill = consensus)) +
-    geom_col(data = anno_consensus_count_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
-  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
-  ggtitle("") +
-  coord_polar("y", start = 0) +
-  theme_void() +
-
-  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
-       fill = "Cell type") + 
-  theme(strip.text = element_text(size = 6)) +
-  scale_fill_manual(values = palette) 
-
-
-# Convert the plot to a grob
-g <- ggplotGrob(p)
-
-# Define the caption
-caption <- 
-  #textGrob("", 
-  textGrob("pie size based on square root of the number of cells in each group", 
-  #textGrob("pie size based on of the number of cells in each group",   
-                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
-                    hjust = 2, vjust = -5, 
-                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
-
-# Draw the plot and then the caption
-grid.newpage()
-grid.draw(g)
-grid.draw(caption)
-
-```
 
 
 
