@@ -1,0 +1,767 @@
+```{r}
+library(here)
+library(tibble)
+library(dplyr)
+library(data.table)
+
+```
+
+```{r}
+#Set working directory
+setwd(here())
+source("script/function.R")
+```
+```{r}
+# Parameter
+source("script/parameter.R")
+
+```
+```{r}
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
+
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+```
+```{r}
+#choose what to analyse
+
+pick <- 3
+sig <- sigs[pick]
+merge <- merges[pick]
+
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+
+
+
+possible_cellstate <- all_cellstates[
+  chosing[[pick]]
+  ]
+
+possible_cellstate_with_unknown <- c(possible_cellstate,"unknown")
+possible_cellstate_with_unassign <- c(possible_cellstate,"unassign")
+possible_cellstate_with_unassign_tie <- c(possible_cellstate,"unassign","tie")
+possible_cellstate_with_tie <- c(possible_cellstate,"tie")
+```
+
+
+
+```{r}
+### import all data
+## marker.based
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE]
+
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
+
+
+# # add full option
+# sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
+# sc.sorter$scSorter_no_unknown <- NA
+# sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+```
+
+
+```{r}
+#unknown <- unknowns[1]
+# ref-based
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run,".csv"), row.names = 1)
+#clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE]
+clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
+
+scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned","_",run,".csv"), row.names = 1)
+scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+```
+
+
+```{r}
+# Add Full option
+sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+sc.pred <- sc.pred[,2:1]
+colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+
+single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+single.r <- single.r[,2:1]
+colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+
+scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+scibet$scibet_no_unknown <- scibet$scibet #no unknown by default
+scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+
+chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+chetah$CHETAH_no_unknown <- chetah$CHETAH
+chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+
+scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
+scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+
+scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
+scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+```
+
+```{r}
+sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
+```
+
+
+```{r}
+anno <- bind_cols(sc.type, scina, clustify.r,scid)
+
+#full option
+#anno <- bind_cols(sc.type, scina, clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+
+#colnames(anno) <- paste(colnames(anno), sig, sep = "_")
+
+anno[] <- lapply(anno, function(x) gsub("\\.new$", "like", x))
+anno[] <- lapply(anno, function(x) gsub("Unknown", "unknown", x))
+anno[] <- lapply(anno, function(x) gsub("unassigned", "unknown", x))
+```
+
+```{r}
+anno
+```
+
+
+
+
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+
+all.sankey <- anno
+colnames(all.sankey) <- gsub("_no_unknown","",colnames(all.sankey))
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+pl <- pl + labs(title = paste(object, sig,run, unknown,sep = "; "))
+pl <- pl + labs(fill = "Nodes")
+pl
+```
+
+
+
+
+# agreement analysis
+```{r}
+library(foreach)
+library(doParallel)
+library(irr)
+
+anno_subtools <- anno[,1:4]
+
+col_names <- names(anno_subtools)
+
+anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) {
+  ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]])
+})
+names(anno_subtools) <- col_names
+
+
+tool_names <- colnames(anno_subtools)
+max_num_of_tools <- length(tool_names)
+
+numCores <- detectCores() - 5
+registerDoParallel(numCores)
+
+# Initialize dataframe with columns for kappa and each tool
+column_names <- c("Kappa", tool_names)
+results <- data.frame(matrix(ncol = max_num_of_tools + 1, nrow = 0))
+
+
+# Perform the analysis
+results <- foreach(i = 2:max_num_of_tools, .combine = rbind) %:% 
+  foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% {
+    kappa_val <- calculate_kappa_for_combination(anno_subtools, comb)
+    # Initialize a row with zeros for each tool
+    tool_presence <- rep(0, max_num_of_tools)
+    # Set 1 for tools present in the combination
+    tool_presence[which(tool_names %in% comb)] <- 1
+    # Combine kappa value with tool presence
+    data.frame(Kappa = kappa_val, t(tool_presence))
+  }
+
+stopImplicitCluster()
+colnames(results) <- column_names
+# Extracting the best combination based on the highest kappa value
+best_combination <- results[which.max(results$Kappa), ]
+results
+```
+
+
+```{r}
+library(ggplot2)
+results_sorted <- results[order(results$Kappa, decreasing = TRUE), ]
+rownames(results_sorted) <- NULL
+
+
+# Assuming your tool columns are everything except the first (Kappa) and last (NumOfTools)
+tool_columns <- 2:(ncol(results_sorted))
+
+# Convert each row to a binary string
+results_sorted$BinaryCode <- as.factor(apply(results_sorted[, tool_columns], 1, function(x) paste(x, collapse = "")))
+
+results_sorted$BinaryCode <- factor(results_sorted$BinaryCode, levels = unique(results_sorted$BinaryCode))
+
+limits <- 1
+# Lollipop Plot
+p_1 <- ggplot(results_sorted, aes(x = BinaryCode, y = Kappa)) +
+  geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = Kappa), color = "grey") +
+  geom_point(color = "blue", size = 3, alpha = 0.6) +
+  scale_y_continuous(limits = c(-limits, limits)) +
+  coord_flip() +
+  labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Add a legend or annotation for tool names
+# Example: Replace this with your actual tool names
+tool_names <- colnames(results_sorted[, tool_columns])
+legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n")
+p_1 <- p_1 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3)
+
+p_1
+```
+
+
+```{r}
+#donor_id wise
+
+library(parallel)
+
+
+anno_subtools <- anno[,1:4]
+
+col_names <- names(anno_subtools)
+
+anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) {
+  ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]])
+})
+names(anno_subtools) <- col_names
+
+
+n_tool <- ncol(anno_subtools)
+#n_tool <- 4
+anno_meta <- (merge(anno_subtools,gbm.meta,by = "row.names"))
+
+calculate_kappa_for_donor <- function(donor_id, data,n_tool) { 
+  # Correctly subset the data for the specific donor_id
+  subset_data <- data[data$donor_id == donor_id, 2:(n_tool +1)] #not include the first column as it is the rowname
+  # Calculate Fleiss' Kappa
+  kappa_result <- kappam.fleiss(subset_data)
+  return(kappa_result$value) # Returning just the Kappa value
+}
+# List of unique donor IDs
+donor_ids <- as.list(unique(anno_meta$donor_id))
+
+# Parallel computation of kappa values
+kappa_values <- mclapply(donor_ids, function(id) calculate_kappa_for_donor(id, anno_meta,n_tool), mc.cores = detectCores() - 1)
+
+# Combine the results into a named list or another preferred format
+names(kappa_values) <- donor_ids
+
+kappa_values_df <- data.frame(kappa_value = t(as.data.frame(kappa_values)))
+kappa_values_df
+```
+
+```{r}
+library(ggplot2)
+
+# Ensure kappa_values_df is in the correct format with donor_id and kappa_value
+kappa_values_df$donor_id <- rownames(kappa_values_df)
+
+# Convert donor_id to a factor and reorder its levels based on kappa_value
+kappa_values_df$donor_id <- factor(kappa_values_df$donor_id, levels = kappa_values_df$donor_id[order(kappa_values_df$kappa_value, decreasing = TRUE)])
+
+limits <- 0.5
+# Lollipop Plot
+ggplot(kappa_values_df, aes(x = donor_id, y = kappa_value)) +
+  geom_segment(aes(x = donor_id, xend = donor_id, y = 0, yend = kappa_value), color = "grey") +
+  geom_point(color = "blue", size = 3, alpha = 0.6) +
+  scale_y_continuous(limits = c(-limits, limits)) +
+  coord_flip() +
+  labs(x = "Donor ID", y = "Kappa Value", title = "Kappa Values by Donor ID", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+```{r}
+library(parallel)
+library(foreach)
+library(doParallel)
+
+#donor wise with combination
+
+
+anno_subtools <- anno[,1:4]
+
+col_names <- names(anno_subtools)
+
+anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) {
+  ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]])
+})
+names(anno_subtools) <- col_names
+
+# Assuming anno is already defined
+anno_meta <- merge(anno_subtools, gbm.meta, by = "row.names")
+
+
+
+
+
+tool_names <- colnames(anno[,1:4])
+max_num_of_tools <- length(tool_names)
+
+# Function to calculate kappa for a specific donor and combination of tools
+calculate_kappa_for_donor_combination <- function(donor_id, tools, data) {
+  subset_data <- data[data$donor_id == donor_id, tools]
+  kappa_result <- kappam.fleiss(subset_data)
+  return(kappa_result$value)
+}
+
+# List of unique donor IDs
+donor_ids <- unique(anno_meta$donor_id)
+
+# Register Parallel Backend
+numCores <- detectCores() - 1
+registerDoParallel(numCores)
+
+# Perform the analysis for each donor
+results_all <- foreach(donor_id = donor_ids, .combine = rbind) %do% {
+  foreach(i = 2:max_num_of_tools, .combine = rbind) %:% 
+    foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% {
+      kappa_val <- calculate_kappa_for_donor_combination(donor_id, comb, anno_meta)
+      # Initialize a row with zeros for each tool
+      tool_presence <- rep(0, max_num_of_tools)
+      # Set 1 for tools present in the combination
+      tool_presence[which(tool_names %in% comb)] <- 1
+      # Combine kappa value with tool presence and donor_id
+      data.frame(DonorID = donor_id, Kappa = kappa_val, t(tool_presence))
+    }
+}
+
+stopImplicitCluster()
+
+# Setting the column names
+column_names <- c("DonorID", "Kappa", tool_names)
+colnames(results_all) <- column_names
+
+# View the results
+results_all
+
+```
+
+
+```{r}
+# Calculate the mean (or another aggregate measure) of Kappa for each tool combination
+library(dplyr)
+aggregated_results <- results_all %>%
+  group_by_at(vars(-DonorID, -Kappa)) %>%
+  summarize(MeanKappa = mean(Kappa, na.rm = TRUE)) %>%
+  arrange(desc(MeanKappa)) %>%
+  ungroup
+
+library(dplyr)
+library(ggplot2)
+
+# Prepare the data
+aggregated_results$BinaryCode <- apply(aggregated_results[,1:4], 1, function(x) {
+  paste0(x, collapse = "")
+})
+
+# Consider taking the top N combinations for a clearer plot
+
+
+# # Bar Plot
+# ggplot(aggregated_results, aes(x =BinaryCode, y = MeanKappa)) +
+#   geom_bar(stat = "identity", fill = "steelblue") +
+#   coord_flip() +  # Flips the axes for better readability of combination names
+#   labs(x = "Tool Combination", y = "Mean Kappa Value", title = "Top Tool Combinations Across Donors") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+aggregated_results$BinaryCode <- factor(aggregated_results$BinaryCode, levels = unique(results_sorted$BinaryCode))
+
+limits <- 1
+# Lollipop Plot
+p_2 <- ggplot(aggregated_results, aes(x = BinaryCode, y = MeanKappa)) +
+  geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = MeanKappa), color = "grey") +
+  geom_point(color = "blue", size = 3, alpha = 0.6) +
+  scale_y_continuous(limits = c(-limits, limits)) +
+  coord_flip() +
+  labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value",subtitle =  paste( "unweighted by cell numbers\n ","with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Add a legend or annotation for tool names
+# Example: Replace this with your actual tool names
+tool_names <- colnames(results_sorted[, tool_columns])
+legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n")
+
+p_2 <- p_2 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3)
+
+```
+```{r}
+library(patchwork)
+p_1 + p_2
+```
+
+```{r}
+# Assuming 'results_all' is your dataframe
+# Convert donor ID to a factor for better plotting
+results_all$DonorID <- as.factor(results_all$DonorID)
+
+# Box Plot
+ggplot(results_all, aes(x = DonorID, y = Kappa)) +
+  geom_boxplot() +
+  labs(x = "Donor ID", y = "Kappa Value", title = "Distribution of Kappa Values Across Donors") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x labels for better readability
+```
+
+
+
+
+
+
+
+
+
+
+
+#calculate all stat
+
+```{r}
+##calculate score
+
+#convert wide to long
+anno_wide <- as.data.table(anno,keep.rownames = TRUE)
+anno_score_long <- melt(anno_wide, id.vars = "rn", variable.name = "tools", value.name = "cellstates")
+
+#count the calling from each tool into cellstate
+anno_score_long <- anno_score_long[,c(1,3)]
+anno_score_long[,binary := 1]
+anno_score <- dcast(anno_score_long,formula = rn ~cellstates ,value.var = "binary")
+
+
+#calculate proportion of unknown
+anno_score[,unknown := unknown/ncol(anno)]
+
+#calculate confidence score
+anno_score[, confidence := apply(.SD, 1, max)/ncol(anno), .SDcols = 2:4]
+
+#split unknown and confidence temporaly 
+anno_score_unknown <- anno_score[,.(rn,unknown,confidence)]
+anno_score <-  anno_score[,..possible_cellstate,with = FALSE]
+
+
+
+
+#order the score and rank
+anno_score[, paste0("Rank_",possible_cellstate) :=
+  as.data.table(t(apply(.SD, 1, function(x) frank(-x, ties.method = "dense")))),
+  .SDcols = possible_cellstate]
+anno_score <- cbind(anno_score_unknown,anno_score)
+
+
+# Assign Tie condition
+rank_columns <- grep("^Rank_", names(anno_score), value = TRUE)
+anno_score[, Tie := rowSums(.SD == 1) > 1, .SDcols = rank_columns]
+
+#stochastic consensus base on the number of call on that cell
+pick_cellstate_stocastic <- function(row) {
+  probs <- row / sum(row)  # Calculate probabilities based on count
+  selected_cellstate <- sample(names(row), size = 1, prob = probs)
+  return(selected_cellstate)
+}
+anno_score[, stochastic_consensus := apply(.SD, 1, pick_cellstate_stocastic), .SDcols = possible_cellstate]
+anno_score$stochastic_consensus <- as.factor(anno_score$stochastic_consensus)
+
+consensus_with_stochastic_of_tie_fn <- function(row) {
+  max_confidence <- max(row)
+  max_diseases <- names(row[row == max_confidence])
+  
+  if (length(max_diseases) == 1) {
+    # Deterministic selection when there's no tie
+    selected_disease <- max_diseases
+  } else {
+    # Stochastic selection when there is a tie
+    selected_disease <- sample(max_diseases, size = 1)
+  }
+  
+  return(selected_disease)
+}
+anno_score[, consensus_with_stochastic_of_tie := apply(.SD, 1, consensus_with_stochastic_of_tie_fn), .SDcols = possible_cellstate]
+anno_score$consensus_with_stochastic_of_tie <- as.factor(anno_score$consensus_with_stochastic_of_tie)
+
+anno_score
+```
+
+
+
+```{r}
+#plot radiation
+
+anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_count_sum <- anno_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
+                                    .SDcols = possible_cellstate,
+                                    by = c("radiation")]
+
+anno_count_sum_long <-  melt(anno_count_sum,id.vars = c("radiation","confidence_mean","n_cell"), measure.vars = possible_cellstate,variable.name = "consensus",value.name = "count")
+
+anno_count_sum_long[,per := count/sum(count),by = c("radiation")]
+
+anno_count_sum_long <- anno_count_sum_long[order( radiation,consensus)]
+
+anno_count_sum_long[,n_cell := as.integer(n_cell)]
+anno_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+
+
+
+
+
+library(grid)
+library(randomcoloR)
+
+set.seed(167)
+n <-  length(unique(anno_count_sum_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot(anno_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus, width = n_cell)) +
+  geom_col() +
+  facet_nested_wrap(~ rad_con,strip = strip_nested(size = "variable")) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = "all donors; control vs radiated\n (confidence score)",
+       fill = "Cell type") +
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette)
+
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- textGrob("pie size based on  the number of cells in each group",
+                    x = unit(1, "npc"), y = unit(0.05, "npc"),
+                    hjust = 2, vjust = -5,
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+
+```
+
+
+```{r}
+# plot radiation + donor_id
+anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_count_sum <- anno_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
+                                    .SDcols = c(possible_cellstate), 
+                                    by = c("radiation", "donor_id")]
+
+anno_count_sum_long <-  melt(anno_count_sum,id.vars = c("radiation","donor_id","confidence_mean","n_cell"), measure.vars = c(possible_cellstate),variable.name = "consensus",value.name = "count")
+
+anno_count_sum_long[,per := count/sum(count),by = c("radiation","donor_id")]
+
+anno_count_sum_long <- anno_count_sum_long[order(donor_id, radiation,consensus)]
+
+anno_count_sum_long[,n_cell := as.integer(n_cell)]
+anno_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_count_sum_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+
+
+library(grid)
+library(randomcoloR)
+
+set.seed(167)
+n <-  length(unique(anno_count_sum_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot(anno_count_sum_long, aes(x = "", y = per, fill = consensus)) +
+#p <- ggplot(anno_count_sum_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +  
+# p <- ggplot(anno_count_sum_long, aes(x = (n_cell)/2, y = per, fill = consensus, width = (n_cell))) +  
+  geom_col() +
+  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+  #facet_wrap(~ donor_id + rad_con) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
+       fill = "Cell type") + 
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette) 
+
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- 
+  textGrob("", 
+  #textGrob("pie size based on squre root of the number of cells in each group", 
+  #textGrob("pie size based on of the number of cells in each group",   
+                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
+                    hjust = 2, vjust = -5, 
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+```
+#consensus
+```{r}
+
+thresholds <- 0.5
+
+
+
+#Option 0
+anno_score[,consensus := NA_character_] #create consensus column
+anno_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = possible_cellstate]
+anno_score[confidence < thresholds,consensus:= "unknown"]
+anno_score[Tie == TRUE, consensus:= "tie"] #assign unknown to Tie condition
+anno_score[unknown == 1, consensus:= "unassigned"] #assign unknown to Tie condition
+
+#Option 1: 1. call unknown only when all tool are unknown 2. stocastic tie
+anno_score[,consensus := consensus_with_stochastic_of_tie] #create consensus column
+anno_score[unknown == 1, consensus:= "unassigned"]
+anno_score[confidence < thresholds,consensus:= "unassign"]
+
+
+
+anno_score$consensus <- as.factor(anno_score$consensus)
+
+
+
+table(anno_score$consensus)
+
+
+# fwrite(anno_score, file = paste("output/annotation/annotation_3celltypes",run,unknown,".csv",sep = "_"))
+# fwrite(anno_mes_score, file = paste("output/annotation/annotation_mes",run,unknown,".csv",sep = "_"))
+```
+```{r}
+
+consensus_unique <- as.vector(unique(anno_score$consensus))
+
+anno_score_meta <- merge(anno_score,data.table(gbm.meta,keep.rownames = TRUE), by = "rn")
+anno_confidence_mean <- anno_score_meta[, c(confidence_mean = mean(confidence)),
+                                    by = c("radiation", "donor_id")]
+
+anno_consensus_count <- dcast(anno_score_meta, formula = donor_id + radiation ~ consensus)
+
+
+anno_consensus_count[, n_cell:= rowSums(.SD),.SDcols = consensus_unique]
+anno_consensus_count <- merge(anno_consensus_count,anno_confidence_mean,by = c("donor_id","radiation"))
+
+setnames(anno_consensus_count, "V1", "confidence_mean")
+anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean"), measure.vars = consensus_unique,variable.name = "consensus",value.name = "count")
+
+
+#common
+anno_consensus_count_long[,per := count/sum(count),by = c("radiation","donor_id")]
+anno_consensus_count_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_consensus_count_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+
+
+
+library(grid)
+library(randomcoloR)
+anno_consensus_count_long$consensus <- factor(anno_consensus_count_long$consensus ,
+                                                       levels = 
+                                                         sort(union(levels(anno_consensus_count_long$consensus),possible_cellstate_with_unassign)))
+
+
+dummy_data <- data.frame(consensus = levels(anno_consensus_count_long$consensus))
+
+
+set.seed(167)
+n <-  length(levels(anno_consensus_count_long$consensus))
+palette <- distinctColorPalette(n)
+
+p <- ggplot() +
+    geom_blank(data = dummy_data, aes(fill = consensus)) +
+    geom_col(data = anno_consensus_count_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
+  facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+
+  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
+       fill = "Cell type") + 
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = palette) 
+
+
+# Convert the plot to a grob
+g <- ggplotGrob(p)
+
+# Define the caption
+caption <- 
+  #textGrob("", 
+  textGrob("pie size based on square root of the number of cells in each group", 
+  #textGrob("pie size based on of the number of cells in each group",   
+                    x = unit(1, "npc"), y = unit(0.05, "npc"), 
+                    hjust = 2, vjust = -5, 
+                    gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
+
+# Draw the plot and then the caption
+grid.newpage()
+grid.draw(g)
+grid.draw(caption)
+
+```
+
+
+

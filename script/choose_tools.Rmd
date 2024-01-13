@@ -1,8 +1,8 @@
 
 ```{r}
-# library(renv)
-# renv::init()
-# BiocManager::install()
+#library(renv)
+#renv::init()
+
 ```
 
 ```{r}
@@ -44,7 +44,6 @@ run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
 
 
-possible_3celltpyes <- c("AClike","NPClike","OPClike","unknown","tie")
 possible_cellstate <- c("AClike","NPClike","OPClike","MESlike","unknown","tie")
 
 ```
