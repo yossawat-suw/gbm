@@ -12,6 +12,9 @@ library(parallel)
 library(tidyverse)
 library(Seurat)
 source("script/function.R")
+
+
+
 ```
 
 
@@ -40,20 +43,20 @@ runs <- c("each","whole")
 
 #choose parameter
 ```{r}
-celltype <- celltypes[4]
+celltype <- celltypes[2]
 
 #mes > 1
 # merge NPC with OPC and still calculate MES seperatly
 #3 celltype > 3
 #4 celltype > 4
 
-pick <- 6
+pick <- 4
 
 # pick which celltype to be analyse
 chosen_celltypes <- all_celltypes[chosing[[pick]]]
 merge <- merges[pick]
 
-run_each <- run_eachs[1]
+run_each <- run_eachs[2]
 
 if (run_each) {
   run <- runs[1]
@@ -99,68 +102,77 @@ if (run_each) {
 
 ```
 
-#clustifyr  --> -->
-```{r}
-library(clustifyr)
-```
+<!-- #clustifyr   -->
+<!-- ```{r} -->
+<!-- library(clustifyr) -->
+<!-- ``` -->
 
 
-```{r}
-neftel.smt <- neftel.smt.original
-new_ref_matrix <- seurat_ref(
-  seurat_object = neftel.smt,        # SeuratV3 object
-  cluster_col = celltype,    # name of column in meta.data containing cell identities
-)
-```
+<!-- ```{r} -->
+<!-- neftel.smt <- neftel.smt.original -->
+<!-- new_ref_matrix <- seurat_ref( -->
+<!--   seurat_object = neftel.smt,        # SeuratV3 object -->
+<!--   cluster_col = celltype,    # name of column in meta.data containing cell identities -->
+<!-- ) -->
+<!-- ``` -->
 
-```{r}
-gbm.list <- gbm.list.original
-```
+<!-- ```{r} -->
+<!-- gbm.list <- gbm.list.original -->
+<!-- ``` -->
 
-```{r}
-library(parallel)
-n.cores <- 3
-system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
-  x <- NormalizeData(x,verbose = FALSE)
-  allgenes <- rownames(x)
-  x <- FindVariableFeatures(x,verbose = FALSE)
-  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
-  x <- RunPCA(x, verbose = FALSE)
-  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
-  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- n.cores <- 3 -->
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose = FALSE) -->
+<!--   allgenes <- rownames(x) -->
+<!--   x <- FindVariableFeatures(x,verbose = FALSE) -->
+<!--   x <- ScaleData(x, features = allgenes ,verbose = FALSE) -->
+<!--   x <- RunPCA(x, verbose = FALSE) -->
+<!--   x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE) -->
+<!--   x <- FindClusters(x, resolution = 1, verbose = FALSE) -->
 
-  res <- clustify(
-          input = x,
-          ref_mat = new_ref_matrix,
-          cluster_col = "RNA_snn_res.1",
-          obj_out = TRUE,threshold = 0,verbose = TRUE )
-  return(res@meta.data[c("type","r")])
-}))
-```
+<!--   res <- clustify( -->
+<!--           input = x, -->
+<!--           ref_mat = new_ref_matrix, -->
+<!--           cluster_col = "RNA_snn_res.1", -->
+<!--           obj_out = TRUE,threshold = 0,verbose = TRUE ) -->
+<!--   return(res@meta.data[c("type","r")]) -->
+<!-- })) -->
+<!-- ``` -->
 
-```{r}
-names(gbm.list.res) <- NULL
-res.ref.df <- NULL
-res.ref.df <- do.call(rbind,gbm.list.res)
-res.ref.df <- res.ref.df[,1,drop =FALSE]
-colnames(res.ref.df) <- c("clustifyr_ref")
-res.ref.df$clustifyr_ref_no_unknown <- NA
-```
+<!-- ```{r} -->
+<!-- names(gbm.list.res) <- NULL -->
+<!-- res.ref.df <- NULL -->
+<!-- res.ref.df <- do.call(rbind,gbm.list.res) -->
+<!-- res.ref.df <- res.ref.df[,1,drop =FALSE] -->
+<!-- colnames(res.ref.df) <- c("clustifyr_ref") -->
+<!-- res.ref.df$clustifyr_ref_no_unknown <- NA -->
+<!-- ``` -->
 
-```{r}
-write.csv(res.ref.df,paste0("output/clustifyr_",object,"_",merge,"_",run,".csv"),row.names = TRUE)
-```
+<!-- ```{r} -->
+<!-- write.csv(res.ref.df,paste0("output/clustifyr_",object,"_",merge,"_",run,".csv"),row.names = TRUE) -->
+<!-- ``` -->
 
-```{r}
-unloadNamespace("clustifyr")
-rm(new_ref_matrix,gbm.list.res,res.ref.df,neftel.smt)
-gc()
-```
+<!-- ```{r} -->
+<!-- unloadNamespace("clustifyr") -->
+<!-- rm(new_ref_matrix,gbm.list.res,res.ref.df,neftel.smt) -->
+<!-- gc() -->
+<!-- ``` -->
 
 #scID without "unassigned" -->
 ```{r}
 library(MASS)
 library(scID)
+
+require(devtools)
+if (!requireNamespace("biomod2", quietly = TRUE) || packageVersion("biomod2") != "3.5.1") {
+  if (requireNamespace("biomod2", quietly = TRUE)) {
+    remove.packages("biomod2")
+  }
+  install.packages("biomod2", version = "3.5.1", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+}
+
 library(biomod2)
 ```
 
@@ -187,19 +199,17 @@ gbm.list <- gbm.list.original
 ```{r}
 print("find_markers_edited")
 
-markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
+#markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
+
+
+#saveRDS(markers.glob,paste0("output/markers_glob_scID",merge))
+markers.glob <- readRDS(paste0("output/markers_glob_scID",merge))
+
 ```
 
 
 ```{r}
-saveRDS(markers.glob,paste0("output/markers_glob_scID",merge))
-#markers.glob <- readRDS(paste0("output/markers_glob_scID",merge))
 
-```
-
-```{r}
-gc()
-library(parallel)
 n.cores <- 2
 #n.cores <- parallel::detectCores()
 # n.cores <- parallel::detectCores() - 3
@@ -214,13 +224,18 @@ gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
   # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
 
   scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
+ # scID_output <- scid_multiclass(markers = markers.glob, target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
 
   #  gc()
   return(scID_output)
 })
 
 print("finish")
+
+
 ```
+
+
 ```{r}
 gc()
 ```
@@ -600,7 +615,6 @@ cell.id <- lapply(gbm.list.res, "[[", 1)
 gbm.list.res <- lapply(gbm.list.res, "[[", 2)
 
 cell.id <- as.character(unlist(cell.id))
-cell.id
 gbm.list.res <- as.character(unlist(gbm.list.res))
 ```
 
@@ -747,10 +761,181 @@ system.time(gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = functio
 }))
 
 system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
-  x <- scPredict(x, reference)
+  #x <- scPredict(x, DietSeurat(reference,assays = "RNA"))
+  x <- scPredict_edited(x, DietSeurat(reference,assays = "RNA"))
 }))
 ```
 
+
+```{r}
+
+```
+
+
+```{r}
+.make_names <- function(x){
+  x <- gsub("\\+", "_plus", x)
+  x <- gsub("\\-", "_minus", x)
+  x <- make.names(x)
+}
+scPredict_edited <- function (new, reference, threshold = 0.55, max.iter.harmony = 20, 
+    recompute_alignment = TRUE, seed = 66) 
+{
+    if (!(is(reference, "Seurat") | is(reference, "scPred"))) 
+        stop("'object' must be of class 'scPred' or 'Seurat'")
+    if (is(reference, "Seurat")) {
+        spmodel <- reference@misc$scPred
+    }
+    else {
+        spmodel <- reference
+    }
+    if (is.null(spmodel)) 
+        stop("No feature space has been determined!")
+    if (!length(spmodel@train)) 
+        stop("No models have been trained!")
+    if (!is(new, "Seurat")) 
+        stop("New data must be a Seurat object")
+    new <- project_query_edited(new, reference = spmodel, max.iter.harmony = max.iter.harmony, 
+        recompute_alignment = recompute_alignment, seed = seed)
+    new_embeddings_aligned <- Embeddings(new[["scpred"]])
+    colnames(new_embeddings_aligned) <- colnames(spmodel@cell_embeddings)
+    cellTypeModelNames <- names(spmodel@features)
+    .predictCellClass <- function(cellType, spmodel, testEmbeddings) {
+        features <- as.character(spmodel@features[[cellType]]$feature)
+        model <- spmodel@train[[cellType]]
+        prediction <- predict(model, newdata = scPred:::subsetMatrix(testEmbeddings, 
+            features), type = "prob")
+        rownames(prediction) <- rownames(testEmbeddings)
+        prediction[, 1, drop = FALSE]
+    }
+    cat(crayon::green(cli::symbol$record, " Classifying cells...\n"))
+    res <- sapply(cellTypeModelNames, .predictCellClass, spmodel, 
+        new_embeddings_aligned)
+    res <- as.data.frame(res)
+    colnames(res) <- cellTypeModelNames
+    rownames(res) <- colnames(new)
+    classes <- cellTypeModelNames
+    if (length(cellTypeModelNames) == 1) {
+        metadata <- get_metadata(spmodel)
+        cellClasses <- levels(metadata$pvar)
+        res_comp <- 1 - res[, 1]
+        negClass <- cellClasses[cellClasses != names(res)]
+        res[[negClass]] <- res_comp
+    }
+    max_props <- as.data.frame(t(apply(res, 1, function(x) c(index = which.max(x), 
+        max = x[which.max(x)]))))
+    names(max_props) <- c("index", "max")
+    max_props$generic_class <- names(res)[max_props$index]
+    res <- cbind(res, max_props)
+    pred <- ifelse(res$max > threshold, res$generic_class, "unassigned")
+    names(pred) <- colnames(new)
+    res$prediction <- pred
+    res$index <- NULL
+    res$no_rejection <- res$generic_class
+    res$generic_class <- NULL
+    names(res) <- .make_names(paste0("scpred_", names(res)))
+    new <- AddMetaData(new, res)
+    cat(crayon::green("DONE!\n"))
+    new
+}
+project_query_edited <- function (new, reference, max.iter.harmony = 20, recompute_alignment = TRUE, 
+    seed = 66, ...) 
+{
+    if (!(is(reference, "Seurat") | is(reference, "scPred"))) 
+        stop("'object' must be of class 'scPred' or 'Seurat'")
+    if (is(reference, "Seurat")) {
+        spmodel <- reference@misc$scPred
+    }
+    else {
+        spmodel <- reference
+    }
+    if (is.null(spmodel)) 
+        stop("No feature space has been determined!")
+    if (!is(new, "Seurat")) 
+        stop("New data must be a Seurat object")
+    if ("scpred" %in% names(new@reductions)) {
+        if (recompute_alignment) {
+            alignment <- TRUE
+            cat(crayon::yellow(cli::symbol$figure_dash, "Data has already been aligned to a reference.\n"), 
+                sep = "")
+            cat(crayon::yellow(cli::symbol$sup_plus, "Skip data alignment using `recompute.alignment = FALSE`.\n"), 
+                sep = "")
+        }
+        else {
+            alignment <- FALSE
+        }
+    }
+    else {
+        alignment <- TRUE
+    }
+    if (alignment) {
+        cat(crayon::green(cli::symbol$record, " Matching reference with new dataset...\n"))
+        ref_loadings <- spmodel@feature_loadings
+        ref_embeddings <- spmodel@cell_embeddings
+        new_features <- rownames(new)
+        reference_features <- rownames(ref_loadings)
+        shared_features <- intersect(reference_features, new_features)
+        cat(crayon::cyan("\t", cli::symbol$line, paste(length(reference_features), 
+            "features present in reference loadings\n")))
+        cat(crayon::cyan("\t", cli::symbol$line, paste(length(shared_features), 
+            "features shared between reference and new dataset\n")))
+        cat(crayon::cyan("\t", cli::symbol$line, paste0(round(length(shared_features)/length(reference_features) * 
+            100, 2), "% of features in the reference are present in new dataset\n")))
+        ref_loadings <- ref_loadings[shared_features, ]
+        new_data <- GetAssayData(new, layer = "data")[shared_features, 
+            ]
+        means <- spmodel@scaling$means
+        stdevs <- spmodel@scaling$stdevs
+        new_data <- Matrix::t(new_data)
+        names(means) <- names(stdevs) <- rownames(spmodel@scaling)
+        means <- means[shared_features]
+        stdevs <- stdevs[shared_features]
+        i <- stdevs == 0
+        if (any(i)) {
+            warning(paste0(sum(i), " features have zero variance but are present in the feature loadings. \nDid you subset or integrated this data before?"))
+            cat(crayon::yellow("Removing zero-variance genes from projection\n"))
+            new_data <- new_data[, !i]
+            ref_loadings <- ref_loadings[!i, ]
+            means <- means[!i]
+            stdevs <- stdevs[!i]
+        }
+        scaled_data <- scale(new_data, means, stdevs)
+        new_embeddings <- scaled_data %*% ref_loadings
+        dataset <- factor(c(rep("reference", nrow(ref_embeddings)), 
+            rep("new", nrow(new_embeddings))), levels = c("reference", 
+            "new"))
+        rownames(ref_embeddings) <- paste0("ref_", rownames(ref_embeddings))
+        rownames(new_embeddings) <- paste0("new_", rownames(new_embeddings))
+        eigenspace <- as.data.frame(rbind(ref_embeddings, new_embeddings))
+        meta_data <- data.frame(rownames(eigenspace), dataset = dataset)
+        cat(crayon::green(cli::symbol$record, " Aligning new data to reference...\n"))
+        set.seed(seed)
+        harmony_embeddings <- harmony::HarmonyMatrix(eigenspace, meta_data, 
+            "dataset", do_pca = FALSE, reference_values = "reference", 
+            max.iter.harmony = max.iter.harmony, ...)
+        new_embeddings_aligned <- harmony_embeddings[dataset == 
+            "new", , drop = FALSE]
+    }
+    else {
+        new_embeddings_aligned <- Embeddings(new, reduction = "scpred")
+        colnames(new_embeddings_aligned) <- gsub("scpred_", spmodel@reduction_key, 
+            colnames(new_embeddings_aligned))
+    }
+    rownames(new_embeddings_aligned) <- gsub("^new_", "", rownames(new_embeddings_aligned))
+    new@reductions[["scpred"]] <- CreateDimReducObject(embeddings = new_embeddings_aligned, 
+        key = "scpred_", assay = DefaultAssay(object = new))
+    if (recompute_alignment) {
+        rownames(new_embeddings) <- gsub("^new_", "", rownames(new_embeddings))
+        new@reductions[["scpred_projection"]] <- CreateDimReducObject(embeddings = new_embeddings, 
+            key = "Projection_", assay = DefaultAssay(object = new))
+    }
+    new
+}
+```
+
+```{r}
+
+```
 
 ```{r}
 each.meta.all <- data.frame()

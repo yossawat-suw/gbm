@@ -1,0 +1,649 @@
+
+```{r}
+# library(renv)
+# renv::init()
+# BiocManager::install()
+```
+
+```{r}
+library(dplyr)
+library(here)
+library(tidyr)
+library(tibble)
+library(easyCODA)
+#library(zCompositions) it will interfere with dplyr select function
+library(topsis)
+library(ggplot2)
+```
+
+
+```{r}
+#Set working directory
+setwd(here())
+source("script/function.R")
+```
+```{r}
+
+# Parameter
+# cell input to be analyse
+
+object <- "all"
+
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
+
+
+
+# For reference based
+merges <- c("4_merge_metamodules_mes","2_merge_metamodules",  "4_merge_metamodules_3celltypes","4_merge_metamodules","npcopc_ac_mes","npcopc_acmes")
+
+
+unknowns <- c("","_no_unknown")
+
+
+run_eachs <- c(TRUE,FALSE)
+runs <- c("each","whole")
+
+
+possible_3celltpyes <- c("AClike","NPClike","OPClike","unknown","tie")
+possible_cellstate <- c("AClike","NPClike","OPClike","MESlike","unknown","tie")
+
+```
+```{r}
+#set unknown 
+unknown <- unknowns[1]
+
+#set whole vs each
+run_each <- run_eachs[1]
+
+#3 celltype
+
+pick <- 3
+
+sig <- sigs[pick]
+merge <- merges[pick]
+
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+```
+
+```{r}
+gbm.meta <- read.csv("output/gbm_meta.csv",row.names = 1)
+gbm.meta
+```
+
+```{r}
+# import all data
+# marker.based
+sc.type <- read.csv(paste0("output/scType_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE]
+
+scina <- read.csv(paste0("output/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1)
+scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
+
+
+# add full option
+sc.sorter <- read.csv(paste0("output/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
+sc.sorter$scSorter_no_unknown <- NA
+sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+```
+
+
+```{r}
+#unknown <- unknowns[1]
+# ref-based
+clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run,".csv"), row.names = 1)
+#clustify.r <- clustify.r[,paste0("clustifyr_ref",unknown) ,drop = FALSE]
+clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
+
+scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned","_",run,".csv"), row.names = 1)
+scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+
+
+```
+
+
+```{r}
+#Add Full option
+sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+sc.pred <- sc.pred[,2:1]
+colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
+sc.pred <- sc.pred[,paste0("scPred",unknown) ,drop = FALSE]
+
+single.r <- read.csv(paste0("output/singleR_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+single.r <- single.r[,2:1]
+colnames(single.r) <- c("singleR",paste0("singleR",unknowns[2]))
+single.r[is.na(single.r$singleR),"singleR"] <- "unknown"
+single.r <- single.r[,paste0("singleR",unknown) ,drop = FALSE]
+
+scibet <- read.csv(paste0("output/scibet_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+scibet$scibet_no_unknown <- scibet$scibet #no unknown by default
+scibet <- scibet[,paste0("scibet",unknown) ,drop = FALSE]
+
+chetah <- read.csv(paste0("output/CHETAH_", object, "_", merge, "_",run, ".csv"), row.names = 1)
+chetah$CHETAH_no_unknown <- chetah$CHETAH
+chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
+
+scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
+scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
+
+scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
+scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
+scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
+```
+
+```{r}
+#sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
+```
+
+
+```{r}
+anno_cellstate <- bind_cols(sc.type, scina, clustify.r,scid)
+
+#full option
+anno_cellstate <- bind_cols(sc.type, scina, sc.sorter,clustify.r,scid,sc.pred,scibet,chetah,single.r,scmap_cluster,scmap_cell)
+
+#colnames(anno_cellstate) <- paste(colnames(anno_cellstate), sig, sep = "_")
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("NPC_OPC$", "NPC_OPClike", x))
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("AC$", "AClike", x))
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("MES$", "MESlike", x))
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("AC_MES$", "AC_MESlike", x))
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("\\.new$", "like", x))
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("Unknown", "unknown", x))
+anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("unassigned", "unknown", x))
+
+```
+
+```{r}
+anno_cellstate_meta <- cbind(gbm.meta[,c("donor_radiation","donor_id","radiation")],anno_cellstate)
+anno_cellstate_meta$donor_radiation <- as.factor(anno_cellstate_meta$donor_radiation)
+
+anno_cellstate_meta
+```
+
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+library(patchwork)
+library(ggtext)
+
+
+
+
+my_colors <- c("red", "green", "blue", "gray", "purple", "orange")
+plots_list <- list()
+
+for (i in levels(anno_cellstate_meta$donor_radiation)) {
+  anno_cellstate_meta_each <- anno_cellstate_meta[anno_cellstate_meta$donor_radiation == i,]
+  anno_cellstate_meta_each <- anno_cellstate_meta_each %>% select(-1:-3)
+  all.sankey <- anno_cellstate_meta_each
+  colnames(all.sankey) <- gsub("_no_unknown","",colnames(all.sankey))
+  df <- all.sankey %>%
+    make_long(colnames(all.sankey))
+
+  # Chart 1
+  pl <- ggplot(df, aes(
+    x = x,
+    next_x = next_x,
+    node = node,
+    next_node = next_node,
+    fill = factor(node),
+    label = node
+  ))
+  pl <- pl + geom_sankey(
+    flow.alpha = 0.5,
+    node.color = "black",
+    show.legend = FALSE
+  )
+  #pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+  pl <- pl + theme_bw()
+  pl <- pl + theme(legend.position = "none")
+  pl <- pl + theme(
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    panel.grid = element_blank()
+  )
+
+  pl <- pl + labs(subtitle = paste(i,"; ",
+                                   round(nrow(anno_cellstate_meta_each)*100/nrow(anno_cellstate_meta),digits = 2),"%",
+                                   sep = ""))
+  pl <- pl + labs(fill = "Nodes")
+  pl <- pl + scale_fill_manual(values = my_colors)
+  plots_list[[i]] <- pl
+}
+
+combined_plot <- wrap_plots(plots_list, ncol = 6)
+
+
+# Assuming 'my_colors' is your color vector and 'df' is your data frame
+# Map colors to factor levels
+color_mapping <- setNames(my_colors, levels(factor(df$node)))
+
+# Construct the caption string dynamically
+caption_text <- paste(sapply(names(color_mapping), function(node) {
+  sprintf("<span style='color: %s;'>%s</span>", color_mapping[node], node)
+}), collapse = " ")
+
+combined_plot + plot_annotation(
+    title = paste0(paste(setdiff(levels(factor(df$node)),"unknown"),collapse = ", ") ," cell states","; ",unknown,"; ",run),
+    subtitle = caption_text,
+    caption = paste(colnames(anno_cellstate),collapse = "; "),
+    theme = theme(plot.subtitle = element_markdown())
+)
+```
+
+#Choose tools: start from 10/ Jan/ 24
+```{r}
+anno_cellstate_meta_control <- anno_cellstate_meta[,-1] %>%
+  filter(radiation == "control") %>%
+  select(!c(radiation))
+unique_tool <- unique(
+  unlist(
+  anno_cellstate_meta_control[,!colnames(anno_cellstate_meta_control) %in% "donor_id"]
+  )
+  )
+unique_donor_id <- unique(anno_cellstate_meta_control$donor_id)
+
+unique_tool_donor_id <- length(unique_tool)*length(unique_donor_id)
+
+count_all_list <- list()
+count_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
+prob_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
+for (i in 2:ncol(anno_cellstate_meta_control)) {
+  anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c(1,i)] 
+  # anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c("donor_id","scSorter")] 
+  
+  # anno_cellstate_meta_eachtool[,2] <- factor(anno_cellstate_meta_eachtool[,2],levels = possible_cellstate[1:5]) 
+  anno_cellstate_meta_eachtool[,2] <- factor(anno_cellstate_meta_eachtool[,2],levels = unique_tool) 
+
+  count_tool_alldonor <- data.frame()
+  prob_tool_alldonor <- data.frame()
+  for (q in unique(anno_cellstate_meta_eachtool$donor_id)) {
+    anno_cellstate_meta_eachtool_eachdonor <- anno_cellstate_meta_eachtool[anno_cellstate_meta_eachtool$donor_id == q,]
+    count_tool <- as.data.frame(table(anno_cellstate_meta_eachtool_eachdonor[,2]))
+    #count_tool[,2] <- count_tool[,2]/nrow(anno_cellstate_meta_eachtool_eachdonor)
+    
+    
+    tool_name <- colnames(anno_cellstate_meta_eachtool_eachdonor)[2]
+    colnames(count_tool) <- c("cellstate",tool_name)
+    count_tool$donor_id <- rep(q,times = nrow(count_tool))
+    count_tool_alldonor <- rbind(count_tool_alldonor,count_tool)
+    count_tool_alldonor <- count_tool_alldonor %>% arrange(donor_id,cellstate)
+    
+    prob_tool <- count_tool
+    prob_tool[,2] <- prob_tool[,2]/nrow(anno_cellstate_meta_eachtool_eachdonor)
+    prob_tool_alldonor <- rbind(prob_tool_alldonor,prob_tool)
+    prob_tool_alldonor <- prob_tool_alldonor %>% arrange(donor_id,cellstate)
+    
+    count_tool_alldonor_wide <- spread(count_tool_alldonor, donor_id, tool_name)
+    count_tool_alldonor_wide <- column_to_rownames(count_tool_alldonor_wide,var = "cellstate")
+    count_tool_alldonor_wide <- data.frame(t(count_tool_alldonor_wide))
+    count_all_list[[tool_name]] <- count_tool_alldonor_wide
+    
+    
+  }
+  count_all <- cbind(count_all,count_tool_alldonor[,2,drop = FALSE])
+  prob_all <- cbind(prob_all,prob_tool_alldonor[,2,drop = FALSE])
+}
+
+count_all <- cbind(count_tool_alldonor[,c(1,3)],count_all)
+prob_all <- cbind(prob_tool_alldonor[,c(1,3)],prob_all)
+```
+
+```{r}
+#exclude unknown
+count_all_nounknown_list <- lapply(count_all_list,function(x){
+  x <- x %>% select(-unknown)
+})
+
+prob_all_nounknown <- lapply(count_all_nounknown_list,function(x){
+  x <- x/rowSums(x) 
+})
+
+count_all_nounknown_list
+prob_all_nounknown
+```
+
+
+
+
+```{r}
+#unknown proportion
+
+prob_all_unknown_list <- lapply(count_all_list,function(x){
+  (x$unknown)/rowSums(x)
+})
+prob_all_unknown_df <- as.data.frame(prob_all_unknown_list)
+
+
+prob_all_unknown_mean <- apply(prob_all_unknown_df,2,mean)
+prob_all_unknown_median <- apply(prob_all_unknown_df,2,median)
+
+prob_all_unknown_pooled <- lapply(count_all_list,function(x){
+  (sum(x$unknown))/sum(x)
+})
+
+```
+
+
+
+```{r}
+impute_fn <- function(x) {
+  lapply(x, function(x){
+  if (any(x == 0)) {
+    return(zCompositions::cmultRepl(x,z.warning = 0.99,label = 0,method = "SQ",output = "p-counts"))
+  } else {
+    return(x)
+  }
+})
+}
+
+count_all_list_imputed <- impute_fn(count_all_list)
+count_all_nounknown_list_imputed <- impute_fn(count_all_nounknown_list)
+```
+```{r}
+#convert count_imputed to prob_imputed
+count_to_prob_fn <- function(x) {
+  lapply(x, function(x) {
+  data.frame(t(apply(x,1,function(x) x/sum(x))))
+})
+}
+prob_all_list_imputed <- count_to_prob_fn(count_all_list_imputed)
+prob_all_nounknown_list_imputed <- count_to_prob_fn(count_all_nounknown_list_imputed)
+```
+
+
+
+```{r}
+#calculate clr
+prob_all_list_imputed_clr <- lapply(prob_all_list_imputed, CLR)
+prob_all_nounknown_list_imputed_clr <- lapply(prob_all_nounknown_list_imputed, CLR)
+```
+
+
+
+
+```{r}
+#calculate log variance
+lrv_list <- lapply(count_all_list_imputed_clr, LR.VAR)
+lrv_nounknown_list <- lapply(prob_all_nounknown_list_imputed_clr, LR.VAR)
+```
+
+
+
+
+```{r}
+#choose best tool
+lrv_vec <- unlist(lrv_list)
+names(lrv_vec) <- names(lrv_list)
+
+lrv_nounknown_vec <- unlist(lrv_nounknown_list)
+names(lrv_nounknown_vec) <- names(lrv_nounknown_list)
+
+tools_matric <- data.frame(lrv = lrv_vec, 
+                           lrv_nounknown = lrv_nounknown_vec,
+                           prob_known_mean = (1-prob_all_unknown_mean),
+                           prob_known_median = (1-prob_all_unknown_median),
+                           prob_known_pooled = (1-unlist(prob_all_unknown_pooled)))
+
+
+tools_matric
+```
+
+```{r}
+library(MCDA)
+score_name <- colnames(tools_matric)
+score_name
+```
+
+
+```{r}
+weights <- setNames(c(2,2,1,1,1), colnames(tools_matric))
+impacts <- c("+","+","+","+","+") # For topsis
+
+pick <- c(2,3)
+```
+
+
+```{r}
+#Topsis
+tools_topsis_score <- topsis(decision = as.matrix(tools_matric[,score_name[pick]]), weights = weights[pick], impacts = impacts[pick])
+
+tools_topsis_score$alt.row <- rownames(tools_matric)
+
+colnames(tools_topsis_score)[1] <- "tool"
+
+tools_topsis_score_metric <- merge(tools_topsis_score,rownames_to_column(tools_matric,var = "tool"),by = "tool")
+
+tools_topsis_score_metric <- tools_topsis_score_metric %>% arrange(rank)
+
+tools_topsis_score_metric
+
+topsis <- column_to_rownames(tools_topsis_score,var = "tool")
+colnames(topsis)[1] <- "topsis"
+topsis <- topsis[,-2,drop = FALSE]
+```
+
+```{r}
+# MCMD: weightedSum 
+normalizationtypes <- rep("rescaling",times = ncol(tools_matric))
+names(normalizationtypes) <- score_name
+
+tools_matric_norm <- normalizePerformanceTable(
+  tools_matric, normalizationTypes = normalizationtypes,
+  criteriaIDs = score_name)
+
+weightedSum <- data.frame(weightedSum = weightedSum(tools_matric_norm,
+            criteriaWeights = weights[pick],
+            criteriaIDs = score_name[pick]))
+
+weightedSum
+```
+
+
+
+```{r}
+# "waspasR" 
+library("waspasR")
+# tools_matric <- tools_matric %>% select(-unknown_mean_weighted_revert)
+# tools_matric$unknown_mean_weighted_revert <- 1 -tools_matric$unknown_mean_weighted
+
+flags_input <- ifelse(impacts == "+", "B", "C")
+
+waspas_df <- rbind(t(data.frame(F = flags_input[pick],
+           W = weights[pick]/sum(weights[pick]))),
+           C = colnames(tools_matric)[pick],
+      tools_matric[pick])
+
+waspas_df <- as.tibble(rownames_to_column(waspas_df,var = "tool"))
+
+waspas_raw <- waspasR_edited(waspas_df,lambda = 0.5)
+waspas_raw
+waspas <- column_to_rownames(waspas_raw,var = "Alternative") 
+waspas <- waspas[!rownames(waspas)%in% c("W","F"),c("WSM_Rank","WPM_Rank","WASPAS_Rank")] 
+waspas
+```
+
+```{r}
+topsis
+weightedSum
+waspas
+```
+
+
+```{r}
+metric <- cbind(topsis,weightedSum,waspas)
+
+metric <- metric %>% arrange(desc(topsis))
+
+metric
+```
+
+
+
+```{r}
+tool <- "tool"
+proportion <- "proportion"
+gathercols <- colnames(prob_all)[!colnames(prob_all) %in% c("cellstate","donor_id")]
+
+prob_all_long <- gather(prob_all, tool, proportion, gathercols)
+prob_all_long$tool <- factor(prob_all_long$tool,levels = rownames(metric))
+
+prob_all_long$donor_id <- factor(prob_all_long$donor_id,level = donor_id_bysize)
+ggplot(prob_all_long, aes(fill=cellstate, y=proportion, x=donor_id)) + 
+    geom_bar(position="fill", stat="identity") +
+  facet_wrap(~tool) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3))
+
+```
+
+```{r}
+count <- "count"
+
+
+
+count_all_long <- gather(count_all, tool, count, gathercols)
+count_all_long$tool <- factor(count_all_long$tool,levels = rownames(metric))
+count_all_long$donor_id <- factor(count_all_long$donor_id,level = donor_id_bysize)
+
+ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) + 
+    geom_bar(position="stack", stat="identity") +
+  facet_wrap(~tool) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3))
+```
+
+
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+library(patchwork)
+library(ggtext)
+my_colors <- c("red", "green", "blue", "gray", "purple", "orange")
+plots_list <- list()
+
+anno_cellstate_meta_control_sortcol <- 
+  cbind(anno_cellstate_meta_control[,1,drop = FALSE],
+        anno_cellstate_meta_control[,rownames(metric)])
+donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
+
+anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
+
+for (i in levels(anno_cellstate_meta_control_sortcol$donor_id)) {
+  anno_cellstate_meta_each <- anno_cellstate_meta_control_sortcol[anno_cellstate_meta_control_sortcol$donor_id== i,]
+  anno_cellstate_meta_each <- anno_cellstate_meta_each %>% select(-1)
+  all.sankey <- anno_cellstate_meta_each
+  colnames(all.sankey) <- gsub("_no_unknown","",colnames(all.sankey))
+  df <- all.sankey %>%
+    make_long(colnames(all.sankey))
+
+  # Chart 1
+  pl <- ggplot(df, aes(
+    x = x,
+    next_x = next_x,
+    node = node,
+    next_node = next_node,
+    fill = factor(node),
+    label = node
+  ))
+  pl <- pl + geom_sankey(
+    flow.alpha = 0.5,
+    node.color = "black",
+    show.legend = FALSE
+  )
+  #pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+  pl <- pl + theme_bw()
+  pl <- pl + theme(legend.position = "none")
+  pl <- pl + theme(
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    panel.grid = element_blank()
+  )
+
+  pl <- pl + labs(subtitle = paste(i,"; ",
+                                   round(nrow(anno_cellstate_meta_each)*100/nrow(anno_cellstate_meta),digits = 2),"%",
+                                   sep = ""))
+  pl <- pl + labs(fill = "Nodes")
+  pl <- pl + scale_fill_manual(values = my_colors)
+  plots_list[[i]] <- pl
+}
+
+combined_plot <- wrap_plots(plots_list, ncol = 6)
+
+
+# Assuming 'my_colors' is your color vector and 'df' is your data frame
+# Map colors to factor levels
+color_mapping <- setNames(my_colors, levels(factor(df$node)))
+
+# Construct the caption string dynamically
+caption_text <- paste(sapply(names(color_mapping), function(node) {
+  sprintf("<span style='color: %s;'>%s</span>", color_mapping[node], node)
+}), collapse = " ")
+
+combined_plot + plot_annotation(
+    title = paste0(paste(setdiff(levels(factor(df$node)),"unknown"),collapse = ", ") ," cell states","; ",unknown,"; ",run),
+    subtitle = caption_text,
+    caption = paste(colnames(anno_cellstate_meta_control_sortcol)[-1],collapse = "; "),
+    theme = theme(plot.subtitle = element_markdown())
+)
+
+
+```
+
+
+
+ 
+#cv (unused)
+```{r}
+# # Assuming count_all is your data frame with columns: cellstate, donor_id, tool1, tool2, ...
+# 
+# # Load required libraries
+# library(dplyr)
+# 
+# # Function to calculate Coefficient of Variation (CV)
+# cv <- function(x) {
+#   sd_val <- sd(x)
+#   mean_val <- mean(x)
+#   cv_result <- sd_val / mean_val * 100  # Multiply by 100 for percentage
+#   return(cv_result)
+# }
+# 
+# # Identify the column indices for cell types
+# celltype_columns <- 3:ncol(count_all)  # Assuming cell type proportions start from the third column
+# 
+# # Print the column names to check
+# print(colnames(count_all))
+# 
+# # Print the indices to check
+# print(celltype_columns)
+# # Apply CV function to each cell type column
+# tool_cv <- data.frame(cellstate =levels(count_all$cellstate))
+# tool_cv$cellstate <- as.factor(tool_cv$cellstate)  
+# for (i in 3:ncol(count_all)) {
+#   prop_tool <- count_all[,c(1,2,i)]
+#   tool_name <- colnames(prop_tool)[3]
+#   colnames(prop_tool)[3] <- "tool"
+#   prop_tool <-  prop_tool %>% group_by(cellstate) %>% summarize(
+#   avg_cv = cv(tool))
+#   colnames(prop_tool)[2] <- tool_name
+#   tool_cv <- merge(tool_cv,prop_tool,by = "cellstate")
+# } 
+# 
+# tool_cv
+
+```
+
+
+
+

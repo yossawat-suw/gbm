@@ -43,7 +43,7 @@ runs <- c("each","whole")
 
 
 ```{r}
-sig <- sigs[6]
+sig <- sigs[4]
 
 
 # cell input to be analyse
@@ -51,7 +51,7 @@ sig <- sigs[6]
 object <- "all"
 
 
-run_each <- run_eachs[2]
+run_each <- run_eachs[1]
 
 if (run_each) {
   run <- runs[1]
@@ -363,15 +363,18 @@ system.time(gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = functio
 
 }))
 ```
+```{r}
+gbm.list
+```
 
 ```{r}
 #system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
-system.time(gbm.list.res <- lapply(X = gbm.list[4:5], FUN = function(x)  {
+system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
 
   
   topgenes <- head(VariableFeatures(x), 2000)
   # gene expression need to be library normalized and log tranform first! #
-  expr = GetAssayData(x, assay = "RNA", slot = "data")
+  expr = GetAssayData(x, assay = "RNA", layer = "data")
   topgene_filter = rowSums(as.matrix(expr)[topgenes, ]!=0) > ncol(expr)*.1
   topgenes = topgenes[topgene_filter]
   picked_genes = unique(c(anno$Marker, topgenes))
@@ -572,7 +575,7 @@ colnames(each.meta.df)[1] <- "cell_id"
 
 
 ```{r}
-write.csv(each.meta.df,paste0("output/scsorter_",object,"_",sig,".csv"),row.names = FALSE)
+write.csv(each.meta.df,paste0("output/scsorter_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
 ```
 
 ```{r}

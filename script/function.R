@@ -277,9 +277,11 @@ find_markers_edited <- function(
     normalize_reference) {
   library(Seurat)
   so_ref <- CreateSeuratObject(reference_gem)
+  so_ref@assays$RNA$data <- so_ref@assays$RNA$counts
+  so_ref <- DietSeurat(so_ref,layers = c("data"))
   if (normalize_reference) {
     so_ref <- suppressMessages(NormalizeData(so_ref, verbose = FALSE))
-  }
+  } 
   so_ref <- suppressMessages(ScaleData(so_ref, verbose = FALSE))
   Idents(so_ref) <- as.factor(reference_clusters)
   markers <- suppressMessages(FindAllMarkers(so_ref,
@@ -378,4 +380,250 @@ calculate_kappa_for_combination <- function(data, tools) {
   # Calculate and return Fleiss' Kappa
   kappa_result <- kappam.fleiss(subset_data)
   return(kappa_result$value)
+}
+
+
+# Row is sample id, col is celltype 
+clr.modified <- function(x, base = exp(1), pseudo_count = 1e-5) {
+  # Adding pseudo-count to zeros
+  x[x == 0] <- pseudo_count
+  
+  if (dim(x)[2] == 1) {
+    res <- list(x.clr = x, gm = rep(1, dim(x)[1]))
+  } else {
+    geometricmean <- function(x) {
+      if (any(na.omit(x == 0))) {
+        0
+      } else {
+        exp(mean(log(unclass(x)[is.finite(x) & x > 0])))
+      }
+    }
+    gm <- apply(x, 1, geometricmean)
+    x.clr <- log(x / gm, base)
+    res <- x.clr
+  }
+  return(res)
+}
+
+
+geometric_mean <- function(x) {
+  exp(mean(log(x)))
+}
+
+
+
+checkInputFormat_edited <- function (waspas_db) 
+{
+  if (missing(waspas_db)) 
+    return("Parameter waspas_db is missing")
+  if (!is.data.frame(waspas_db)) 
+    return("Parameter waspas_db must be a data.frame")
+  tryCatch({
+    proc_step <- "Indicators"
+    indicators <- c("C", "F", "W")
+    i1 <- toupper(substr(toString(waspas_db[1, 1]), 1, 1))
+    i2 <- toupper(substr(toString(waspas_db[2, 1]), 1, 1))
+    i3 <- toupper(substr(toString(waspas_db[3, 1]), 1, 1))
+    indicators_uploaded <- sort(c(i1, i2, i3))
+    if (!identical(indicators, indicators_uploaded)) 
+      stop()
+    flags <- sliceData(waspas_db, "F")
+    just_bc <- sort(unique(toupper(substr(flags, 1, 1))))
+    proc_step <- "Flags"
+    # if (!identical(just_bc, c("B", "C"))) 
+    #     stop()
+    if (!any(just_bc %in% c("B", "C")))
+      stop("Invalid first characters in 'F' column. Only 'B' or 'C' are allowed.")
+    
+    proc_step <- "Weights-1"
+    weights <- sliceData(waspas_db, "W")
+    weights <- sapply(weights, as.numeric)
+    proc_step <- "Weights-2"
+    #if (sum(weights) != 1) 
+    #stop()
+    proc_step <- "Values"
+    values <- sliceData(waspas_db, "V")
+    values <- sapply(values, as.numeric)
+    if (sum(is.na(values)) > 0) 
+      stop()
+    proc_step <- "End"
+  }, error = function(cond) {
+    stop(paste("E[CI]", cond))
+  }, warning = function(cond) {
+    if (grepl("NAs intro", cond)) {
+    }
+  }, finally = {
+    if (proc_step == "Indicators") {
+      return(paste("Error: Check the indicators in cells [1:3, 1], the strings", 
+                   " must be intiated with 'C', 'F' or 'W'"))
+    }
+    else if (proc_step == "Flags") {
+      return(paste("Error: Vector of flags must contains just strings initiated", 
+                   "with B or C (i.e. b, c, B, C, Cost, Benefit, Ben etc.)"))
+    }
+    else if (proc_step == "Weights-1") {
+      return("Error: Check Weights values, all must be numeric")
+    }
+    else if (proc_step == "Weights-2") {
+      return("Error: Values in Vector of Weights must summarize 1")
+    }
+    else if (proc_step == "Values") {
+      return("Error: Check Aternatives x Criteria values, all must be numeric")
+    }
+    else {
+      return(TRUE)
+    }
+  })
+}
+
+waspasR_edited <- function (waspas_df, lambda) 
+{
+  if (missing(waspas_df)) 
+    return("Parameter waspas_df is missing")
+  if (missing(lambda)) 
+    return("Parameter lambda is missing")
+  format_ok <- checkInputFormat_edited(waspas_df)
+  if (is.character(format_ok)) 
+    return(format_ok)
+  Alternative <- sliceData(waspas_df, "A")
+  criteria <- sliceData(waspas_df, "C")
+  weights <- sliceData(waspas_df, "W")
+  flags <- sliceData(waspas_df, "F")
+  values <- sliceData(waspas_df, "V")
+  normalized <- normalize_edited(values, flags)
+  wsm <- calcWSM_edited(normalized, weights)
+  wpm <- calcWPM_edited(normalized, weights)
+  waspas <- applyLambda(wsm, wpm, lambda)
+  waspas_matrix <- data.frame(matrix(nrow = nrow(waspas_df) - 
+                                       1, ncol = ncol(waspas_df) + 3))
+  colnames(waspas_matrix) <- cbind("Alternative", criteria, 
+                                   "WSM_Rank", "WPM_Rank", "WASPAS_Rank")
+  qtd_rows <- nrow(waspas_matrix)
+  qtd_cols_weights <- ncol(weights) + 1
+  qtd_cols_flags <- ncol(flags) + 1
+  qtd_cols_values <- ncol(values) + 1
+  waspas_matrix[1, 1] <- "W"
+  waspas_matrix[1, 2:qtd_cols_weights] <- weights
+  waspas_matrix[2, 1] <- "F"
+  waspas_matrix[2, 2:qtd_cols_flags] <- flags
+  waspas_matrix[3:qtd_rows, 1] <- t(Alternative)
+  waspas_matrix[3:qtd_rows, 2:qtd_cols_values] <- values
+  waspas_matrix[3:qtd_rows, "WSM_Rank"] <- waspas[, "WSM_Rank"]
+  waspas_matrix[3:qtd_rows, "WPM_Rank"] <- waspas[, "WPM_Rank"]
+  waspas_matrix[3:qtd_rows, "WASPAS_Rank"] <- waspas[, "WASPAS_Rank"]
+  return(as.data.frame(waspas_matrix))
+}
+
+
+normalize_edited <- function (normalized_matrix, vec_cost_benefit) 
+{
+  tryCatch({
+    sapply(normalized_matrix, as.numeric)
+    if (length(vec_cost_benefit) != ncol(normalized_matrix)) {
+      return(paste("Error: The cost - benefit flags array must be the same size", 
+                   "as the number of criteria"))
+    }
+    just_bc <- sort(unique(toupper(substr(vec_cost_benefit, 
+                                          1, 1))))
+    # if (!identical(just_bc, c("B", "C"))) {
+    #     return(paste("Error: Vector of flags must contains just strings initiated", 
+    #         "with B or C (i.e. b, c, B, C, Cost, Benefit, Ben etc.)"))
+    # }
+    if (!any(just_bc %in% c("B", "C")))
+      stop("Invalid first characters in 'F' column. Only 'B' or 'C' are allowed.")
+    total_rows <- nrow(normalized_matrix)
+    flags <- toupper(substr(vec_cost_benefit, 1, 1))
+    for (iCol in seq_len(ncol(normalized_matrix))) {
+      alternative_vals <- normalized_matrix[1:total_rows, 
+                                            iCol]
+      alternative_vals <- sapply(alternative_vals, as.numeric)
+      maxv <- max(alternative_vals)
+      minv <- min(alternative_vals)
+      for (iRow in seq_len(nrow(normalized_matrix))) {
+        if (flags[iCol] == "C") {
+          normalized_matrix[iRow, iCol] <- toString(minv/as.numeric(normalized_matrix[iRow, 
+                                                                                      iCol]))
+        }
+        else {
+          normalized_matrix[iRow, iCol] <- toString(as.numeric(normalized_matrix[iRow, 
+                                                                                 iCol])/maxv)
+        }
+      }
+    }
+    return(as.data.frame(normalized_matrix))
+  }, error = function(cond) {
+    stop(paste("E[N]", cond))
+  }, warning = function(cond) {
+    if (grepl("NAs intro", cond)) {
+      return("W[N] Error: Some non numeric-alike value was found")
+    }
+  })
+}
+
+calcWSM_edited <- function (normal_db, vec_weights) 
+{
+  tryCatch({
+    if (length(vec_weights) != ncol(normal_db)) {
+      return(paste("Error: The weight vector must be the same size as the", 
+                   "number of criteria"))
+    }
+    # if (sum(sapply(vec_weights, as.numeric)) != 1) {
+    #     return("Error: Values in Vector of Weights must summarize 1")
+    # }
+    WSM_Rank <- rep(0, nrow(normal_db))
+    Alternative <- seq_len(nrow(normal_db))
+    wsm <- cbind(Alternative, WSM_Rank)
+    for (iCol in seq_len(ncol(normal_db))) {
+      for (iRow in seq_len(nrow(normal_db))) {
+        normal_db[iRow, iCol] <- toString(as.numeric(normal_db[iRow, 
+                                                               iCol]) * as.numeric(vec_weights[iCol]))
+      }
+    }
+    for (iRow in seq_len(nrow(normal_db))) {
+      wsm[iRow, "WSM_Rank"] <- sum(sapply(normal_db[iRow, 
+      ], as.numeric))
+    }
+    wsm_db <- wsm[, c("Alternative", "WSM_Rank")]
+    return(wsm_db)
+  }, error = function(cond) {
+    stop(paste("E[S]", cond))
+  }, warning = function(cond) {
+    if (grepl("NAs intro", cond)) {
+      return("W[S] Error: Some non numeric - alike value was found")
+    }
+  })
+}
+
+calcWPM_edited <- function (normal_db, vec_weights) 
+{
+  tryCatch({
+    if (length(vec_weights) != ncol(normal_db)) {
+      return(paste("Error: The weight vector must be the same size as", 
+                   "the number of criteria"))
+    }
+    # if (sum(sapply(vec_weights, as.numeric)) != 1) {
+    #     return("Error: Values in Vector of Weights must summarize 1")
+    # }
+    WPM_Rank <- rep(0, nrow(normal_db))
+    Alternative <- seq_len(nrow(normal_db))
+    wpm <- cbind(Alternative, WPM_Rank)
+    for (iCol in seq_len(ncol(normal_db))) {
+      for (iRow in seq_len(nrow(normal_db))) {
+        normal_db[iRow, iCol] <- toString(as.numeric(normal_db[iRow, 
+                                                               iCol])^as.numeric(vec_weights[iCol]))
+      }
+    }
+    for (iRow in seq_len(nrow(normal_db))) {
+      wpm[iRow, "WPM_Rank"] <- prod(sapply(normal_db[iRow, 
+      ], as.numeric))
+    }
+    wpm_db <- wpm[, c("Alternative", "WPM_Rank")]
+    return(wpm_db)
+  }, error = function(cond) {
+    stop(paste("E[P]", cond))
+  }, warning = function(cond) {
+    if (grepl("NAs intro", cond)) {
+      return("W[P] Error: Some non numeric - alike value was found")
+    }
+  })
 }
