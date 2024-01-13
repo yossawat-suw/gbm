@@ -188,11 +188,6 @@ pl
 
 #test 
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 042738b (update code)
 ```{r}
 tools <- c("tool1","tool2","tool3","tool4","tool5")
 anno.test <- data.frame(matrix(ncol = length(tools),nrow =0))
@@ -251,13 +246,6 @@ anno.count.test
 ```{r}
 # 5 tools 5 cell states
 anno.count.test
-<<<<<<< HEAD
-
-
-#IQV
-anno.agreement <- data.frame(matrix(nrow = nrow(anno.count.test),ncol = 0))
-rownames(anno.agreement) <- rownames(anno.count.test)
-=======
 iqv <- c("DM" ,"MDA" ,"ADA" ,"VA" ,"HREL" ,"B")
 
 #IQV
@@ -272,28 +260,12 @@ anno.agreement$ADA <- apply(anno.count.test, 1, ADA)
 anno.agreement$VA <- apply(anno.count.test, 1, VA)
 anno.agreement$HREL <- apply(anno.count.test, 1, HREL)
 anno.agreement$B <- apply(anno.count.test, 1, B)
->>>>>>> 042738b (update code)
-
-
-# 0 mean more consistence; 1 mean zero agreement
-
-<<<<<<< HEAD
-anno.agreement$DM <- apply(anno.count.test, 1, DM)
-anno.agreement$MDA <- apply(anno.count.test, 1, MDA)
-anno.agreement$ADA <- apply(anno.count.test, 1, ADA)
-anno.agreement$VA <- apply(anno.count.test, 1, VA)
-anno.agreement$HREL <- apply(anno.count.test, 1, HREL)
-anno.agreement$B <- apply(anno.count.test, 1, B)
 
 
 # 0 mean more consistence; 1 mean zero agreement
 
 anno.agreement <- format(round(anno.agreement, 3), nsmall = 3)
 
-=======
-anno.agreement <- format(round(anno.agreement, 3), nsmall = 3)
-
->>>>>>> 042738b (update code)
 for (i in 1:ncol(anno.agreement)) {
   anno.agreement[,i] <- as.numeric(anno.agreement[,i])
 }
@@ -308,37 +280,13 @@ kappam.fleiss(anno.test[,])
 
 anno.test
 ```
-<<<<<<< HEAD
-```{r}
-anno.agreement
-```
-=======
 
->>>>>>> 042738b (update code)
 
 
 
 #agreement analysis: IQV
 
-<<<<<<< HEAD
-```{r}
-#install.packages('qualvar')
-library(qualvar)
-```
-```{r}
-library(qualvar)
-set.seed(1)
 
-# create a vector of frequencies for four categories
-x <- rmultinom(1, 100, rep_len(0.25, 4))
-x <- as.vector(t(x))
-
-# compute the DM index
-DM(x)
-```
-=======
-
->>>>>>> 042738b (update code)
 
 
 
