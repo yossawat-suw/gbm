@@ -3,7 +3,8 @@ library(here)
 library(tibble)
 library(dplyr)
 library(data.table)
-
+library(tidyr)
+library(entropy)
 ```
 
 ```{r}
@@ -115,7 +116,7 @@ scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
 ```
 
 ```{r}
-sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
+#sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
 ```
 
 
@@ -184,281 +185,569 @@ pl
 
 
 # agreement analysis
+
+#test 
+
+
+
 ```{r}
-library(foreach)
-library(doParallel)
-library(irr)
+tools <- c("tool1","tool2","tool3","tool4","tool5")
+anno.test <- data.frame(matrix(ncol = length(tools),nrow =0))
+possible_cellstate_test <- c("a","b","c","d","e","f","g")
+cellstate_test <- possible_cellstate_test[1:5]
 
-anno_subtools <- anno[,1:4]
-
-col_names <- names(anno_subtools)
-
-anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) {
-  ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]])
-})
-names(anno_subtools) <- col_names
-
-
-tool_names <- colnames(anno_subtools)
-max_num_of_tools <- length(tool_names)
-
-numCores <- detectCores() - 5
-registerDoParallel(numCores)
-
-# Initialize dataframe with columns for kappa and each tool
-column_names <- c("Kappa", tool_names)
-results <- data.frame(matrix(ncol = max_num_of_tools + 1, nrow = 0))
+colnames(anno.test) <- tools
+anno.test[1,] <- c("a","a","a","a","a")
+anno.test[2,] <- c("a","a","a","a","b")
+anno.test[3,] <- c("a","a","a","b","b")
+anno.test[4,] <- c("a","a","a","b","c")
+anno.test[5,] <- c("a","a","b","b","c")
+anno.test[6,] <- c("a","a","c","b","d")
+anno.test[7,] <- c("a","c","d","b","e")
 
 
-# Perform the analysis
-results <- foreach(i = 2:max_num_of_tools, .combine = rbind) %:% 
-  foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% {
-    kappa_val <- calculate_kappa_for_combination(anno_subtools, comb)
-    # Initialize a row with zeros for each tool
-    tool_presence <- rep(0, max_num_of_tools)
-    # Set 1 for tools present in the combination
-    tool_presence[which(tool_names %in% comb)] <- 1
-    # Combine kappa value with tool presence
-    data.frame(Kappa = kappa_val, t(tool_presence))
-  }
 
-stopImplicitCluster()
-colnames(results) <- column_names
-# Extracting the best combination based on the highest kappa value
-best_combination <- results[which.max(results$Kappa), ]
-results
+#Calculate frequency for each
+
+
+anno.count.test <- anno.test
+tool <- "tool"
+cellstate <- "cellstate"
+gathercols <- colnames(anno.count.test)
+
+
+
+anno.count.test <- rownames_to_column(anno.count.test,var = "cellname")
+
+
+anno.count.test <- gather(anno.count.test, tool, cellstate, gathercols)
+anno.count.test$cellstate <- factor(anno.count.test$cellstate, levels = cellstate_test)
+
+anno.count.test <- anno.count.test %>% 
+  group_by(cellname) %>%
+  count(cellstate, name = "count") %>%
+  complete(cellstate, fill = list(count = 0)) 
+
+anno.count.test <- spread(anno.count.test, cellstate, count)
+
+anno.count.test[is.na(anno.count.test)] <- 0
+
+
+anno.count.test <- column_to_rownames(anno.count.test,var = "cellname")
 ```
 
 
 ```{r}
-library(ggplot2)
-results_sorted <- results[order(results$Kappa, decreasing = TRUE), ]
-rownames(results_sorted) <- NULL
-
-
-# Assuming your tool columns are everything except the first (Kappa) and last (NumOfTools)
-tool_columns <- 2:(ncol(results_sorted))
-
-# Convert each row to a binary string
-results_sorted$BinaryCode <- as.factor(apply(results_sorted[, tool_columns], 1, function(x) paste(x, collapse = "")))
-
-results_sorted$BinaryCode <- factor(results_sorted$BinaryCode, levels = unique(results_sorted$BinaryCode))
-
-limits <- 1
-# Lollipop Plot
-p_1 <- ggplot(results_sorted, aes(x = BinaryCode, y = Kappa)) +
-  geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = Kappa), color = "grey") +
-  geom_point(color = "blue", size = 3, alpha = 0.6) +
-  scale_y_continuous(limits = c(-limits, limits)) +
-  coord_flip() +
-  labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-# Add a legend or annotation for tool names
-# Example: Replace this with your actual tool names
-tool_names <- colnames(results_sorted[, tool_columns])
-legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n")
-p_1 <- p_1 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3)
-
-p_1
+anno.test
+anno.count.test
 ```
 
 
-```{r}
-#donor_id wise
-
-library(parallel)
-
-
-anno_subtools <- anno[,1:4]
-
-col_names <- names(anno_subtools)
-
-anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) {
-  ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]])
-})
-names(anno_subtools) <- col_names
-
-
-n_tool <- ncol(anno_subtools)
-#n_tool <- 4
-anno_meta <- (merge(anno_subtools,gbm.meta,by = "row.names"))
-
-calculate_kappa_for_donor <- function(donor_id, data,n_tool) { 
-  # Correctly subset the data for the specific donor_id
-  subset_data <- data[data$donor_id == donor_id, 2:(n_tool +1)] #not include the first column as it is the rowname
-  # Calculate Fleiss' Kappa
-  kappa_result <- kappam.fleiss(subset_data)
-  return(kappa_result$value) # Returning just the Kappa value
-}
-# List of unique donor IDs
-donor_ids <- as.list(unique(anno_meta$donor_id))
-
-# Parallel computation of kappa values
-kappa_values <- mclapply(donor_ids, function(id) calculate_kappa_for_donor(id, anno_meta,n_tool), mc.cores = detectCores() - 1)
-
-# Combine the results into a named list or another preferred format
-names(kappa_values) <- donor_ids
-
-kappa_values_df <- data.frame(kappa_value = t(as.data.frame(kappa_values)))
-kappa_values_df
-```
-
-```{r}
-library(ggplot2)
-
-# Ensure kappa_values_df is in the correct format with donor_id and kappa_value
-kappa_values_df$donor_id <- rownames(kappa_values_df)
-
-# Convert donor_id to a factor and reorder its levels based on kappa_value
-kappa_values_df$donor_id <- factor(kappa_values_df$donor_id, levels = kappa_values_df$donor_id[order(kappa_values_df$kappa_value, decreasing = TRUE)])
-
-limits <- 0.5
-# Lollipop Plot
-ggplot(kappa_values_df, aes(x = donor_id, y = kappa_value)) +
-  geom_segment(aes(x = donor_id, xend = donor_id, y = 0, yend = kappa_value), color = "grey") +
-  geom_point(color = "blue", size = 3, alpha = 0.6) +
-  scale_y_continuous(limits = c(-limits, limits)) +
-  coord_flip() +
-  labs(x = "Donor ID", y = "Kappa Value", title = "Kappa Values by Donor ID", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-```
 
 
 ```{r}
-library(parallel)
-library(foreach)
-library(doParallel)
-
-#donor wise with combination
+# 5 tools 5 cell states
+anno.count.test
 
 
-anno_subtools <- anno[,1:4]
-
-col_names <- names(anno_subtools)
-
-anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) {
-  ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]])
-})
-names(anno_subtools) <- col_names
-
-# Assuming anno is already defined
-anno_meta <- merge(anno_subtools, gbm.meta, by = "row.names")
+#IQV
+anno.agreement <- data.frame(matrix(nrow = nrow(anno.count.test),ncol = 0))
+rownames(anno.agreement) <- rownames(anno.count.test)
 
 
 
+anno.agreement$DM <- apply(anno.count.test, 1, DM)
+anno.agreement$MDA <- apply(anno.count.test, 1, MDA)
+anno.agreement$ADA <- apply(anno.count.test, 1, ADA)
+anno.agreement$VA <- apply(anno.count.test, 1, VA)
+anno.agreement$HREL <- apply(anno.count.test, 1, HREL)
+anno.agreement$B <- apply(anno.count.test, 1, B)
 
 
-tool_names <- colnames(anno[,1:4])
-max_num_of_tools <- length(tool_names)
+# 0 mean more consistence; 1 mean zero agreement
 
-# Function to calculate kappa for a specific donor and combination of tools
-calculate_kappa_for_donor_combination <- function(donor_id, tools, data) {
-  subset_data <- data[data$donor_id == donor_id, tools]
-  kappa_result <- kappam.fleiss(subset_data)
-  return(kappa_result$value)
+anno.agreement <- format(round(anno.agreement, 3), nsmall = 3)
+
+for (i in 1:ncol(anno.agreement)) {
+  anno.agreement[,i] <- as.numeric(anno.agreement[,i])
 }
 
-# List of unique donor IDs
-donor_ids <- unique(anno_meta$donor_id)
 
-# Register Parallel Backend
-numCores <- detectCores() - 1
-registerDoParallel(numCores)
 
-# Perform the analysis for each donor
-results_all <- foreach(donor_id = donor_ids, .combine = rbind) %do% {
-  foreach(i = 2:max_num_of_tools, .combine = rbind) %:% 
-    foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% {
-      kappa_val <- calculate_kappa_for_donor_combination(donor_id, comb, anno_meta)
-      # Initialize a row with zeros for each tool
-      tool_presence <- rep(0, max_num_of_tools)
-      # Set 1 for tools present in the combination
-      tool_presence[which(tool_names %in% comb)] <- 1
-      # Combine kappa value with tool presence and donor_id
-      data.frame(DonorID = donor_id, Kappa = kappa_val, t(tool_presence))
-    }
+#entropy
+anno.agreement$entropy <- apply(anno.count.test,1,entropy,unit = "log2")
+
+#Fleiss
+kappam.fleiss(anno.test[,])
+
+anno.test
+```
+```{r}
+anno.agreement
+```
+
+
+
+#agreement analysis: IQV
+
+```{r}
+#install.packages('qualvar')
+library(qualvar)
+```
+```{r}
+library(qualvar)
+set.seed(1)
+
+# create a vector of frequencies for four categories
+x <- rmultinom(1, 100, rep_len(0.25, 4))
+x <- as.vector(t(x))
+
+# compute the DM index
+DM(x)
+```
+
+
+
+```{r}
+#Calculate frequency for each
+
+
+anno.count <- anno
+tool <- "tool"
+cellstate <- "cellstate"
+gathercols <- colnames(anno.count)
+
+
+
+anno.count <- rownames_to_column(anno.count,var = "cellname")
+
+
+anno.count <- gather(anno.count, tool, cellstate, gathercols)
+
+anno.count$cellstate <- factor(anno.count$cellstate, levels = possible_cellstate_with_unknown)
+
+anno.count <- anno.count %>% 
+  group_by(cellname) %>%
+  count(cellstate, name = "count") %>%
+  complete(cellstate, fill = list(count = 0)) 
+
+anno.count <- spread(anno.count, cellstate, count)
+anno.count
+anno.count[is.na(anno.count)] <- 0
+
+
+anno.count <- column_to_rownames(anno.count,var = "cellname")
+
+anno.count
+```
+
+
+
+
+
+
+```{r}
+
+anno.agreement <- data.frame(matrix(nrow = nrow(anno.count),ncol = 0))
+rownames(anno.agreement) <- rownames(anno.count)
+
+
+
+anno.agreement$DM <- apply(anno.count, 1, DM)
+anno.agreement$MDA <- apply(anno.count, 1, MDA)
+anno.agreement$ADA <- apply(anno.count, 1, ADA)
+anno.agreement$VA <- apply(anno.count, 1, VA)
+anno.agreement$HREL <- apply(anno.count, 1, HREL)
+anno.agreement$B <- apply(anno.count, 1, B)
+
+
+# 0 mean more consistence; 1 mean zero agreement
+
+anno.agreement <- format(round(anno.agreement, 3), nsmall = 3)
+
+for (i in 1:ncol(anno.agreement)) {
+  anno.agreement[,i] <- as.numeric(anno.agreement[,i])
 }
 
-stopImplicitCluster()
-
-# Setting the column names
-column_names <- c("DonorID", "Kappa", tool_names)
-colnames(results_all) <- column_names
-
-# View the results
-results_all
 
 ```
 
 
 ```{r}
-# Calculate the mean (or another aggregate measure) of Kappa for each tool combination
-library(dplyr)
-aggregated_results <- results_all %>%
-  group_by_at(vars(-DonorID, -Kappa)) %>%
-  summarize(MeanKappa = mean(Kappa, na.rm = TRUE)) %>%
-  arrange(desc(MeanKappa)) %>%
-  ungroup
-
-library(dplyr)
-library(ggplot2)
-
-# Prepare the data
-aggregated_results$BinaryCode <- apply(aggregated_results[,1:4], 1, function(x) {
-  paste0(x, collapse = "")
-})
-
-# Consider taking the top N combinations for a clearer plot
-
-
-# # Bar Plot
-# ggplot(aggregated_results, aes(x =BinaryCode, y = MeanKappa)) +
-#   geom_bar(stat = "identity", fill = "steelblue") +
-#   coord_flip() +  # Flips the axes for better readability of combination names
-#   labs(x = "Tool Combination", y = "Mean Kappa Value", title = "Top Tool Combinations Across Donors") +
-#   theme_minimal() +
-#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-
-aggregated_results$BinaryCode <- factor(aggregated_results$BinaryCode, levels = unique(results_sorted$BinaryCode))
-
-limits <- 1
-# Lollipop Plot
-p_2 <- ggplot(aggregated_results, aes(x = BinaryCode, y = MeanKappa)) +
-  geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = MeanKappa), color = "grey") +
-  geom_point(color = "blue", size = 3, alpha = 0.6) +
-  scale_y_continuous(limits = c(-limits, limits)) +
-  coord_flip() +
-  labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value",subtitle =  paste( "unweighted by cell numbers\n ","with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-# Add a legend or annotation for tool names
-# Example: Replace this with your actual tool names
-tool_names <- colnames(results_sorted[, tool_columns])
-legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n")
-
-p_2 <- p_2 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3)
-
+all.iqv <- anno.agreement
 ```
+
+
 ```{r}
-library(patchwork)
-p_1 + p_2
+#Check the range of
+unique(all.iqv[,1])
+test <- list()
+for (i in 1:ncol(all.iqv)) {
+  test <- append(test,list(unique(all.iqv[,i])))
+}
+test
+```
+
+
+
+```{r}
+library(GGally)
+all.iqv %>%
+  ggpairs(progress = FALSE) +
+  theme_bw()
 ```
 
 ```{r}
-# Assuming 'results_all' is your dataframe
-# Convert donor ID to a factor for better plotting
-results_all$DonorID <- as.factor(results_all$DonorID)
 
-# Box Plot
-ggplot(results_all, aes(x = DonorID, y = Kappa)) +
-  geom_boxplot() +
-  labs(x = "Donor ID", y = "Kappa Value", title = "Distribution of Kappa Values Across Donors") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x labels for better readability
+#calculate bin width
+
+
+bin_num <- 10
+
+p1 <- ggplot(all.iqv, aes(x=DM)) + geom_histogram(bins =  bin_num)
+p2 <- ggplot(all.iqv, aes(x=MDA)) + geom_histogram(bins =  bin_num)
+p3 <- ggplot(all.iqv, aes(x=ADA)) + geom_histogram(bins =  bin_num)
+p4 <- ggplot(all.iqv, aes(x=VA)) + geom_histogram(bins =  bin_num)
+p5 <- ggplot(all.iqv, aes(x=HREL)) + geom_histogram(bins =  bin_num)
+p6 <- ggplot(all.iqv, aes(x=B)) + geom_histogram(bins =  bin_num)
+
+(p1 + p2 + p3) / (p4 + p5 + p6)
 ```
+
+```{r}
+#color_by resolution
+all.iqv.con <- data.frame()
+all.iqv.con <- cbind(all.iqv,all.consensus)
+
+p1 <- ggplot(all.iqv.con, aes(x=DM, fill = res_0.6)) + geom_histogram(bins = bin_num)
+p1
+```
+
+
+```{r}
+#Plot lolipop
+all.iqv.freq <- data.frame()
+for (i in 1:ncol(all.iqv)){
+  all.iqv.freq.each <- data.frame(table(all.iqv[,i]))
+  all.iqv.freq.each <- cbind(all.iqv.freq.each, data.frame(method = rep(colnames(all.iqv)[i],nrow(all.iqv.freq.each))))
+  all.iqv.freq <- rbind(all.iqv.freq,all.iqv.freq.each)
+}
+
+colnames(all.iqv.freq)[1] <- "score"
+
+all.iqv.freq$score <- as.numeric(as.character(all.iqv.freq$score))
+
+all.iqv.freq
+
+#also for log scale
+all.iqv.freq <- all.iqv.freq %>%
+  mutate(logFreq = log(Freq))
+
+all.iqv.freq
+```
+```{r}
+ggplot(all.iqv.freq, aes(x=score, y=Freq)) +
+#ggplot(all.iqv.freq, aes(x=score, y=logFreq)) +
+  geom_point(size=0.2) +
+  geom_segment( aes(x=score, xend=score, y=0, yend=Freq)) +
+  facet_wrap(~ method)
+```
+
+```{r}
+#ggplot(all.iqv.freq, aes(x=score, y=Freq)) +
+ggplot(all.iqv.freq, aes(x=score, y=logFreq)) +
+  geom_point(size=0.2) +
+  geom_segment( aes(x=score, xend=score, y=0, yend=logFreq)) +
+  facet_wrap(~ method)
+```
+
+#agreement analysis: Entropy
+```{r}
+anno.agreement$entropy <- apply(anno.count,1,entropy,unit = "log2")
+```
+
+#(archive) agrement analysis:pick best tool combination (now is Fleiss kappa **cannot do it per cell) -->
+<!-- ```{r} -->
+
+<!-- #this code is for  -->
+<!-- library(foreach) -->
+<!-- library(doParallel) -->
+<!-- library(irr) -->
+
+<!-- anno_subtools <- anno -->
+
+<!-- col_names <- names(anno_subtools) -->
+
+
+
+<!-- anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) { -->
+<!--   ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]]) -->
+<!-- }) -->
+
+
+<!-- names(anno_subtools) <- col_names -->
+
+
+<!-- tool_names <- colnames(anno_subtools) -->
+<!-- max_num_of_tools <- length(tool_names) -->
+
+<!-- numCores <- detectCores() - 5 -->
+<!-- registerDoParallel(numCores) -->
+
+<!-- # Initialize dataframe with columns for kappa and each tool -->
+<!-- column_names <- c("Kappa", tool_names) -->
+<!-- results <- data.frame(matrix(ncol = max_num_of_tools + 1, nrow = 0)) -->
+
+
+<!-- # Perform the analysis -->
+<!-- results <- foreach(i = 2:max_num_of_tools, .combine = rbind) %:% -->
+<!--   foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% { -->
+<!--     kappa_val <- calculate_kappa_for_combination(anno_subtools, comb) -->
+<!--     # Initialize a row with zeros for each tool -->
+<!--     tool_presence <- rep(0, max_num_of_tools) -->
+<!--     # Set 1 for tools present in the combination -->
+<!--     tool_presence[which(tool_names %in% comb)] <- 1 -->
+<!--     # Combine kappa value with tool presence -->
+<!--     data.frame(Kappa = kappa_val, t(tool_presence)) -->
+<!--   } -->
+
+<!-- stopImplicitCluster() -->
+<!-- colnames(results) <- column_names -->
+<!-- # Extracting the best combination based on the highest kappa value -->
+<!-- best_combination <- results[which.max(results$Kappa), ] -->
+<!-- results -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+<!-- results_sorted <- results[order(results$Kappa, decreasing = TRUE), ] -->
+<!-- rownames(results_sorted) <- NULL -->
+
+
+<!-- # Assuming your tool columns are everything except the first (Kappa) and last (NumOfTools) -->
+<!-- tool_columns <- 2:(ncol(results_sorted)) -->
+
+<!-- # Convert each row to a binary string -->
+<!-- results_sorted$BinaryCode <- as.factor(apply(results_sorted[, tool_columns], 1, function(x) paste(x, collapse = ""))) -->
+
+<!-- results_sorted$BinaryCode <- factor(results_sorted$BinaryCode, levels = unique(results_sorted$BinaryCode)) -->
+
+<!-- limits <- 1 -->
+<!-- # Lollipop Plot -->
+<!-- p_1 <- ggplot(results_sorted, aes(x = BinaryCode, y = Kappa)) + -->
+<!--   geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = Kappa), color = "grey") + -->
+<!--   geom_point(color = "blue", size = 3, alpha = 0.6) + -->
+<!--   scale_y_continuous(limits = c(-limits, limits)) + -->
+<!--   coord_flip() + -->
+<!--   labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) + -->
+<!--   theme_minimal() + -->
+<!--   theme(axis.text.x = element_text(angle = 90, hjust = 1)) -->
+
+<!-- # Add a legend or annotation for tool names -->
+<!-- # Example: Replace this with your actual tool names -->
+<!-- tool_names <- colnames(results_sorted[, tool_columns]) -->
+<!-- legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n") -->
+<!-- p_1 <- p_1 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3) -->
+
+<!-- p_1 -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- #donor_id wise -->
+
+<!-- library(parallel) -->
+
+
+<!-- anno_subtools <- anno -->
+
+<!-- col_names <- names(anno_subtools) -->
+
+<!-- anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) { -->
+<!--   ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]]) -->
+<!-- }) -->
+<!-- names(anno_subtools) <- col_names -->
+
+
+<!-- n_tool <- ncol(anno_subtools) -->
+<!-- #n_tool <- 4 -->
+<!-- anno_meta <- (merge(anno_subtools,gbm.meta,by = "row.names")) -->
+
+<!-- calculate_kappa_for_donor <- function(donor_id, data,n_tool) { -->
+<!--   # Correctly subset the data for the specific donor_id -->
+<!--   subset_data <- data[data$donor_id == donor_id, 2:(n_tool +1)] #not include the first column as it is the rowname -->
+<!--   # Calculate Fleiss' Kappa -->
+<!--   kappa_result <- kappam.fleiss(subset_data) -->
+<!--   return(kappa_result$value) # Returning just the Kappa value -->
+<!-- } -->
+<!-- # List of unique donor IDs -->
+<!-- donor_ids <- as.list(unique(anno_meta$donor_id)) -->
+
+<!-- # Parallel computation of kappa values -->
+<!-- kappa_values <- mclapply(donor_ids, function(id) calculate_kappa_for_donor(id, anno_meta,n_tool), mc.cores = detectCores() - 1) -->
+
+<!-- # Combine the results into a named list or another preferred format -->
+<!-- names(kappa_values) <- donor_ids -->
+
+<!-- kappa_values_df <- data.frame(kappa_value = t(as.data.frame(kappa_values))) -->
+<!-- kappa_values_df -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(ggplot2) -->
+
+<!-- # Ensure kappa_values_df is in the correct format with donor_id and kappa_value -->
+<!-- kappa_values_df$donor_id <- rownames(kappa_values_df) -->
+
+<!-- # Convert donor_id to a factor and reorder its levels based on kappa_value -->
+<!-- kappa_values_df$donor_id <- factor(kappa_values_df$donor_id, levels = kappa_values_df$donor_id[order(kappa_values_df$kappa_value, decreasing = TRUE)]) -->
+
+<!-- limits <- 0.5 -->
+<!-- # Lollipop Plot -->
+<!-- ggplot(kappa_values_df, aes(x = donor_id, y = kappa_value)) + -->
+<!--   geom_segment(aes(x = donor_id, xend = donor_id, y = 0, yend = kappa_value), color = "grey") + -->
+<!--   geom_point(color = "blue", size = 3, alpha = 0.6) + -->
+<!--   scale_y_continuous(limits = c(-limits, limits)) + -->
+<!--   coord_flip() + -->
+<!--   labs(x = "Donor ID", y = "Kappa Value", title = "Kappa Values by Donor ID", subtitle = paste("with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")) + -->
+<!--   theme(axis.text.x = element_text(angle = 90, hjust = 1)) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- library(foreach) -->
+<!-- library(doParallel) -->
+
+<!-- #donor wise with combination -->
+
+
+<!-- anno_subtools <- anno -->
+
+<!-- col_names <- names(anno_subtools) -->
+
+<!-- anno_subtools[] <- lapply(seq_along(anno_subtools), function(i) { -->
+<!--   ifelse(anno_subtools[[i]] == "unknown", paste("unknown", i, sep = "_"), anno_subtools[[i]]) -->
+<!-- }) -->
+<!-- names(anno_subtools) <- col_names -->
+
+<!-- # Assuming anno is already defined -->
+<!-- anno_meta <- merge(anno_subtools, gbm.meta, by = "row.names") -->
+
+
+
+
+
+<!-- tool_names <- colnames(anno[,1:4]) -->
+<!-- max_num_of_tools <- length(tool_names) -->
+
+<!-- # Function to calculate kappa for a specific donor and combination of tools -->
+<!-- calculate_kappa_for_donor_combination <- function(donor_id, tools, data) { -->
+<!--   subset_data <- data[data$donor_id == donor_id, tools] -->
+<!--   kappa_result <- kappam.fleiss(subset_data) -->
+<!--   return(kappa_result$value) -->
+<!-- } -->
+
+<!-- # List of unique donor IDs -->
+<!-- donor_ids <- unique(anno_meta$donor_id) -->
+
+<!-- # Register Parallel Backend -->
+<!-- numCores <- detectCores() - 1 -->
+<!-- registerDoParallel(numCores) -->
+
+<!-- # Perform the analysis for each donor -->
+<!-- results_all <- foreach(donor_id = donor_ids, .combine = rbind) %do% { -->
+<!--   foreach(i = 2:max_num_of_tools, .combine = rbind) %:% -->
+<!--     foreach(comb = iter(combn(tool_names, i, simplify = FALSE)), .combine = rbind) %dopar% { -->
+<!--       kappa_val <- calculate_kappa_for_donor_combination(donor_id, comb, anno_meta) -->
+<!--       # Initialize a row with zeros for each tool -->
+<!--       tool_presence <- rep(0, max_num_of_tools) -->
+<!--       # Set 1 for tools present in the combination -->
+<!--       tool_presence[which(tool_names %in% comb)] <- 1 -->
+<!--       # Combine kappa value with tool presence and donor_id -->
+<!--       data.frame(DonorID = donor_id, Kappa = kappa_val, t(tool_presence)) -->
+<!--     } -->
+<!-- } -->
+
+<!-- stopImplicitCluster() -->
+
+<!-- # Setting the column names -->
+<!-- column_names <- c("DonorID", "Kappa", tool_names) -->
+<!-- colnames(results_all) <- column_names -->
+
+<!-- # View the results -->
+<!-- results_all -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # Calculate the mean (or another aggregate measure) of Kappa for each tool combination -->
+<!-- library(dplyr) -->
+<!-- aggregated_results <- results_all %>% -->
+<!--   group_by_at(vars(-DonorID, -Kappa)) %>% -->
+<!--   summarize(MeanKappa = mean(Kappa, na.rm = TRUE)) %>% -->
+<!--   arrange(desc(MeanKappa)) %>% -->
+<!--   ungroup -->
+
+<!-- library(dplyr) -->
+<!-- library(ggplot2) -->
+
+<!-- # Prepare the data -->
+<!-- aggregated_results$BinaryCode <- apply(aggregated_results[,1:4], 1, function(x) { -->
+<!--   paste0(x, collapse = "") -->
+<!-- }) -->
+
+<!-- # Consider taking the top N combinations for a clearer plot -->
+
+
+<!-- # # Bar Plot -->
+<!-- # ggplot(aggregated_results, aes(x =BinaryCode, y = MeanKappa)) + -->
+<!-- #   geom_bar(stat = "identity", fill = "steelblue") + -->
+<!-- #   coord_flip() +  # Flips the axes for better readability of combination names -->
+<!-- #   labs(x = "Tool Combination", y = "Mean Kappa Value", title = "Top Tool Combinations Across Donors") + -->
+<!-- #   theme_minimal() + -->
+<!-- #   theme(axis.text.x = element_text(angle = 45, hjust = 1)) -->
+
+
+<!-- aggregated_results$BinaryCode <- factor(aggregated_results$BinaryCode, levels = unique(results_sorted$BinaryCode)) -->
+
+<!-- limits <- 1 -->
+<!-- # Lollipop Plot -->
+<!-- p_2 <- ggplot(aggregated_results, aes(x = BinaryCode, y = MeanKappa)) + -->
+<!--   geom_segment(aes(x = BinaryCode, xend = BinaryCode, y = 0, yend = MeanKappa), color = "grey") + -->
+<!--   geom_point(color = "blue", size = 3, alpha = 0.6) + -->
+<!--   scale_y_continuous(limits = c(-limits, limits)) + -->
+<!--   coord_flip() + -->
+<!--   labs(x = "Tool Combination (Binary Code)", y = "Kappa Value", title = "Tool Combinations Ranked by Kappa Value",subtitle =  paste( "unweighted by cell numbers\n ","with unknown?: ", unknown,"; run as whole or each?: ",run,sep = "")  ) + -->
+<!--   theme_minimal() + -->
+<!--   theme(axis.text.x = element_text(angle = 90, hjust = 1)) -->
+<!-- # Add a legend or annotation for tool names -->
+<!-- # Example: Replace this with your actual tool names -->
+<!-- tool_names <- colnames(results_sorted[, tool_columns]) -->
+<!-- legend_text <- paste(seq_along(tool_names), ": ", tool_names, collapse = "\n") -->
+
+<!-- p_2 <- p_2 + annotate("text", x = 1, y = 0.5, label = legend_text, hjust = 0, vjust = -4, size = 3) -->
+
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- library(patchwork) -->
+<!-- p_1 + p_2 -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # Assuming 'results_all' is your dataframe -->
+<!-- # Convert donor ID to a factor for better plotting -->
+<!-- results_all$DonorID <- as.factor(results_all$DonorID) -->
+
+<!-- # Box Plot -->
+<!-- ggplot(results_all, aes(x = DonorID, y = Kappa)) + -->
+<!--   geom_boxplot() + -->
+<!--   labs(x = "Donor ID", y = "Kappa Value", title = "Distribution of Kappa Values Across Donors") + -->
+<!--   theme_minimal() + -->
+<!--   theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x labels for better readability -->
+<!-- ``` -->
 
 
 
@@ -494,7 +783,6 @@ anno_score[, confidence := apply(.SD, 1, max)/ncol(anno), .SDcols = 2:4]
 #split unknown and confidence temporaly 
 anno_score_unknown <- anno_score[,.(rn,unknown,confidence)]
 anno_score <-  anno_score[,..possible_cellstate,with = FALSE]
-
 
 
 
