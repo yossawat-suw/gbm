@@ -57,7 +57,7 @@ run_each <- run_eachs[1]
 
 #3 celltype
 
-pick <- 3
+pick <- 4
 
 sig <- sigs[pick]
 merge <- merges[pick]
@@ -374,11 +374,22 @@ prob_all_nounknown_list_imputed_clr <- lapply(prob_all_nounknown_list_imputed, C
 
 ```{r}
 #calculate log variance
-lrv_list <- lapply(count_all_list_imputed_clr, LR.VAR)
+lrv_list <- lapply(prob_all_list_imputed_clr, LR.VAR)
 lrv_nounknown_list <- lapply(prob_all_nounknown_list_imputed_clr, LR.VAR)
 ```
 
+```{r}
+#diversify 
+#sd-of-cellstate-per-donor_mean_nounknown
+sd_mean_nounknown_list <- lapply(prob_all_nounknown_list_imputed, function(x) { # per tool
+  x <- apply(x,1,FUN = sd) # sd of cellstate per donor
+  x <- mean(x) # mean of sd
+  return(x)
+})
 
+prob_all_nounknown_list_imputed
+sd_mean_nounknown_list
+```
 
 
 ```{r}
@@ -389,8 +400,12 @@ names(lrv_vec) <- names(lrv_list)
 lrv_nounknown_vec <- unlist(lrv_nounknown_list)
 names(lrv_nounknown_vec) <- names(lrv_nounknown_list)
 
+sd_mean_nounknown_vec <- unlist(sd_mean_nounknown_list)
+names(sd_mean_nounknown_vec) <- names(sd_mean_nounknown_list)
+
 tools_matric <- data.frame(lrv = lrv_vec, 
                            lrv_nounknown = lrv_nounknown_vec,
+                           sd_mean_nounknown = sd_mean_nounknown_vec,
                            prob_known_mean = (1-prob_all_unknown_mean),
                            prob_known_median = (1-prob_all_unknown_median),
                            prob_known_pooled = (1-unlist(prob_all_unknown_pooled)))
@@ -407,10 +422,10 @@ score_name
 
 
 ```{r}
-weights <- setNames(c(2,2,1,1,1), colnames(tools_matric))
-impacts <- c("+","+","+","+","+") # For topsis
+weights <- setNames(c(1,1,19,1,1,1), colnames(tools_matric))
+impacts <- c("+","+","-","+","+","+") # For topsis
 
-pick <- c(2,3)
+pick <- c(2,3,4)
 ```
 
 
@@ -483,11 +498,20 @@ waspas
 ```{r}
 metric <- cbind(topsis,weightedSum,waspas)
 
-metric <- metric %>% arrange(desc(topsis))
+metric <- metric %>% arrange(desc(WASPAS_Rank))
 
 metric
 ```
 
+
+```{r}
+anno_cellstate_meta_control_sortcol <- 
+  cbind(anno_cellstate_meta_control[,1,drop = FALSE],
+        anno_cellstate_meta_control[,rownames(metric)])
+donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
+
+anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
+```
 
 
 ```{r}
@@ -531,12 +555,7 @@ library(ggtext)
 my_colors <- c("red", "green", "blue", "gray", "purple", "orange")
 plots_list <- list()
 
-anno_cellstate_meta_control_sortcol <- 
-  cbind(anno_cellstate_meta_control[,1,drop = FALSE],
-        anno_cellstate_meta_control[,rownames(metric)])
-donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
 
-anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
 
 for (i in levels(anno_cellstate_meta_control_sortcol$donor_id)) {
   anno_cellstate_meta_each <- anno_cellstate_meta_control_sortcol[anno_cellstate_meta_control_sortcol$donor_id== i,]
@@ -643,7 +662,3 @@ combined_plot + plot_annotation(
 # tool_cv
 
 ```
-
-
-
-
