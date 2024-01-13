@@ -47,4 +47,7 @@ runs <- c("each","whole")
 unknowns <- c("","_no_unknown")
 
 
+#choosing tools
+radiations <- c("control","radiated")
+
 

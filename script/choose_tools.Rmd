@@ -69,6 +69,8 @@ if (run_each) {
   run <- runs[2]
 }
 
+
+radiation_chosen <- radiations[1]
 ```
 
 ```{r}
@@ -243,7 +245,7 @@ combined_plot + plot_annotation(
 #Choose tools: start from 10/ Jan/ 24
 ```{r}
 anno_cellstate_meta_control <- anno_cellstate_meta[,-1] %>%
-  filter(radiation == "control") %>%
+  filter(radiation == radiation_chosen) %>%
   select(!c(radiation))
 unique_tool <- unique(
   unlist(
@@ -421,10 +423,12 @@ score_name
 
 
 ```{r}
-weights <- setNames(c(1,1,19,1,1,1), colnames(tools_matric))
+weights <- setNames(c(1,1,1,1,1,1), colnames(tools_matric))
 impacts <- c("+","+","-","+","+","+") # For topsis
 
 pick <- c(2,3,4)
+
+score_name[pick]
 ```
 
 
@@ -497,7 +501,17 @@ waspas
 ```{r}
 metric <- cbind(topsis,weightedSum,waspas)
 
-metric <- metric %>% arrange(desc(WASPAS_Rank))
+metric_names <- colnames(metric)
+
+chosen_metric  <- metric_names[5]
+
+metric <- metric %>% arrange(desc(chosen_metric))
+
+metric$rank <- 1:nrow(metric)
+
+# pick and round chosen score 
+metric$score <- metric[,chosen_metric,drop = TRUE]
+metric$score <- round(metric$score, digits = 2)
 
 metric
 ```
@@ -522,12 +536,25 @@ prob_all_long <- gather(prob_all, tool, proportion, gathercols)
 prob_all_long$tool <- factor(prob_all_long$tool,levels = rownames(metric))
 
 prob_all_long$donor_id <- factor(prob_all_long$donor_id,level = donor_id_bysize)
-ggplot(prob_all_long, aes(fill=cellstate, y=proportion, x=donor_id)) + 
+
+
+plot.prop <- ggplot(prob_all_long, aes(fill=cellstate, y=proportion, x=donor_id)) + 
     geom_bar(position="fill", stat="identity") +
   facet_wrap(~tool) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3)) +
+  
+  labs(title = "Cellstate annotaion",
+       subtitle = paste0("analysed group: ",radiation_chosen),
+       caption = paste0(
+                         "metric = ",chosen_metric,"\n",
+                         "criteria = ",paste(score_name[pick],collapse = ": "),";  ",
+                         "weight = ",paste(weights[pick],collapse = ":")))
+  
+plot.prop
+
 
 ```
+
 
 ```{r}
 count <- "count"
@@ -538,84 +565,117 @@ count_all_long <- gather(count_all, tool, count, gathercols)
 count_all_long$tool <- factor(count_all_long$tool,levels = rownames(metric))
 count_all_long$donor_id <- factor(count_all_long$donor_id,level = donor_id_bysize)
 
-ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) + 
+plot.count <- ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) + 
     geom_bar(position="stack", stat="identity") +
   facet_wrap(~tool) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3)) +
+  labs(title = "Cellstate annotaion",
+       subtitle = paste0("analysed group: ",radiation_chosen),
+       caption = paste0(
+                         "metric = ",chosen_metric,"\n",
+                         "criteria = ",paste(score_name[pick],collapse = ": "),";  ",
+                         "weight = ",paste(weights[pick],collapse = ":")))
+
+plot.count
+```
+```{r}
+library(gridExtra)
+
+# Set theme to allow for plotmath expressions
+#tt <- ttheme_default(colhead=list(fg_params = list(parse=TRUE)))
+#tbl <- tableGrob(SummaryTable, rows=NULL, theme=tt)
+tbl <- rownames_to_column(metric[,c("score","rank")],var = "tool")
+tbl.gnob <- tableGrob(tbl,rows = NULL,theme=ttheme_default(base_size = 4,padding = unit(c(1, 1), "mm")) )
+
+
+gp.prop <- ggplotGrob(plot.prop)
+gp.prop.table <- gtable_add_grob(x = gp.prop,
+                       grobs = tbl.gnob,
+                       t = 18, 
+                       l = 17 )
+
+gp.count <- ggplotGrob(plot.count)
+gp.count.table <- gtable_add_grob(x = gp.count,
+                       grobs = tbl.gnob,
+                       t = 18, 
+                       l = 17 )
+
+
+plot(gp.prop.table)
+plot(gp.count.table)
 ```
 
-
 ```{r}
-# Do sankey
-library(ggsankey)
-library(ggplot2)
-library(patchwork)
-library(ggtext)
-my_colors <- c("red", "green", "blue", "gray", "purple", "orange")
-plots_list <- list()
-
-
-
-for (i in levels(anno_cellstate_meta_control_sortcol$donor_id)) {
-  anno_cellstate_meta_each <- anno_cellstate_meta_control_sortcol[anno_cellstate_meta_control_sortcol$donor_id== i,]
-  anno_cellstate_meta_each <- anno_cellstate_meta_each %>% select(-1)
-  all.sankey <- anno_cellstate_meta_each
-  colnames(all.sankey) <- gsub("_no_unknown","",colnames(all.sankey))
-  df <- all.sankey %>%
-    make_long(colnames(all.sankey))
-
-  # Chart 1
-  pl <- ggplot(df, aes(
-    x = x,
-    next_x = next_x,
-    node = node,
-    next_node = next_node,
-    fill = factor(node),
-    label = node
-  ))
-  pl <- pl + geom_sankey(
-    flow.alpha = 0.5,
-    node.color = "black",
-    show.legend = FALSE
-  )
-  #pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
-  pl <- pl + theme_bw()
-  pl <- pl + theme(legend.position = "none")
-  pl <- pl + theme(
-    axis.title = element_blank(),
-    axis.text.y = element_blank(),
-    axis.ticks = element_blank(),
-    axis.text.x = element_blank(),
-    panel.grid = element_blank()
-  )
-
-  pl <- pl + labs(subtitle = paste(i,"; ",
-                                   round(nrow(anno_cellstate_meta_each)*100/nrow(anno_cellstate_meta),digits = 2),"%",
-                                   sep = ""))
-  pl <- pl + labs(fill = "Nodes")
-  pl <- pl + scale_fill_manual(values = my_colors)
-  plots_list[[i]] <- pl
-}
-
-combined_plot <- wrap_plots(plots_list, ncol = 6)
-
-
-# Assuming 'my_colors' is your color vector and 'df' is your data frame
-# Map colors to factor levels
-color_mapping <- setNames(my_colors, levels(factor(df$node)))
-
-# Construct the caption string dynamically
-caption_text <- paste(sapply(names(color_mapping), function(node) {
-  sprintf("<span style='color: %s;'>%s</span>", color_mapping[node], node)
-}), collapse = " ")
-
-combined_plot + plot_annotation(
-    title = paste0(paste(setdiff(levels(factor(df$node)),"unknown"),collapse = ", ") ," cell states","; ",unknown,"; ",run),
-    subtitle = caption_text,
-    caption = paste(colnames(anno_cellstate_meta_control_sortcol)[-1],collapse = "; "),
-    theme = theme(plot.subtitle = element_markdown())
-)
-
+# # Do sankey
+# library(ggsankey)
+# library(ggplot2)
+# library(patchwork)
+# library(ggtext)
+# my_colors <- c("red", "green", "blue", "gray", "purple", "orange")
+# plots_list <- list()
+# 
+# 
+# 
+# for (i in levels(anno_cellstate_meta_control_sortcol$donor_id)) {
+#   anno_cellstate_meta_each <- anno_cellstate_meta_control_sortcol[anno_cellstate_meta_control_sortcol$donor_id== i,]
+#   anno_cellstate_meta_each <- anno_cellstate_meta_each %>% select(-1)
+#   all.sankey <- anno_cellstate_meta_each
+#   colnames(all.sankey) <- gsub("_no_unknown","",colnames(all.sankey))
+#   df <- all.sankey %>%
+#     make_long(colnames(all.sankey))
+# 
+#   # Chart 1
+#   pl <- ggplot(df, aes(
+#     x = x,
+#     next_x = next_x,
+#     node = node,
+#     next_node = next_node,
+#     fill = factor(node),
+#     label = node
+#   ))
+#   pl <- pl + geom_sankey(
+#     flow.alpha = 0.5,
+#     node.color = "black",
+#     show.legend = FALSE
+#   )
+#   #pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+#   pl <- pl + theme_bw()
+#   pl <- pl + theme(legend.position = "none")
+#   pl <- pl + theme(
+#     axis.title = element_blank(),
+#     axis.text.y = element_blank(),
+#     axis.ticks = element_blank(),
+#     axis.text.x = element_blank(),
+#     panel.grid = element_blank()
+#   )
+# 
+#   pl <- pl + labs(subtitle = paste(i,"; ",
+#                                    round(nrow(anno_cellstate_meta_each)*100/nrow(anno_cellstate_meta),digits = 2),"%",
+#                                    sep = ""))
+#   pl <- pl + labs(fill = "Nodes")
+#   pl <- pl + scale_fill_manual(values = my_colors)
+#   plots_list[[i]] <- pl
+# }
+# 
+# combined_plot <- wrap_plots(plots_list, ncol = 6)
+# 
+# 
+# # Assuming 'my_colors' is your color vector and 'df' is your data frame
+# # Map colors to factor levels
+# color_mapping <- setNames(my_colors, levels(factor(df$node)))
+# 
+# # Construct the caption string dynamically
+# caption_text <- paste(sapply(names(color_mapping), function(node) {
+#   sprintf("<span style='color: %s;'>%s</span>", color_mapping[node], node)
+# }), collapse = " ")
+# 
+# combined_plot + plot_annotation(
+#     title = paste0(paste(setdiff(levels(factor(df$node)),"unknown"),collapse = ", ") ," cell states","; ",unknown,"; ",run),
+#     subtitle = caption_text,
+#     caption = paste(colnames(anno_cellstate_meta_control_sortcol)[-1],collapse = "; "),
+#     theme = theme(plot.subtitle = element_markdown())
+# )
+# 
 
 ```
 

@@ -34,7 +34,6 @@ pick <- 3
 sig <- sigs[pick]
 merge <- merges[pick]
 
-
 #run_each <- run_eachs[2]
 if (run_each) {
   run <- runs[1]
@@ -868,10 +867,17 @@ anno.all <- merge(anno_score,anno.agreement.chosen,
 fwrite(anno.all, file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
 
 
-anno.all
+anno.all <- anno_score
 ```
 
 
+```{r}
+#shorter verion
+chosen_info <- colnames(anno.all)[c(1,14,3,13,2)]
+anno.all.short <- anno.all[,chosen_info,with = FALSE]
+
+fwrite(anno.all.short, file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
+```
 
 
 

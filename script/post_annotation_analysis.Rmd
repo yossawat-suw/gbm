@@ -14,14 +14,43 @@ setwd(here())
 ```
 #new
 
+```{r}
+
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
+
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+
+#choose what to analyse
+
+pick <- 3
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+```
+
+
 #post annotation analysis
 
 ```{r}
 #load data
 anno_score <- fread(file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
+anno_score_short <- fread(file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
 gbm.meta <- read.csv("output/gbm_meta.csv", row.names = 1)
 ```
 
+```{r}
+anno_score_short
+```
 
 
 
@@ -66,7 +95,8 @@ anno_score$consensus <- as.factor(anno_score$consensus)
 
 
 table(anno_score$consensus)
-anno_score
+
+
 ```
 
 ```{r}
@@ -642,7 +672,6 @@ grid.draw(caption)
 <!-- ```{r} -->
 <!-- final_dfs -->
 <!-- ``` -->
-
 
 
 
