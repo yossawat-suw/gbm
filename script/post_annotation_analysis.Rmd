@@ -70,34 +70,6 @@ possible_cellstate_with_tie <- c(setdiff(possible_cellstate,"tie"),"tie")
 ```
 
 #consensus
-```{r}
-
-thresholds <- 0.5
-
-
-
-# #Option 0
-# anno_score[,consensus := NA_character_] #create consensus column
-# anno_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = possible_cellstate]
-# anno_score[confidence < thresholds,consensus:= "unknown"]
-# anno_score[Tie == TRUE, consensus:= "tie"] #assign unknown to Tie condition
-# anno_score[unknown == 1, consensus:= "unassigned"] #assign unknown to Tie condition
-
-#Option 1: 1. call unknown only when all tool are unknown 2. stocastic tie
-anno_score[,consensus := consensus_with_stochastic_of_tie] #create consensus column
-anno_score[unknown == 1, consensus:= "unassign"]
-#anno_score[confidence < thresholds,consensus:= "unassign"] dont need this because we already use stocastic
-
-
-
-anno_score$consensus <- as.factor(anno_score$consensus)
-
-
-
-table(anno_score$consensus)
-
-
-```
 
 ```{r}
 plot(x = anno_score$agreement,y = anno_score$confidence)

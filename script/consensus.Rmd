@@ -30,7 +30,7 @@ run_each <- run_eachs[1]
 ```{r}
 #choose what to analyse
 
-pick <- 3
+pick <- 4
 sig <- sigs[pick]
 merge <- merges[pick]
 
@@ -853,6 +853,32 @@ anno_score$consensus_with_stochastic_of_tie <- as.factor(anno_score$consensus_wi
 
 anno_score
 ```
+```{r}
+
+thresholds <- 0.5
+
+
+
+# #Option 0
+# anno_score[,consensus := NA_character_] #create consensus column
+# anno_score[Tie == FALSE, consensus := colnames(.SD)[apply(.SD, 1, which.max)], .SDcols = possible_cellstate]
+# anno_score[confidence < thresholds,consensus:= "unknown"]
+# anno_score[Tie == TRUE, consensus:= "tie"] #assign unknown to Tie condition
+# anno_score[unknown == 1, consensus:= "unassigned"] #assign unknown to Tie condition
+
+#Option 1: 1. call unknown only when all tool are unknown 2. stocastic tie
+anno_score[,consensus := consensus_with_stochastic_of_tie] #create consensus column
+anno_score[unknown == 1, consensus:= "unassign"]
+#anno_score[confidence < thresholds,consensus:= "unassign"] dont need this because we already use stocastic
+
+
+
+anno_score$consensus <- as.factor(anno_score$consensus)
+
+
+
+table(anno_score$consensus)
+```
 #combind all score
 ```{r}
 #gbm.meta <- read.csv("output/gbm_meta.csv", row.names = 1)
@@ -863,19 +889,19 @@ anno.agreement.chosen <- anno.agreement.chosen %>% select(rn,agreement)
 anno.all <- merge(anno_score,anno.agreement.chosen,
                   by = "rn")
 
-
+anno_score
 fwrite(anno.all, file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
 
 
-anno.all <- anno_score
 ```
 
 
 ```{r}
 #shorter verion
-chosen_info <- colnames(anno.all)[c(1,14,3,13,2)]
-anno.all.short <- anno.all[,chosen_info,with = FALSE]
 
+chosen_info <- c("rn","consensus","confidence","agreement","unknown")
+anno.all.short <- anno.all[,chosen_info,with = FALSE]
+anno.all.short
 fwrite(anno.all.short, file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
 ```
 
