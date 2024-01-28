@@ -160,10 +160,22 @@ anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("Unknown", "unknown"
 anno_cellstate[] <- lapply(anno_cellstate, function(x) gsub("unassigned", "unknown", x))
 
 ```
+```{r}
+anno_cellstate
+```
+```{r}
+anno_cellstate[grepl("_r",rownames(anno_cellstate)) == TRUE,]
+
+```
+
 
 ```{r}
-anno_cellstate_meta <- cbind(gbm.meta[,c("donor_radiation","donor_id","radiation")],anno_cellstate)
+anno_cellstate_meta <- merge(gbm.meta[,c("donor_radiation","donor_id","radiation")],anno_cellstate,by = "row.names", all = FALSE)
 anno_cellstate_meta$donor_radiation <- as.factor(anno_cellstate_meta$donor_radiation)
+
+
+rownames(anno_cellstate_meta) <- anno_cellstate_meta$Row.names
+anno_cellstate_meta <- anno_cellstate_meta[,-1]
 
 anno_cellstate_meta
 ```
@@ -242,50 +254,114 @@ combined_plot + plot_annotation(
 )
 ```
 
+```{r}
+anno_cellstate_meta
+```
+
 #Choose tools: start from 10/ Jan/ 24
 ```{r}
-anno_cellstate_meta_control <- anno_cellstate_meta[,-1] %>%
-  filter(radiation == radiation_chosen) %>%
-  select(!c(radiation))
+# anno_cellstate_meta_control <- anno_cellstate_meta[,-1] %>%
+#   filter(radiation == radiation_chosen) %>%
+#   select(!c(radiation))
+# unique_tool <- unique(
+#   unlist(
+#   anno_cellstate_meta_control[,!colnames(anno_cellstate_meta_control) %in% "donor_id"]
+#   )
+#   )
+# unique_donor_id <- unique(anno_cellstate_meta_control$donor_id)
+# 
+# unique_tool_donor_id <- length(unique_tool)*length(unique_donor_id)
+# 
+# 
+# 
+# count_all_list <- list()
+# count_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
+# prob_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
+# for (i in 2:ncol(anno_cellstate_meta_control)) {
+#   anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c(1,i)] 
+#   # anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c("donor_id","scSorter")] 
+#   
+#   # anno_cellstate_meta_eachtool[,2] <- factor(anno_cellstate_meta_eachtool[,2],levels = possible_cellstate[1:5]) 
+#   anno_cellstate_meta_eachtool[,2] <- factor(anno_cellstate_meta_eachtool[,2],levels = unique_tool) 
+# 
+#   count_tool_alldonor <- data.frame()
+#   prob_tool_alldonor <- data.frame()
+#   for (q in unique(anno_cellstate_meta_eachtool$donor_id)) {
+#     anno_cellstate_meta_eachtool_eachdonor <- anno_cellstate_meta_eachtool[anno_cellstate_meta_eachtool$donor_id == q,]
+#     count_tool <- as.data.frame(table(anno_cellstate_meta_eachtool_eachdonor[,2]))
+#     #count_tool[,2] <- count_tool[,2]/nrow(anno_cellstate_meta_eachtool_eachdonor)
+#     
+#     
+#     tool_name <- colnames(anno_cellstate_meta_eachtool_eachdonor)[2]
+#     colnames(count_tool) <- c("cellstate",tool_name)
+#     count_tool$donor_id <- rep(q,times = nrow(count_tool))
+#     count_tool_alldonor <- rbind(count_tool_alldonor,count_tool)
+#     count_tool_alldonor <- count_tool_alldonor %>% arrange(donor_id,cellstate)
+#     
+#     prob_tool <- count_tool
+#     prob_tool[,2] <- prob_tool[,2]/nrow(anno_cellstate_meta_eachtool_eachdonor)
+#     prob_tool_alldonor <- rbind(prob_tool_alldonor,prob_tool)
+#     prob_tool_alldonor <- prob_tool_alldonor %>% arrange(donor_id,cellstate)
+#     
+#     count_tool_alldonor_wide <- spread(count_tool_alldonor, donor_id, tool_name)
+#     count_tool_alldonor_wide <- column_to_rownames(count_tool_alldonor_wide,var = "cellstate")
+#     count_tool_alldonor_wide <- data.frame(t(count_tool_alldonor_wide))
+#     count_all_list[[tool_name]] <- count_tool_alldonor_wide
+#     
+#     
+#   }
+#   count_all <- cbind(count_all,count_tool_alldonor[,2,drop = FALSE])
+#   prob_all <- cbind(prob_all,prob_tool_alldonor[,2,drop = FALSE])
+# }
+# 
+# count_all <- cbind(count_tool_alldonor[,c(1,3)],count_all)
+# prob_all <- cbind(prob_tool_alldonor[,c(1,3)],prob_all)
+```
+
+```{r}
+anno_cellstate_meta_control <- anno_cellstate_meta %>%
+  select(!c(donor_id,radiation))
 unique_tool <- unique(
   unlist(
-  anno_cellstate_meta_control[,!colnames(anno_cellstate_meta_control) %in% "donor_id"]
+  anno_cellstate_meta_control[,!colnames(anno_cellstate_meta_control) %in% "donor_radiation"]
   )
   )
-unique_donor_id <- unique(anno_cellstate_meta_control$donor_id)
+unique_donor_radiation <- unique(anno_cellstate_meta_control$donor_radiation)
 
-unique_tool_donor_id <- length(unique_tool)*length(unique_donor_id)
+unique_tool_donor_radiation <- length(unique_tool)*length(unique_donor_radiation)
+
+
 
 count_all_list <- list()
-count_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
-prob_all <- data.frame(matrix(nrow = unique_tool_donor_id, ncol = 0))
+count_all <- data.frame(matrix(nrow = unique_tool_donor_radiation, ncol = 0))
+prob_all <- data.frame(matrix(nrow = unique_tool_donor_radiation, ncol = 0))
 for (i in 2:ncol(anno_cellstate_meta_control)) {
   anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c(1,i)] 
-  # anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c("donor_id","scSorter")] 
+  # anno_cellstate_meta_eachtool <- anno_cellstate_meta_control[,c("donor_radiation","scSorter")] 
   
   # anno_cellstate_meta_eachtool[,2] <- factor(anno_cellstate_meta_eachtool[,2],levels = possible_cellstate[1:5]) 
   anno_cellstate_meta_eachtool[,2] <- factor(anno_cellstate_meta_eachtool[,2],levels = unique_tool) 
 
   count_tool_alldonor <- data.frame()
   prob_tool_alldonor <- data.frame()
-  for (q in unique(anno_cellstate_meta_eachtool$donor_id)) {
-    anno_cellstate_meta_eachtool_eachdonor <- anno_cellstate_meta_eachtool[anno_cellstate_meta_eachtool$donor_id == q,]
+  for (q in unique(anno_cellstate_meta_eachtool$donor_radiation)) {
+    anno_cellstate_meta_eachtool_eachdonor <- anno_cellstate_meta_eachtool[anno_cellstate_meta_eachtool$donor_radiation == q,]
     count_tool <- as.data.frame(table(anno_cellstate_meta_eachtool_eachdonor[,2]))
     #count_tool[,2] <- count_tool[,2]/nrow(anno_cellstate_meta_eachtool_eachdonor)
     
     
     tool_name <- colnames(anno_cellstate_meta_eachtool_eachdonor)[2]
     colnames(count_tool) <- c("cellstate",tool_name)
-    count_tool$donor_id <- rep(q,times = nrow(count_tool))
+    count_tool$donor_radiation <- rep(q,times = nrow(count_tool))
     count_tool_alldonor <- rbind(count_tool_alldonor,count_tool)
-    count_tool_alldonor <- count_tool_alldonor %>% arrange(donor_id,cellstate)
+    count_tool_alldonor <- count_tool_alldonor %>% arrange(donor_radiation,cellstate)
     
     prob_tool <- count_tool
     prob_tool[,2] <- prob_tool[,2]/nrow(anno_cellstate_meta_eachtool_eachdonor)
     prob_tool_alldonor <- rbind(prob_tool_alldonor,prob_tool)
-    prob_tool_alldonor <- prob_tool_alldonor %>% arrange(donor_id,cellstate)
+    prob_tool_alldonor <- prob_tool_alldonor %>% arrange(donor_radiation,cellstate)
     
-    count_tool_alldonor_wide <- spread(count_tool_alldonor, donor_id, tool_name)
+    count_tool_alldonor_wide <- spread(count_tool_alldonor, donor_radiation, tool_name)
     count_tool_alldonor_wide <- column_to_rownames(count_tool_alldonor_wide,var = "cellstate")
     count_tool_alldonor_wide <- data.frame(t(count_tool_alldonor_wide))
     count_all_list[[tool_name]] <- count_tool_alldonor_wide
@@ -298,12 +374,32 @@ for (i in 2:ncol(anno_cellstate_meta_control)) {
 
 count_all <- cbind(count_tool_alldonor[,c(1,3)],count_all)
 prob_all <- cbind(prob_tool_alldonor[,c(1,3)],prob_all)
+
+count_all
+prob_all
 ```
 
+
+
 ```{r}
+library(tibble)
 #exclude unknown
+
 count_all_nounknown_list <- lapply(count_all_list,function(x){
-  x <- x %>% select(-unknown)
+x <- x %>% 
+  rownames_to_column(var = "rowname") %>% 
+  select(-unknown) %>%
+  rowwise() %>%
+  filter(!all(c_across(-rowname) == 0)) %>%
+  ungroup()
+
+
+# Convert the rowname column back to row names
+x <- as.data.frame(x)
+rownames(x) <- x$rowname
+x <- x %>% select(-rowname)
+
+
 })
 
 prob_all_nounknown <- lapply(count_all_nounknown_list,function(x){
@@ -338,13 +434,21 @@ prob_all_unknown_pooled <- lapply(count_all_list,function(x){
 
 
 ```{r}
+
 impute_fn <- function(x) {
   lapply(x, function(x){
-  if (any(x == 0)) {
-    return(zCompositions::cmultRepl(x,z.warning = 0.99,label = 0,method = "SQ",output = "p-counts"))
-  } else {
-    return(x)
-  }
+  # if (any(x == 0)) {
+  #   return(zCompositions::cmultRepl(x,z.warning = 0.99,label = 0,method = "SQ",output = "p-counts",))
+  # } else {
+  #   return(x)
+  #}
+   
+  ##this method just add 1 to all, could be biased for the donor id with low cell number  
+  #   x <- x+1
+    
+  # add pseudocount to each donor_id weight by the cell count
+  
+  x <- x + (rowSums(x))/total_cell
 })
 }
 
@@ -360,24 +464,35 @@ count_to_prob_fn <- function(x) {
 }
 prob_all_list_imputed <- count_to_prob_fn(count_all_list_imputed)
 prob_all_nounknown_list_imputed <- count_to_prob_fn(count_all_nounknown_list_imputed)
-```
 
+prob_all_nounknown_list_imputed
+```
 
 
 ```{r}
+weight <- TRUE
+```
+
+```{r}
 #calculate clr
-prob_all_list_imputed_clr <- lapply(prob_all_list_imputed, CLR)
-prob_all_nounknown_list_imputed_clr <- lapply(prob_all_nounknown_list_imputed, CLR)
+prob_all_list_imputed_clr <- lapply(prob_all_list_imputed, CLR,weight=weight)
+prob_all_nounknown_list_imputed_clr <- lapply(prob_all_nounknown_list_imputed, CLR,weight=weight)
 ```
 
 
+```{r}
+# lapply(prob_all_nounknown_list_imputed, function(x) {
+#   print(sum(x == 0) > 0) 
+# })
+```
 
 
 ```{r}
 #calculate log variance
-lrv_list <- lapply(prob_all_list_imputed_clr, LR.VAR)
-lrv_nounknown_list <- lapply(prob_all_nounknown_list_imputed_clr, LR.VAR)
+lrv_list <- lapply(prob_all_list_imputed_clr, LR.VAR,weight=weight)
+lrv_nounknown_list <- lapply(prob_all_nounknown_list_imputed_clr, LR.VAR,weight=weight)
 ```
+
 
 ```{r}
 #diversify 
@@ -391,7 +506,6 @@ sd_mean_nounknown_list <- lapply(prob_all_nounknown_list_imputed, function(x) { 
 prob_all_nounknown_list_imputed
 sd_mean_nounknown_list
 ```
-
 
 ```{r}
 #choose best tool
@@ -412,8 +526,31 @@ tools_matric <- data.frame(lrv = lrv_vec,
                            prob_known_pooled = (1-unlist(prob_all_unknown_pooled)))
 
 
-tools_matric
+tools_matric %>% arrange(lrv_nounknown)
 ```
+
+```{r}
+#choose best tool
+lrv_vec <- unlist(lrv_list)
+names(lrv_vec) <- names(lrv_list)
+
+lrv_nounknown_vec <- unlist(lrv_nounknown_list)
+names(lrv_nounknown_vec) <- names(lrv_nounknown_list)
+
+sd_mean_nounknown_vec <- unlist(sd_mean_nounknown_list)
+names(sd_mean_nounknown_vec) <- names(sd_mean_nounknown_list)
+
+tools_matric <- data.frame(lrv = lrv_vec, 
+                           lrv_nounknown = lrv_nounknown_vec,
+                           sd_mean_nounknown = sd_mean_nounknown_vec,
+                           prob_known_mean = (1-prob_all_unknown_mean),
+                           prob_known_median = (1-prob_all_unknown_median),
+                           prob_known_pooled = (1-unlist(prob_all_unknown_pooled)))
+
+tools_matric %>% arrange(lrv_nounknown)
+```
+
+
 
 ```{r}
 library(MCDA)
@@ -423,10 +560,10 @@ score_name
 
 
 ```{r}
-weights <- setNames(c(1,1,1,1,1,1), colnames(tools_matric))
+weights <- setNames(c(1,1,1,1,0.5,0.5), colnames(tools_matric))
 impacts <- c("+","+","-","+","+","+") # For topsis
 
-pick <- c(2,3,4)
+pick <- c(2,5,6)
 
 score_name[pick]
 ```
@@ -463,6 +600,7 @@ tools_matric_norm <- normalizePerformanceTable(
 weightedSum <- data.frame(weightedSum = weightedSum(tools_matric_norm,
             criteriaWeights = weights[pick],
             criteriaIDs = score_name[pick]))
+
 
 weightedSum
 ```
@@ -503,8 +641,14 @@ metric <- cbind(topsis,weightedSum,waspas)
 
 metric_names <- colnames(metric)
 
-chosen_metric  <- metric_names[5]
+chosen_metric  <- metric_names[3]
 
+metric_names
+chosen_metric
+```
+
+
+```{r}
 metric <- metric %>% arrange(desc(chosen_metric))
 
 metric$rank <- 1:nrow(metric)
@@ -518,59 +662,119 @@ metric
 
 
 ```{r}
+# anno_cellstate_meta_control_sortcol <- 
+#   cbind(anno_cellstate_meta_control[,1,drop = FALSE],
+#         anno_cellstate_meta_control[,rownames(metric)])
+# donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
+# 
+# anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
+```
+```{r}
 anno_cellstate_meta_control_sortcol <- 
   cbind(anno_cellstate_meta_control[,1,drop = FALSE],
         anno_cellstate_meta_control[,rownames(metric)])
-donor_id_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_id),decreasing = TRUE))
+donor_radiation_bysize <- names(sort(table(anno_cellstate_meta_control_sortcol$donor_radiation),decreasing = TRUE))
 
-anno_cellstate_meta_control_sortcol$donor_id <- factor(anno_cellstate_meta_control_sortcol$donor_id,levels = donor_id_bysize)
+anno_cellstate_meta_control_sortcol$donor_radiation <- factor(anno_cellstate_meta_control_sortcol$donor_radiation,levels = donor_radiation_bysize)
+
+anno_cellstate_meta_control_sortcol
 ```
 
 
 ```{r}
+# tool <- "tool"
+# proportion <- "proportion"
+# gathercols <- colnames(prob_all)[!colnames(prob_all) %in% c("cellstate","donor_id")]
+# 
+# prob_all_long <- gather(prob_all, tool, proportion, gathercols)
+# prob_all_long$tool <- factor(prob_all_long$tool,levels = rownames(metric))
+# 
+# prob_all_long$donor_id <- factor(prob_all_long$donor_id,level = donor_id_bysize)
+# 
+# 
+# plot.prop <- ggplot(prob_all_long, aes(fill=cellstate, y=proportion, x=donor_id)) + 
+#     geom_bar(position="fill", stat="identity") +
+#   facet_wrap(~tool) +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3)) +
+#   
+#   labs(title = "Cellstate annotaion",
+#        subtitle = paste0("analysed group: ",radiation_chosen),
+#        caption = paste0(
+#                          "metric = ",chosen_metric,"\n",
+#                          "criteria = ",paste(score_name[pick],collapse = ": "),";  ",
+#                          "weight = ",paste(weights[pick],collapse = ":")))
+#   
+# plot.prop
+
+
+```
+```{r}
 tool <- "tool"
 proportion <- "proportion"
-gathercols <- colnames(prob_all)[!colnames(prob_all) %in% c("cellstate","donor_id")]
+gathercols <- colnames(prob_all)[!colnames(prob_all) %in% c("cellstate","donor_radiation")]
 
 prob_all_long <- gather(prob_all, tool, proportion, gathercols)
+prob_all_long
 prob_all_long$tool <- factor(prob_all_long$tool,levels = rownames(metric))
 
-prob_all_long$donor_id <- factor(prob_all_long$donor_id,level = donor_id_bysize)
+prob_all_long$donor_radiation <- factor(prob_all_long$donor_radiation,level = donor_radiation_bysize)
 
 
-plot.prop <- ggplot(prob_all_long, aes(fill=cellstate, y=proportion, x=donor_id)) + 
+plot.prop <- ggplot(prob_all_long, aes(fill=cellstate, y=proportion, x=donor_radiation)) + 
     geom_bar(position="fill", stat="identity") +
   facet_wrap(~tool) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3)) +
   
   labs(title = "Cellstate annotaion",
-       subtitle = paste0("analysed group: ",radiation_chosen),
+       subtitle = paste0("analysed group: ","both"),
        caption = paste0(
                          "metric = ",chosen_metric,"\n",
                          "criteria = ",paste(score_name[pick],collapse = ": "),";  ",
                          "weight = ",paste(weights[pick],collapse = ":")))
   
 plot.prop
-
-
 ```
 
 
 ```{r}
+# count <- "count"
+# 
+# 
+# 
+# count_all_long <- gather(count_all, tool, count, gathercols)
+# count_all_long$tool <- factor(count_all_long$tool,levels = rownames(metric))
+# count_all_long$donor_id <- factor(count_all_long$donor_id,level = donor_id_bysize)
+# 
+# plot.count <- ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) + 
+#     geom_bar(position="stack", stat="identity") +
+#   facet_wrap(~tool) +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3)) +
+#   labs(title = "Cellstate annotaion",
+#        subtitle = paste0("analysed group: ",radiation_chosen),
+#        caption = paste0(
+#                          "metric = ",chosen_metric,"\n",
+#                          "criteria = ",paste(score_name[pick],collapse = ": "),";  ",
+#                          "weight = ",paste(weights[pick],collapse = ":")))
+# 
+# plot.count
+```
+
+```{r}
 count <- "count"
 
-
+gathercols <- colnames(count_all)[!colnames(count_all) %in% c("cellstate","donor_radiation")]
 
 count_all_long <- gather(count_all, tool, count, gathercols)
+count_all_long
 count_all_long$tool <- factor(count_all_long$tool,levels = rownames(metric))
-count_all_long$donor_id <- factor(count_all_long$donor_id,level = donor_id_bysize)
+count_all_long$donor_radiation <- factor(count_all_long$donor_radiation,level = donor_radiation_bysize)
 
-plot.count <- ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) + 
+plot.count <- ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_radiation)) + 
     geom_bar(position="stack", stat="identity") +
   facet_wrap(~tool) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size = 3)) +
   labs(title = "Cellstate annotaion",
-       subtitle = paste0("analysed group: ",radiation_chosen),
+       subtitle = paste0("analysed group: ","both"),
        caption = paste0(
                          "metric = ",chosen_metric,"\n",
                          "criteria = ",paste(score_name[pick],collapse = ": "),";  ",
@@ -578,6 +782,8 @@ plot.count <- ggplot(count_all_long, aes(fill=cellstate, y=count, x=donor_id)) +
 
 plot.count
 ```
+
+
 ```{r}
 library(gridExtra)
 

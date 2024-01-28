@@ -1,0 +1,288 @@
+```{r}
+#example data
+
+# example <- list(
+#   c(0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1),
+#      c(0.2,0.2,0.2,0.2,0.2),
+#      c(0.25,0.25,0.25,0.25),
+#      c(0.25,0.25,0.5,0),
+#      c(0.25,0.75,0,0),
+#      c(0.25,0.75,0,0,0),
+#      c(0.99,0.01,0,0)
+# )
+
+
+example <- list(
+  c(5,0,0,0,0,0,0),
+  c(4,1,0,0,0,0,0),
+  c(3,2,0,0,0,0,0),
+  c(3,1,1,0,0,0,0),
+  c(2,2,1,0,0,0,0),
+  c(2,1,1,1,0,0,0),
+  c(1,1,1,1,1,0,0),
+    c(5,0,0,0,0),
+    c(4,1,0,0,0),
+    c(3,2,0,0,0),
+    c(3,1,1,0,0),
+    c(2,2,1,0,0),
+    c(2,1,1,1,0),
+    c(200,100,100,100,0),
+    c(125,125,125,125,0),
+    c(100,100,100,100,100),
+    c(500,500,500,500,500,500,500,500,500,500),
+    c(2,2,2,2,2,2,2,2,2,2),
+    c(1,1,1,1,1,1,1,1,1,1),
+     c(1,1,1,1,1),
+     c(1,1,1,1),
+     c(1,1,2,0),
+     c(1,3,0,0),
+     c(1,3,0,0,0),
+     c(99,1,0,0),
+      c(0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1),
+  c(0.2,0.2,0.2,0.2,0.2),
+  c(0.25,0.25,0.5,0),
+  c(0.25,0.75,0,0),
+  c(0.25,0.75,0,0,0),
+  c(0.99,0.01,0,0),
+  c(1,0,0,0,0,0,0),
+  c(0.8,0.2,0,0,0,0,0),
+  c(0.6,0.4,0,0,0,0,0),
+  c(0.6,0.2,0.2,0,0,0,0),
+  c(0.4,0.4,0.2,0,0,0,0),
+  c(0.4,0.2,0.2,0.2,0,0,0),
+  c(0.2,0.2,0.2,0.2,0.2,0,0),
+  c(1,0,0,0,0,0),
+  c(0.8,0.2,0,0,0,0),
+  c(0.6,0.4,0,0,0,0),
+  c(0.6,0.2,0.2,0,0,0),
+  c(0.4,0.4,0.2,0,0,0),
+  c(0.4,0.2,0.2,0.2,0,0),
+  c(0.2,0.2,0.2,0.2,0.2,0),
+  c(0.25,0.25,0.25,0.25)
+  
+
+)
+
+
+
+```
+
+
+
+
+```{r}
+all_indices <- lapply(example, function(x) {
+
+#input as count  
+  
+  #print("count-based")
+  # tabula
+  #print("berger")
+  berger <- "error"
+  tryCatch({
+    berger <- index_berger(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  #print("brillouin")
+  brillouin <- "error"  
+  tryCatch({
+    brillouin <- index_brillouin(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  #print("mcintosh")  
+  mcintosh <- "error"    
+  tryCatch({
+    mcintosh <- index_mcintosh(x)
+  }, error = function(e) {
+     #print(e)
+  })
+
+  #print("shannon")
+  shannon <- "error"
+  tryCatch({
+    shannon <- index_shannon(x)
+  }, error = function(e) {
+     #print(e)
+  })
+    
+  #print("simpson")
+  simpson <- "error"
+  tryCatch({
+    simpson <- index_simpson(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  
+  # Desctools
+  #print("gini")
+  gini <- "error"
+  tryCatch({
+    gini <- Gini(x, unbiased=FALSE)
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  
+#input as freq
+  #print("freq-based")
+  # iqv 
+  #print("ada")
+  ada <- "error"
+  tryCatch({
+    ada <- ADA(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  #print("mda")
+  mda <- "error"
+  tryCatch({
+    mda <- MDA(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  #print("dm")
+  dm <- "error"
+  tryCatch({
+    dm <- DM(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  #print("vs")      
+  vs <- "error"
+  tryCatch({
+    vs <- VA(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  #print("hrel")     
+  hrel <- "error"
+  tryCatch({
+    hrel <- HREL(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  #print("b")      
+  b <- "error"
+  tryCatch({
+    b <- B(x)
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  # calcDiv
+  #print("hil_div")
+  x_rowise <- t(matrix(x))
+  hil_div <- "error"
+  tryCatch({
+    hil_div <- (calcDiv((x_rowise), type = c("HillDiv")))[1,1]
+  }, error = function(e) {
+     #print(e)
+  })
+  #print("hil_even")
+  hil_even <- "error"
+  tryCatch({
+    hil_even <- (calcDiv((x_rowise), type = c("HillEven")))[1,1]
+  }, error = function(e) {
+     #print(e)
+  })
+  #print("pielou_even")     
+  pielou_even <- "error"
+  tryCatch({
+    pielou_even <- (calcDiv((x_rowise), type = c("PielouEven")))[1,1]
+  }, error = function(e) {
+     #print(e)
+  })
+  
+  return(list(
+    berger = berger,
+    brillouin = brillouin,
+    mcintosh = mcintosh,
+    shannon = shannon,
+    simpson = simpson,
+              
+    gini = gini,
+      
+    ada = ada,
+    mda = mda,
+    dm = dm,
+    vs = vs,
+    hrel = hrel,
+    b = b,
+              
+    hil_div = hil_div,
+    hil_even = hil_even,
+    pielou_even = pielou_even
+  ))
+  
+})
+
+```
+
+
+
+```{r}
+all_df <-  data.frame(t(matrix(unlist(all_indices),
+                               nrow = length(all_indices[[1]]))))
+rownames(all_df) <- unlist(lapply(example,paste,collapse = "_"))
+colnames(all_df) <- names(all_indices[[1]])
+```
+
+
+```{r}
+View(all_df)
+```
+
+
+```{r}
+write.csv(all_df,file = "output/diversity_example.csv",row.names = TRUE)
+```
+
+
+#log variance 
+```{r}
+example_2 <-read.csv(file = "data/diversity_example_2.csv",row.names = 1,header = FALSE)
+
+example_2_1 <- example_2[,1:4]
+example_2_2 <- example_2[,5:8]
+example_2_3 <- example_2[1:3,5:8]
+```
+```{r}
+library(easyCODA)
+```
+
+```{r}
+example_2_1
+example_2_2
+```
+
+
+```{r}
+CLR(example_2_1,weight = FALSE)
+CLR(example_2_2,weight = FALSE)
+CLR(example_2_3,weight = FALSE)
+
+LR.VAR(CLR(example_2_1,weight = FALSE))
+LR.VAR(CLR(example_2_2,weight = FALSE))
+LR.VAR(CLR(example_2_3,weight = FALSE))
+```
+
+
+```{r}
+CLR(example_2_1,weight = TRUE)
+CLR(example_2_2,weight = TRUE)
+```
+
+
+```{r}
+LR.VAR(CLR(example_2_1,weight = TRUE))
+LR.VAR(CLR(example_2_2,weight = TRUE))
+
+```
+
+

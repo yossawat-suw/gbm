@@ -1,5 +1,6 @@
 ```{r}
 library(Seurat)
+library(here)
 gbm <- readRDS("output/seurat_gbm_qc")
 ```
 
@@ -39,14 +40,22 @@ gbm <- readRDS("output/seurat_gbm_qc")
 
 
 #new
+```{r}
+#Set working directory
+setwd(here())
+source("script/function.R")
+source("script/parameter.R")
+```
+
+```{r}
+pick <- 4
+sig <- sigs[pick]
+```
 
 ```{r}
 run_radiation <- c("run1_control","run1_radiated","run2_control","run2_radiated")
 
-Idents(gbm.common) <- "donor_id"
-gbm.common.list <- SplitObject(gbm.common, split.by = "ident")
-gbm.common.list <- gbm.common.list[sort(names(gbm.common.list))]
-names(gbm.common.list)
+
 
 
 gbm$batch <- factor(gbm$batch, levels = run_radiation)
@@ -65,8 +74,9 @@ gbm.donor_run_raidiation_list <- lapply(gbm.donor.list,function(x){
   }
   return(run_radiation_list)
 })
-
-gbm.donor_run_raidiation_list
+rm(gbm)
+rm(gbm.donor.list)
+#gbm.donor_run_raidiation_list
 ```
 
 ```{r}
@@ -74,13 +84,10 @@ gbm.donor_run_raidiation_list
 # Create a dataframe with all possible combinations of 4 binary values (0,1)
 binary_combinations <- expand.grid(replicate(4, 0:1, simplify = FALSE))
 
-# Print the dataframe
-print(binary_combinations)
+
 
 colnames(binary_combinations) <- run_radiation
 rownames(binary_combinations) <- paste("s",1:nrow(binary_combinations),sep = "")
-
-binary_combinations
 
 sample.tree_run.radiation_list <- list(
   s1 = NULL,
@@ -120,17 +127,28 @@ signatures
 ```
 
 
+```{r}
+for (i in 1:length(gbm.donor_run_raidiation_list)){
+  print("\n")
+  print(names(gbm.donor_run_raidiation_list)[i])
+  gbm.tmp <- gbm.donor_run_raidiation_list[[i]]
+  for (q in 1:length(gbm.tmp)) {
+    print(names(gbm.tmp)[q])
+    print(ncol(gbm.tmp[[q]]))
+  }
+}
+```
 
 ```{r}
 
-gbm.list = gbm.donor_run_raidiation_list[["E26N"]]; mc.cores = 2; signatures = signatures; npcs = 30; min.cell = 3;
-  
+gbm.list = gbm.donor_run_raidiation_list[[6]]; mc.cores = 2; signatures = signatures; npcs = 30; min.cell = 3;
+
  gbm.list <- lapply(X = gbm.list, FUN = function(x) {
     if(!is.null(x)) {
-      if(ncol(x) > min.cell) { 
+      if(ncol(x) > max(min.cell,npcs) ) {
         x <- SCTransform(x, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE, vars.to.regress = "percent.mt")
         # x <- NormalizeData(x)
-        # x <- ScaleData(x) 
+        # x <- ScaleData(x)
        #this getresidual add the  pearson residuals of features not in the scale.data
         #x <- GetResidual(x, features = signatures)
         x <- RunPCA(x, features = rownames(x),npcs = npcs)
@@ -141,14 +159,14 @@ gbm.list = gbm.donor_run_raidiation_list[["E26N"]]; mc.cores = 2; signatures = s
     } else {
       return(x)
     }
-    
+
 })
     gbm.list_filtered <- Filter(Negate(is.null), gbm.list)
-    
+
     res.list <- lapply(X = gbm.list_filtered, FUN = function(x) {
   rownames(x@assays$SCT@meta.features)
 })
-  
+
 
   features <- SelectIntegrationFeatures(object.list = gbm.list_filtered, nfeatures = 3000)
 
@@ -162,11 +180,11 @@ gbm.list = gbm.donor_run_raidiation_list[["E26N"]]; mc.cores = 2; signatures = s
   plan("sequential")
   options(future.globals.maxSize = 8000 * 1024^2)
   gbm.list_filtered_prep <- PrepSCTIntegration(object.list = gbm.list_filtered, anchor.features = features_sig)
-  
 
 
 
-  
+
+
   gbm.anchors <- FindIntegrationAnchors(
     object.list = gbm.list_filtered_prep, normalization.method = "SCT",
     anchor.features = features_sig, reduction = "rpca"
@@ -195,11 +213,13 @@ return(gbm.integrated.list)
 
 ```
 
+
+
 ```{r}
 integrate_sc_data <- function(gbm.list, mc.cores = 1,signatures,npcs = 30,min.cell = 3 ) {
   gbm.list <- lapply(X = gbm.list, FUN = function(x) {
     if(!is.null(x)) {
-      if(ncol(x) > min.cell) { 
+      if(ncol(x) > max(min.cell,npcs) ) {
         x <- SCTransform(x, method = "glmGamPoi", vst.flavor = "v2", verbose = FALSE, vars.to.regress = "percent.mt")
         # x <- NormalizeData(x)
         # x <- ScaleData(x) 
@@ -267,7 +287,28 @@ return(gbm.integrated.list)
 
 ```
 ```{r}
-integrate_list <- lapply(gbm.donor_run_raidiation_list,integrate_sc_data,signatures = signatures)
+#integrate_list <- lapply(gbm.donor_run_raidiation_list,integrate_sc_data,signatures = signatures,min.cell = 3)
+```
+```{r}
+
+integrate_list <- lapply(gbm.donor_run_raidiation_list[6],integrate_sc_data,signatures = signatures,min.cell = 3)
+```
+
+
+```{r}
+integrate_list <- list()
+for (i in 1:length(gbm.donor_run_raidiation_list)){
+  print(i)
+  integrate_list[[
+    names(gbm.donor_run_raidiation_list)[i]
+  ]] <- suppressWarnings(
+    integrate_sc_data(gbm.donor_run_raidiation_list[[i]],signatures = signatures,min.cell = 3,npcs = 20)
+  )
+}
+```
+```{r}
+length(integrate_list)
+gbm.donor_run_raidiation_list[[5]]
 ```
 
 

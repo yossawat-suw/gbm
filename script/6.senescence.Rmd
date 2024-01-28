@@ -3,12 +3,44 @@
 ```{r}
 library(Seurat)
 library(UCell)
-gbm <- readRDS("output/seurat_gbm_qc")
+library(ggplot2)
+library(data.table)
+library(tibble)
+library(rstatix)
+```
 
+
+```{r}
+gbm <- readRDS("output/seurat_gbm_qc")
+```
+
+
+```{r}
 # create senescence score
 signatures <- list(senescence = scan("data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
 ```
+```{r}
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
 
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+
+#choose what to analyse
+
+pick <- 3
+
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+```
 ```{r}
 gbm <- NormalizeData(gbm)
 gbm <- ScaleData(gbm, features = rownames(gbm))
@@ -29,12 +61,19 @@ for (i in levels(gbm$donor_id)) {
   q <- quantile(gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i, "senescence"], 0.95)
 
   gbm@meta.data[gbm$donor_id == i, "cutoff_sen"] <- q
-  gbm@meta.data[gbm$radiation == "radiated" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence"
+  gbm@meta.data[gbm$radiation == "radiated" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence" #assign senescence to radiated group
+  gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence" #assign senescence to control group
 }
 gbm@meta.data[is.na(gbm$sen_label), "sen_label"] <- "not_senescence"
 ```
 ```{r}
-gbm@meta.data
+senescene_score <- gbm@meta.data
+
+senescene_score
+```
+```{r}
+fwrite(gbm@meta.data, file = paste("output/senescence_score.csv",sep = "_"))
+senescene_score <- fread(file = paste("output/senescence_score.csv",sep = "_"))
 ```
 
 ```{r}
@@ -121,6 +160,88 @@ p
 
 #Add annotation data
 ```{r}
+senescene_score <- fread(file = paste("output/senescence_score.csv",sep = "_"))
+anno.all.short <- fread(file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
+anno.all.short_edited <- column_to_rownames(anno.all.short,var = "rn")
 
+anno.senesence <- cbind(anno.all.short_edited,senescene_score)
+
+anno.senesence
+```
+#analysis
+```{r}
+#filter before analysis
+
+# threshold.vec <- c(unknown = 0.5,
+#                    confidence = 0.5,
+#                    agreement = 0.25)
+
+# no threshold
+threshold.vec <- c(unknown = 1,
+                   confidence = 0,
+                   agreement = 0)
+
+anno.senesence.filtered <- anno.senesence[anno.senesence$unknown <= threshold.vec["unknown"] &
+                                            anno.senesence$confidence >= threshold.vec["confidence"] &
+                                            anno.senesence$agreement >= threshold.vec["agreement"],]
+
+anno.senesence.filtered
+```
+#intercellstate senescence heterogeneity
+```{r}
+
+#subset only control 
+anno.senesence.filtered.radiation <- anno.senesence.filtered[anno.senesence.filtered$radiation == "control",]
+anno.senesence.filtered.radiation
 ```
 
+```{r}
+#contingency table: Chi square
+contingency_table <- table(anno.senesence.filtered.radiation$consensus, anno.senesence.filtered.radiation$sen_label)
+contingency_table
+```
+```{r}
+prop_table <- prop.table(contingency_table, margin = 1) #proportion row-wise
+prop_table
+```
+
+```{r}
+overall_chi_square <- chisq.test(contingency_table)
+overall_chi_square
+```
+
+
+```{r}
+pairwise_chi_square <- pairwise_prop_test(contingency_table)
+
+prop_table
+pairwise_chi_square
+```
+#intracellstate pre-post radiation senescence change
+```{r}
+cellstates <- unique(anno.senesence.filtered$consensus)
+cellstates
+```
+
+
+```{r}
+anno.senesence.filtered.cellstate <-  anno.senesence.filtered[anno.senesence.filtered$consensus == cellstates[4],]
+anno.senesence.filtered.cellstate
+```
+
+```{r}
+#contingency table: Chi square
+
+
+contingency_table <- table(anno.senesence.filtered.cellstate$radiation, anno.senesence.filtered.cellstate$sen_label)
+contingency_table
+```
+```{r}
+prop_table <- prop.table(contingency_table, margin = 1) #proportion row-wise
+prop_table
+```
+
+```{r}
+overall_chi_square <- chisq.test(contingency_table)
+overall_chi_square
+```

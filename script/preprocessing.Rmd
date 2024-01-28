@@ -19,18 +19,26 @@ library(DoubletFinder)
 library(scales)
 ```
 
+```{r}
+source("script/parameter.R")
+```
+
 
 #Import into Seurat  
 ```{r}
 # Load 10x in local
 gbm.list <- list()
 batch <- c()
+runs <- c("run1","run2")
 for (n in 1:length(runs)) {
   for (m in 1:length(radiation)) {
     run <- runs[n]
     donor.group <- radiation[m]
-
-    data.dir <- paste0("./../data/scRNA_", run, "/")
+    
+    # run <- "run1"
+    # donor.group <- "radiated"
+    
+    data.dir <- paste0("data/scRNA_", run, "/")
 
     mtx <- Read10X(data.dir = paste0(data.dir, "matrix_", donor.group, "_", run))
     gbm <- CreateSeuratObject(mtx, project = "glioblastoma", min.cells = 5, min.features = 200)
@@ -66,31 +74,46 @@ for (n in 1:length(runs)) {
 
     # Change rownames to add experiment and runs so that merge clearly
     x <- paste0(gbm$runs, "_", gbm$radiation, "_", rownames(gbm@meta.data))
+    print(table(grepl("_ru",x)))
     gbm <- RenameCells(gbm, new.names = x)
+    
+    print(table(grepl("_ru",rownames(gbm@meta.data))))
     gbm <- list(gbm)
+    
+    
+    
     gbm.list <- append(gbm.list, gbm)
     batch <- append(batch, paste0(runs[n], "_", radiation[m]))
+    rm(gbm)
   }
 }
 names(gbm.list) <- batch
 ```
 
 
-
-
 ```{r}
 gbm <- Merge_Seurat_List(gbm.list)
+
+rownames(gbm@meta.data) <- gsub("_ru","ru",rownames(gbm@meta.data))
 ```
 
 ```{r}
 gbm@meta.data
 ```
+
+
+
+
+```{r}
+#rownames(gbm@meta.data) <- gsub("_ru","ru",rownames(gbm@meta.data))
+```
 ```{r}
 gbm.meta <- gbm@meta.data
-gbm.meta <- gbm.meta[c("split", "donor_id", "batch", "radiation", "runs")]
+gbm.meta <- gbm.meta[c("split", "donor_id", "batch", "radiation", "runs","donor_radiation")]
 gbm.meta
-write.csv(gbm.meta, "./../output/gbm_meta.csv", row.names = TRUE)
+write.csv(gbm.meta, "output/gbm_meta.csv", row.names = TRUE)
 ```
+
 
 #Check pooled unassigned and cross-doublet
 ```{r}
@@ -105,7 +128,7 @@ ggplot(donor.per, aes(x = split, y = Freq)) +
   )
 ```
 ```{r}
-ggsave(paste0("donor_id_proportion"), path = "./../figure/", device = "png")
+ggsave(paste0("donor_id_proportion"), path = "figure/", device = "png")
 ```
 
 ```{r}
@@ -113,6 +136,8 @@ ggsave(paste0("donor_id_proportion"), path = "./../figure/", device = "png")
 Idents(gbm) <- "donor_id"
 gbm <- subset(gbm, idents = c("unassigned", "doublet"), invert = TRUE)
 gbm@meta.data <- droplevels(gbm@meta.data)
+
+dim(gbm)
 ```
 
 
@@ -188,7 +213,7 @@ gbm[["RNA"]] <- AddMetaData(gbm[["RNA"]], metadata = ncell, col.name = "nCell_RN
 ```
 
 ```{r}
-saveRDS(gbm, paste0("./../output/", "seurat_gbm_qc"), compress = TRUE)
+saveRDS(gbm, paste0("output/", "seurat_gbm_qc"), compress = TRUE)
     ```
 
 ```{r}
@@ -270,7 +295,7 @@ table(gbm.filtered$split)
 ```{r}
 library(SingleCellExperiment)
 
-gbm <- readRDS("./../output/seurat_gbm_qc")
+gbm <- readRDS("output/seurat_gbm_qc")
 gbm <- NormalizeData(gbm)
 gbm.sce <- as.SingleCellExperiment(gbm)
 ```
@@ -279,7 +304,7 @@ gbm.sce <- as.SingleCellExperiment(gbm)
 
 ```{r}
 # import smartseq
-smrt_mtx <- read.delim("./../data/neftel/IDHwtGBM.processed.SS2.logTPM.txt.gz")
+smrt_mtx <- read.delim("data/neftel/IDHwtGBM.processed.SS2.logTPM.txt.gz")
 rownames(smrt_mtx) <- smrt_mtx[, 1]
 smrt_mtx <- smrt_mtx[, -1]
 head(smrt_mtx)
@@ -287,7 +312,7 @@ colnames(smrt_mtx) <- gsub("\\.", "-", colnames(smrt_mtx))
 smrt_mtx <- smrt_mtx[, order(colnames(smrt_mtx))]
 head(smrt_mtx)
 
-meta <- read.delim("./../data/neftel/metadata.txt")
+meta <- read.delim("data/neftel/metadata.txt")
 meta <- meta[-1, ]
 rownames(meta) <- meta$NAME
 meta <- meta[order(rownames(meta)), ]

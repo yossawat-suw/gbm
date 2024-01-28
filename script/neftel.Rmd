@@ -1,6 +1,6 @@
 ```{r}
 library(Seurat)
-library(SeuratDisk)
+#library(SeuratDisk)
 library(ggplot2)
 library(dplyr)
 library(RColorBrewer)
@@ -11,7 +11,11 @@ library(HGC)
 library(UCell)
 ```
 ```{r}
-set.seed(1)
+# set.seed(1)
+# 
+# sessionInfo()
+# #remove.packages("SeuratObject")
+# install.packages("SeuratObject")
 ```
 
 ```{r}
@@ -28,12 +32,26 @@ meta <- read.delim("data/neftel/metadata.txt")
 meta <- meta[-1, ]
 rownames(meta) <- meta$NAME
 meta <- meta[order(rownames(meta)), ]
-
+meta
 library(Seurat)
-smrt <- CreateSeuratObject(smrt_mtx, meta.data = meta)
+smrt <- CreateSeuratObject(smrt_mtx, meta.data = meta,)
 
 rm(smrt_mtx)
 ```
+```{r}
+dim(smrt)
+```
+```{r}
+#Load 10x 
+#x10_mtx <- read.delim("data/neftel/GSM3828673_10X_GBM_IDHwt_processed_TPM.tsv.gz")
+
+
+#cannot use as the the 10x does not have cell annotation
+
+```
+
+
+
 
 
 
@@ -51,12 +69,16 @@ table(smrt$CellAssignment)
 
 #Remove count and convert log2 to simple normalized
 ```{r}
-smrt <- DietSeurat(smrt, counts = FALSE, data = TRUE)
-norm <- as((2^(smrt@assays$RNA@data)) - 1, "CsparseMatrix")
-norm <- CreateAssayObject(data = norm)
-smrt[["norm"]] <- norm
+# as the count is actually log TPM + 1 , we will move it to data layer and reverse the log to tpm
+smrt[["RNA"]]$data <- smrt[["RNA"]]$counts
+smrt[["RNA"]]$counts <- NULL
 
-# Now if we want to analyse TPM >> use data slot in norm assay ; if want log2 + 1P use data slot in RNA assay
+#smrt[["RNA"]]$counts <- smrt[["RNA"]]$data
+
+#reverse the log+1 
+smrt[["RNA"]]$data <- as((2^(smrt@assays$RNA@layers$data)) - 1, "CsparseMatrix")
+
+
 ```
 
 
@@ -65,8 +87,14 @@ smrt[["norm"]] <- norm
 library(tibble)
 # filter by MT, Count, feature
 Idents(smrt) <- "orig.ident"
-smrt[["percent.mt"]] <- PercentageFeatureSet(smrt, pattern = "^MT-")
+
+# # as the smart seq does not need to do percent.mt
+smrt[["percent.mt"]] <- PercentageFeatureSet(smrt, pattern = "^MT")
+
+
+#rownames(smrt)[(grepl(pattern = "^MT",rownames(smrt),ignore.case = TRUE))]
 ```
+
 
 ```{r}
 VlnPlot(smrt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
@@ -76,28 +104,40 @@ VlnPlot(smrt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3
 ```{r}
 Idents(smrt) <- "CellAssignment"
 smrt.mal <- subset(smrt, idents = "Malignant")
-rm(smrt)
+# rm(smrt)
 ```
 
 
 
 
 
+```{r}
+dim(smrt.mal)
+```
 
 
 
 ```{r}
 # Remove cell that have no score
-smrt.mal$isNA <- is.na(smrt.mal$NPClike1)
+colnames(smrt.mal@meta.data)
+
+
+smrt.mal$isNA <- apply(smrt.mal@meta.data[c("MESlike2","MESlike1","NPClike1","NPClike2","AClike","OPClike")], 1, function(x) any(is.na(x)))
 Idents(smrt.mal) <- "isNA"
 smrt.mal <- subset(smrt.mal, idents = FALSE)
+
+dim(smrt.mal)
 ```
+
 
 ```{r}
 # Skip log normalize as it is logTPM
-smrt.mal <- ScaleData(smrt.mal)
-smrt.mal <- FindVariableFeatures(smrt.mal, selection.method = "vst", nfeatures = 2000)
+smrt.mal <- FindVariableFeatures(smrt.mal)
+smrt.mal <- ScaleData(smrt.mal,features = rownames(smrt.mal))
+```
 
+
+```{r}
 smrt.mal <- RunPCA(smrt.mal, features = VariableFeatures(object = smrt.mal))
 ```
 
@@ -128,7 +168,7 @@ smrt.mal.meta <- smrt.mal@meta.data
 
 phenotype <- c("MESlike2", "MESlike1", "AClike", "OPClike", "NPClike1", "NPClike2")
 score <- smrt.mal@meta.data[, phenotype]
-score$MESlike2 <- as.numeric(score$MESlike2)
+
 score <- transform(score,
   MESlike2 = as.numeric(MESlike2),
   MESlike1 = as.numeric(MESlike1),
@@ -138,11 +178,12 @@ score <- transform(score,
   NPClike2 = as.numeric(NPClike2)
 )
 
+
 q10 <- apply(score, 2, function(x) {
   quantile(x, probs = c(0.10))
 })
 
-celltype_merge.all <- c()
+celltype.all <- c()
 for (i in 1:nrow(score)) {
   score_cell <- sort(unlist((score[i, ])), decreasing = TRUE)
   score_cell
@@ -178,6 +219,10 @@ for (i in 1:nrow(score)) {
 smrt.mal$celltype <- celltype.all
 ```
 
+```{r}
+table(smrt.mal$celltype == "hybrid")
+```
+
 
 ```{r}
 p0 <- DimPlot(smrt.mal, reduction = "umap", group.by = "celltype", label = FALSE, split.by = "celltype", ncol = 4)
@@ -204,7 +249,6 @@ p0
 # remove hybrid
 Idents(smrt.mal) <- "celltype"
 smrt.mal <- subset(smrt.mal, idents = "hybrid", invert = TRUE)
-smrt.mal.no.hybrid@meta.data
 ```
 ```{r}
 p0 <- DimPlot(smrt.mal.no.hybrid, reduction = "umap", group.by = "celltype_merge", label = FALSE, ncol = 2, )
@@ -605,9 +649,8 @@ devtools::install_github("yanlinlin82/ggvenn")
 # Load Dataset
 smrt.mal <- readRDS("output/smrt_mal")
 ```
-```{r}
-smrt.mal@meta.data
-```
+
+
 
 
 ```{r}
@@ -618,20 +661,87 @@ Idents(smrt.mal) <- "celltype_merge"
 
 
 
+```{r}
+Idents(smrt.mal) <- "Sample"
 
+smrt.mal.list <- SplitObject(smrt.mal, split.by = "Sample")
+
+celltype_all <- c("celltype_merge")
+npc.de.other.markers.list <- lapply(smrt.mal.list, function(x) {
+  Idents(x) <- celltype_all
+  FindMarkers(x, ident.1 = "NPClike", only.pos = TRUE,min.cells.group = 1,min.cells.feature = 1)
+  })
+```
+```{r}
+library(tibble)
+
+
+npc.de.other.markers.list <- Filter(Negate(is.null), npc.de.other.markers.list)
+npc.list <- lapply(npc.de.other.markers.list,function(x) {
+  x <- rownames_to_column(x,var = "gene_name")
+  x$fdr <- p.adjust(x$p_val,method = "BH")
+  
+  return(x)
+})
+
+
+npc.de.other.markers.list <- Filter(Negate(is.null), npc.de.other.markers.list)
+npc.list <- lapply(npc.de.other.markers.list,function(x) {
+  x <- rownames_to_column(x,var = "gene_name")
+  x$fdr <- p.adjust(x$p_val,method = "BH")
+  
+  return(x)
+})
+
+npc_df <- Reduce(rbind,npc.list)
+
+threshold <- 0.3
+
+npc_df_filtered <- npc_df %>%
+  filter(avg_log2FC >= 1,fdr < 0.05) %>% 
+  group_by(gene_name) %>%
+  mutate(count = n()) %>%
+  filter(count >= threshold*length(npc.list)) %>%
+  ungroup() %>%
+  select(-count)  # Optionally remove the count column
+
+```
+
+```{r}
+findMarkersWrapper <- function(seurat_object, identity,celltype_chosen) {
+  Idents(seurat_object) <- celltype_chosen
+  
+  tryCatch({
+    FindMarkers(seurat_object, ident.1 = identity, only.pos = TRUE, min.cells.group = 1, min.cells.feature = 1)
+  }, error = function(e) {
+    # Optional: Print the error message
+    print(paste("Error in processing", identity, ":", e$message))
+    NULL  # Return NULL in case of error
+  })
+}
+npc.de.other.markers.list <- lapply(smrt.mal.list, function(x) findMarkersWrapper(x, "NPClike",celltype_all[1]))
+opc.de.other.markers.list <- lapply(smrt.mal.list, function(x) findMarkersWrapper(x, "OPClike",celltype_all[1]))
+ac.de.other.markers.list <- lapply(smrt.mal.list, function(x) findMarkersWrapper(x, "AClike",celltype_all[1]))
+mes.de.other.markers.list <- lapply(smrt.mal.list, function(x) findMarkersWrapper(x, "MESlike",celltype_all[1]))
+```
 
 ```{r}
 # npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
 # opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
 # ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
 # mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
-
+split()
 npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike", only.pos = TRUE)
 opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike", only.pos = TRUE)
 ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike", only.pos = TRUE)
 mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike", only.pos = TRUE)
 
 
+
+```
+
+
+```{r}
 npc.de.other.markers <- npc.de.other.markers[order(npc.de.other.markers$avg_log2FC, decreasing = TRUE), ]
 npc.de.other.markers <- npc.de.other.markers[1:50, ]
 
@@ -925,7 +1035,6 @@ ggplot(neftel.10x@meta.data, aes(x = nCount_RNA, y = nFeature_RNA)) +
 ```{r}
 # Filter the same way as neftel
 neftel.10x.list <- SplitObject(neftel.10x, split.by = "orig.ident")
-
 neftel.10x.list <- lapply(X = neftel.10x.list, FUN = function(x) {
   mean.feature <- mean(x$nFeature_RNA)
   x <- subset(x, subset = nFeature_RNA > (0.5 * mean.feature) & nFeature_RNA < (2 * mean.feature) & percent.mt < 15)
