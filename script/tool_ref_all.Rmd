@@ -170,10 +170,9 @@ if (!requireNamespace("biomod2", quietly = TRUE) || packageVersion("biomod2") !=
   if (requireNamespace("biomod2", quietly = TRUE)) {
     remove.packages("biomod2")
   }
-  install.packages("biomod2", version = "3.5.1", repos = "http://cran.us.r-project.org", dependencies = TRUE)
+  devtools::install_version("biomod2", version = "3.5.1")
 }
 
-library(biomod2)
 ```
 
 ```{r}
@@ -193,12 +192,21 @@ gbm.list <- gbm.list.original
 
 
 
+```{r}
+?NormalizeData
+```
 
 
+```{r}
+library(scID)
+markers.glob <- find_markers(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
+```
 
 ```{r}
 print("find_markers_edited")
 
+
+#the edite code just 
 #markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 
 
@@ -223,7 +231,7 @@ gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
   x <- as.matrix(x@assays$RNA@data)
   # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
 
-  scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
+  scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE,markers.glob = markers.glob)
  # scID_output <- scid_multiclass(markers = markers.glob, target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
 
   #  gc()

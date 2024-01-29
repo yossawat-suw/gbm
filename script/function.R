@@ -90,7 +90,8 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
                                    reference_clusters = NULL, markers = NULL,
                                    logFC = 0.5, normalize_reference = TRUE,
                                    estimate_weights_from_target = FALSE,
-                                   weights = NULL, only_pos = FALSE) {
+                                   weights = NULL, only_pos = FALSE,
+                                   markers.glob = markers.glob) {
   # state the variable that will be use in the function
   markers <- markers.glob
   
