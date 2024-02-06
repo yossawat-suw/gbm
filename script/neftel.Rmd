@@ -78,8 +78,10 @@ smrt[["RNA"]]$data <- smrt[["RNA"]]$counts
 #smrt[["RNA"]]$counts <- NULL
 
 
-#reverse the log+1 
-# smrt[["RNA"]]$data <- as((2^(smrt@assays$RNA@layers$data)) - 1, "CsparseMatrix")
+#reverse the log2+1  and put to assay "norm"
+
+#code still bug
+smrt[["norm"]]$data <- as((2^(smrt@assays$RNA$data)) - 1, "CsparseMatrix")
 ```
 
 
@@ -218,7 +220,6 @@ smrt.mal <- subset(smrt.mal, idents = "hybrid", invert = TRUE)
 
 ```{r}
 # Skip log normalize as it is logTPM
-smrt.mal[["RNA"]]$counts 
 smrt.mal <- FindVariableFeatures(smrt.mal)
 smrt.mal <- ScaleData(smrt.mal,features = rownames(smrt.mal))
 ```
@@ -375,7 +376,18 @@ library(ggvenn)
 # devtools::install_github("yanlinlin82/ggvenn")
 
 # Load Dataset
-#smrt.mal <- readRDS("output/smrt_mal")
+smrt.mal <- readRDS("output/smrt_mal")
+
+#assay RNA is logTPM
+#assay norm is TPM
+```
+
+
+```{r}
+smrt.mal@assays$RNA$data[1:10,1:10]
+smrt.mal@assays$norm$data[1:10,1:10]
+smrt@assays$RNA$counts[1:10,1:10]
+smrt@assays$RNA$data[1:10,1:10]
 ```
 
 
@@ -385,13 +397,15 @@ library(ggvenn)
 smrt.mal$celltype_merge <- as.factor(smrt.mal$celltype_merge)
 ```
 
+```{r}
+smrt.mal@meta.data
+```
 
 ```{r}
-smrt.mal.pseudo <- AggregateExpression(smrt.mal,return.seurat = TRUE,group.by = c("Sample","celltype_merge"))
+smrt.mal[["RNA"]]$counts <- smrt.mal[["RNA"]]$data
 
-
-smrt.mal.pseudo@meta.data
-smrt[["RNA"]]$counts <- NULL
+#aggregrate on logTPM
+smrt.mal.pseudo <- AggregateExpression(smrt.mal,return.seurat = TRUE,group.by = c("Sample","celltype_merge"),assays = "RNA")
 
 Idents(smrt.mal.pseudo) <- "celltype_merge"
 
@@ -426,6 +440,7 @@ for (i in cellstates) {
 
 
 ```{r}
+#filter(avg_log2FC >1 & fdr < 0.05)  and slice top 50
 bulk.deg.list.filter <- lapply(bulk.deg.list,function(x){
   x <- x %>%
     filter(avg_log2FC >1 & fdr < 0.05) %>% 
@@ -474,6 +489,43 @@ venn_list
 
 
 ```{r}
+signatures.new <- readRDS(file = "output/signature_subtype_new")
+
+
+signatures.new
+```
+```{r}
+npc <- ggvenn(list(new = signatures.new$NPC.new, new.bulk = bulk.deg.list.filter.genes$NPClike,original =original$NPClike)) + labs(title = "NPC")
+
+opc <- ggvenn(list(new = signatures.new$OPC.new, new.bulk = bulk.deg.list.filter.genes$OPClike,original =original$OPClike))+ labs(title = "OPC")
+
+ac <- ggvenn(list(new = signatures.new$AC.new, new.bulk = bulk.deg.list.filter.genes$AClike,original =original$AClike))+ labs(title = "AC")
+
+mes <- ggvenn(list(new = signatures.new$MES.new, new.bulk = bulk.deg.list.filter.genes$MESlike,original =original$MESlike))+ labs(title = "MES")
+
+library(patchwork)
+
+(npc + opc) / (ac + mes)
+```
+
+```{r}
+saveRDS(bulk.deg.list.filter.genes, file = "output/signature_subtype_bulk")
+```
+
+```{r}
+library(stringi)
+
+
+signatures.bulk.df <- data.frame(stri_list2matrix(bulk.deg.list.filter.genes))
+colnames(signatures.bulk.df) <- names(bulk.deg.list.filter.genes)
+
+signatures.bulk.df
+```
+```{r}
+write.csv(signatures.bulk.df, file = paste0("output/signature_subtype_", sig,"_","bulk", ".csv"), col.names = TRUE, row.names = FALSE)
+```
+
+```{r}
 # Also compare to database
 markers.db <- read_excel("data/Cell_marker_Human.xlsx")
 
@@ -520,32 +572,6 @@ marker.all
 
 
 
-```{r}
-# Merge MES and NPC
-smrt.mal.meta <- smrt.mal@meta.data
-smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "MESlike1")] <- "MESlike"
-smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "MESlike2")] <- "MESlike"
-
-smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "NPClike1")] <- "NPClike"
-smrt.mal.meta$celltype[(smrt.mal.meta$celltype == "NPClike2")] <- "NPClike"
-
-smrt.mal$celltype_merge <- smrt.mal.meta$celltype
-```
-
-```{r}
-p0 <- DimPlot(smrt.mal, reduction = "umap", group.by = "celltype_merge", label = FALSE, split.by = "celltype_merge", ncol = 4)
-p0
-```
-
-```{r}
-# remove hybrid
-Idents(smrt.mal) <- "celltype"
-smrt.mal <- subset(smrt.mal, idents = "hybrid", invert = TRUE)
-```
-```{r}
-p0 <- DimPlot(smrt.mal.no.hybrid, reduction = "umap", group.by = "celltype_merge", label = FALSE, ncol = 2, )
-p0
-```
 
 
 
@@ -653,13 +679,10 @@ mes.de.other.markers.list <- lapply(smrt.mal.list, function(x) findMarkersWrappe
 # opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
 # ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
 # mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike",logfc.threshold = 1,min.diff.pct = 0.1,only.pos = TRUE)
-split()
 npc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "NPClike", only.pos = TRUE)
 opc.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "OPClike", only.pos = TRUE)
 ac.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "AClike", only.pos = TRUE)
 mes.de.other.markers <- FindMarkers(smrt.mal, ident.1 = "MESlike", only.pos = TRUE)
-
-
 
 ```
 
@@ -1006,7 +1029,7 @@ Idents(smrt.mal) <- "npcopc_acmes"
 ```
 
 ```{r}
-saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
+#saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
 ```
 
 
@@ -1157,7 +1180,7 @@ library(nebula)
 
 
 ```{r}
-saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
+#saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
 ```
 
 

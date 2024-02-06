@@ -56,7 +56,7 @@ pick <- 4
 chosen_celltypes <- all_celltypes[chosing[[pick]]]
 merge <- merges[pick]
 
-run_each <- run_eachs[2]
+run_each <- run_eachs[1]
 
 if (run_each) {
   run <- runs[1]
@@ -193,26 +193,31 @@ gbm.list <- gbm.list.original
 
 
 ```{r}
-?NormalizeData
+
 ```
 
 
 ```{r}
 library(scID)
-markers.glob <- find_markers(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
-```
+# markers.glob <- find_markers(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 
-```{r}
 print("find_markers_edited")
 
+# normalize_reference is set to FALSE as the reference data is already normalized. Any library-depth normalization (e.g. TPM, CPM) is compatibe with scID, but not log-transformed data.
+# logFC is defining minimum logFold-change for a gene to be seleced as cluster-specific. Low logFC lead to identification of longer lists of cluster-specific genes that can help resolve classes in presense of very similar reference clusters but will require longer computational time.
+# estimate_weights_from_target is set to TRUE in order to estimated gene weights from the target by selecting training target cells as described in the manuscript. Alternatively, weights can be estimated from the reference data (using the known cell labels), which is recommended when library depth of the two datasets is similar or when the reference clusters are transcriptionally similar.
+# only_pos is set to FALSE to include cluster-specific downregulated genes that can help distinguish clusters from their nearest neighbours.
 
-#the edite code just 
+
+# I split the find_markers out from the main scid_multiclass so that it does not need to be run(which take lot of time) for each loop
+
+# the edite code just make the code accept the already normalized reference 
 #markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 
 
 #saveRDS(markers.glob,paste0("output/markers_glob_scID",merge))
 markers.glob <- readRDS(paste0("output/markers_glob_scID",merge))
-
+head(markers.glob)
 ```
 
 
@@ -225,13 +230,14 @@ all.tasks <- length(gbm.list)
 
 print("load run sc_id_edited")
 #gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
-
 gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
-  x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE)
+  x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE,scale.factor = 1e6)
   x <- as.matrix(x@assays$RNA@data)
   # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
 
-  scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE,markers.glob = markers.glob)
+  
+  #the edited does nothing more except that i export more information of unknown cell, but the result is not useful fornow because i didnt correctly export the right score but i dont have time to recheck it yet 
+    scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE,markers.glob = markers.glob)
  # scID_output <- scid_multiclass(markers = markers.glob, target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
 
   #  gc()
@@ -302,6 +308,7 @@ library(SingleCellExperiment)
 ```{r}
 # neftel.smt <- readRDS("output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes);
 neftel.smt <- neftel.smt.original
+neftel.smt <- DietSeurat(neftel.smt, assays = "RNA")
 neftel.smt.sce <- as.SingleCellExperiment(DietSeurat(neftel.smt,data = TRUE, counts = FALSE,scale.data = FALSE))
 rm(neftel.smt)
 ```
@@ -480,52 +487,6 @@ neftel.smt.sce <- indexCluster(neftel.smt.sce, cluster_col = celltype)
 gbm.list <- gbm.list.original
 ```
 
-```{r}
-# x.list <- lapply(X = gbm.list[10],  FUN = function(x)  {
-#   x <- nrow(x@meta.data)
-#   return(x)
-# })
-# Reduce('+',x.list)
-# x.list
-# 
-# str(gbm.list.res)
-# str(gbm.list.res)
-```
-
-
-```{r}
-# 
-# #test <- NormalizeData(gbm.list[[4]],verbose= FALSE,normalization.method = "RC")
-# test <- gbm.list[[10]]
-# test <- NormalizeData(test,verbose= FALSE,normalization.method = "RC")
-# test.matrix <- test@assays$RNA@data
-# celltype.df.test <- rownames(test@meta.data)
-# celltype.df.test
-# sce <- SingleCellExperiment(assays = list(normcounts = as.matrix(test.matrix)), colData =  celltype.df.test)
-# logcounts(sce) <- log2(normcounts(sce) + 1)
-# # use gene names as feature symbols
-# rowData(sce)$feature_symbol <- rownames(sce)
-# # remove features with duplicated names
-# sce <- sce[!duplicated(rownames(sce)), ]
-# 
-# 
-# scmapCluster_results_test <- scmapCluster(threshold = 0,
-#   projection = sce,
-#   index_list = list(
-#     neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cluster_index
-#   )
-# )
-# 
-# scmapCluster_results_test
-# plot(
-#   getSankey(
-#     neftel.smt.sce@colData[,celltype],
-#     scmapCluster_results_test$scmap_cluster_labs[,'neftel.smt.norm'],
-#     plot_height = 400
-#   )
-# )
-
-```
 
 
 ```{r}
@@ -544,36 +505,37 @@ system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = fun
   # remove features with duplicated names
   x <- x[!duplicated(rownames(x)), ]
 
-
-  x <- scmapCluster(threshold = 0,
+  x.default <- scmapCluster(threshold = 0.7,
     projection = x,
     index_list = list(
       neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cluster_index
     )
   )
-  return(list(name,x$scmap_cluster_labs))
+  x.adjust <- scmapCluster(threshold = 0,
+    projection = x,
+    index_list = list(
+      neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cluster_index
+    )
+  )
+  return(list(name,x.default$scmap_cluster_labs,x.adjust$scmap_cluster_labs))
+
 
 }))
 
-```
-```{r}
 cell.id <- lapply(gbm.list.res, "[[", 1)
-gbm.list.res <- lapply(gbm.list.res, "[[", 2)
+gbm.list.res.default <- lapply(gbm.list.res, "[[", 2)
+gbm.list.res.adjust <- lapply(gbm.list.res, "[[", 3)
 
 cell.id <- as.character(unlist(cell.id))
-gbm.list.res <- as.character(unlist(gbm.list.res))
-```
+gbm.list.res.default <- as.character(unlist(gbm.list.res.default))
+gbm.list.res.adjust <- as.character(unlist(gbm.list.res.adjust))
+prediction <- data.frame(cell_id = cell.id,scmap_cluster = gbm.list.res.default,scmap_cluster_adjust = gbm.list.res.adjust)
 
-
-```{r}
-prediction <- data.frame(cell_id = cell.id,scmap_cluster = gbm.list.res)
-```
-
-```{r}
+#convert cell id to rowname
 rownames(prediction) <- prediction$cell_id
-prediction <- prediction["scmap_cluster"]
-
+prediction <- prediction[,-1] 
 ```
+
 
 ```{r}
 write.csv(prediction,paste0("output/scmap_cluster_",object,"_",merge,"_",run,".csv"),row.names = TRUE)
@@ -581,6 +543,8 @@ write.csv(prediction,paste0("output/scmap_cluster_",object,"_",merge,"_",run,".c
 
 
 ```{r}
+#scmap cell
+
 set.seed(1)
 ```
 
@@ -593,8 +557,8 @@ library(parallel)
 #n.cores <- parallel::detectCores() - 1
 n.cores <- 1
 
-#system.time(gbm.list.res <- mclapply(X = gbm.list[10], mc.cores = n.cores, FUN = function(x)  {
-system.time(gbm.list.res <- lapply(X = gbm.list,  FUN = function(x)  {
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+#system.time(gbm.list.res <- lapply(X = gbm.list,  FUN = function(x)  {
   name <- rownames(x@meta.data)
   x <- NormalizeData(x,verbose= FALSE,normalization.method = "RC")
   x <- x@assays$RNA@data
@@ -612,31 +576,32 @@ system.time(gbm.list.res <- lapply(X = gbm.list,  FUN = function(x)  {
       neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cell_index
     )
   )
-  x <- scmapCell2Cluster(x, list(as.character(neftel.smt.sce@colData[,celltype])),threshold = 0)
-  return(list(name,x$combined_labs))
+  x.default <- scmapCell2Cluster(x, list(as.character(neftel.smt.sce@colData[,celltype])),w = 3,threshold = 0.5) #default
+   x.adjust <- scmapCell2Cluster(x, list(as.character(neftel.smt.sce@colData[,celltype])),w = 1,threshold = 0) #adjust to extract most
+   
+  return(list(name,x.default$combined_labs,x.adjust$combined_labs))
 
 }))
-```
 
-```{r}
 cell.id <- lapply(gbm.list.res, "[[", 1)
-gbm.list.res <- lapply(gbm.list.res, "[[", 2)
+gbm.list.res.default <- lapply(gbm.list.res, "[[", 2)
+gbm.list.res.adjust <- lapply(gbm.list.res, "[[", 3)
 
 cell.id <- as.character(unlist(cell.id))
-gbm.list.res <- as.character(unlist(gbm.list.res))
-```
+gbm.list.res.default <- as.character(unlist(gbm.list.res.default))
+gbm.list.res.adjust <- as.character(unlist(gbm.list.res.adjust))
+prediction <- data.frame(cell_id = cell.id,scmap_cell = gbm.list.res.default,scmap_cell_adjust = gbm.list.res.adjust)
 
-
-```{r}
-prediction <- data.frame(cell_id = cell.id,scmap_cell = gbm.list.res)
-
-```
-
-```{r}
+#convert cell id to rowname
 rownames(prediction) <- prediction$cell_id
-prediction <- prediction["scmap_cell"]
-
+prediction <- prediction[,-1] 
 ```
+
+
+
+
+
+
 
 ```{r}
 write.csv(prediction,paste0("output/scmap_cell_",object,"_",merge,"_",run,".csv"),row.names = TRUE)

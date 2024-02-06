@@ -74,8 +74,8 @@ possible_cellstate_with_tie <- c(setdiff(possible_cellstate,"tie"),"tie")
 #consensus
 ```{r}
 plot(x = anno_score$agreement,y = anno_score$confidence)
-plot(x = anno_score$unknown,y = anno_score$confidence)
-plot(x = anno_score$unknown,y = anno_score$agreement)
+plot(x = anno_score$known,y = anno_score$confidence)
+plot(x = anno_score$known,y = anno_score$agreement)
 ```
 
 ```{r}
@@ -91,13 +91,16 @@ count_consensus <- anno_score_meta %>%
 
 
 ```
+```{r}
+anno_score_meta
+```
 
 ```{r}
 mean_score <- anno_score_meta %>%
   group_by(radiation, donor_id) %>%
   summarise(confidence = mean(confidence),
             agreement = mean(agreement),
-            unknown_prop = mean(unknown),
+            known_prop = mean(known),
             cell_number = n())
 
 mean_score
@@ -106,10 +109,10 @@ mean_score
 
 ```{r}
 ggplot(mean_score,
-         aes(x = agreement, y = confidence, size = cell_number, color = unknown_prop)) +
+         aes(x = agreement, y = confidence, size = cell_number, color = known_prop)) +
     geom_point() +
-    labs(title = "Mean Score from each donor_id") +
-    scale_color_continuous(limits = c(0, 0.5)) +  # Set color scale limits
+    labs(title = "mean Score from each donor_id") +
+    scale_color_continuous(limits = c(0, 1)) +  # Set color scale limits
     scale_size_continuous(limits = c(100, 4000))  +  # Set size scale limits
     facet_wrap(~radiation)
 ```
@@ -119,16 +122,16 @@ mean_score_cellstate <- anno_score_meta %>%
   group_by(radiation, donor_id,consensus) %>%
   summarise(confidence = mean(confidence),
             agreement = mean(agreement),
-            unknown_prop = mean(unknown),
+            known_prop = mean(known),
             cell_number = n())
 
 mean_score_cellstate
 ```
 ```{r}
 ggplot(mean_score_cellstate,
-         aes(x = agreement, y = confidence, size = cell_number, color = unknown_prop)) +
+         aes(x = agreement, y = confidence, size = cell_number, color = known_prop)) +
     geom_point() +
-    labs(title = "Mean Score from each donor_id") +
+    labs(title = "mean Score from each donor_id") +
      # facet_grid(radiation ~ consensus)
     facet_grid(consensus ~ radiation)
 ```
@@ -137,9 +140,9 @@ ggplot(mean_score_cellstate,
 ```{r}
 # Create a 3D scatter plot
 library(scatterplot3d)
-scatterplot3d(mean_score$agreement, mean_score$confidence, mean_score$unknown_prop, 
+scatterplot3d(mean_score$agreement, mean_score$confidence, mean_score$known_prop, 
               color = "blue", main = "3D Scatter Plot",
-              xlab = "agreement", ylab = "confidence", zlab = "unknown_prop",
+              xlab = "agreement", ylab = "confidence", zlab = "known_prop",
                             grid = TRUE, box = FALSE,type = "h")
 
 text(x = 7, y = 0.5, "confidence", srt = 25)
@@ -153,22 +156,26 @@ text(x = 7, y = 0.5, "confidence", srt = 25)
 consensus_unique <- as.vector(unique(anno_score$consensus))
 
 anno_score_meta <- merge(anno_score,data.table(gbm.meta,keep.rownames = TRUE), by = "rn")
-anno_confidence_mean <- anno_score_meta[, c(confidence_mean = mean(confidence)),
+anno_score_mean <- anno_score_meta[, .(confidence_mean = mean(confidence),
+                                            agreement_mean = mean(agreement),
+                                            known_mean = mean(known)),
                                     by = c("radiation", "donor_id")]
 
 anno_consensus_count <- dcast(anno_score_meta, formula = donor_id + radiation ~ consensus)
 
 
 anno_consensus_count[, n_cell:= rowSums(.SD),.SDcols = consensus_unique]
-anno_consensus_count <- merge(anno_consensus_count,anno_confidence_mean,by = c("donor_id","radiation"))
+anno_consensus_count <- merge(anno_consensus_count,anno_score_mean,by = c("donor_id","radiation"))
 
-setnames(anno_consensus_count, "V1", "confidence_mean")
-anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean"), measure.vars = consensus_unique,variable.name = "consensus",value.name = "count")
+anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean","agreement_mean","known_mean"), measure.vars = consensus_unique,variable.name = "consensus",value.name = "count")
 
 
 #common
 anno_consensus_count_long[,per := count/sum(count),by = c("radiation","donor_id")]
-anno_consensus_count_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
+anno_consensus_count_long[, rad_con := paste0(radiation,"(",n_cell,")","\n","[",round(confidence_mean,digits = 2),"/",
+                                              round(agreement_mean,digits = 2),"/",
+                                              round(known_mean,digits = 2),
+                                              "]")]
 #anno_consensus_count_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
 
 
@@ -201,8 +208,8 @@ p <- ggplot() +
   coord_polar("y", start = 0) +
   theme_void() +
 
-  labs(title = "Cell types proportion", subtitle = paste(object,run,"control vs radiated\n (confidence score)",sep = "; "), 
-       fill = "Cell type") + 
+  labs(title = "Cell states proportion", subtitle = paste(object,run,"control vs radiated\n [confidence/agreement/known score)]",sep = "; "), 
+       fill = "Cell state") + 
   theme(strip.text = element_text(size = 6)) +
   scale_fill_manual(values = palette) 
 
@@ -216,7 +223,7 @@ caption <-
   textGrob("pie size based on square root of the number of cells in each group", 
   #textGrob("pie size based on of the number of cells in each group",   
                     x = unit(1, "npc"), y = unit(0.05, "npc"), 
-                    hjust = 2, vjust = -5, 
+                    hjust = 4, vjust = -5, 
                     gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
 ```
 
@@ -226,7 +233,6 @@ caption <-
 grid.newpage()
 grid.draw(g)
 grid.draw(caption)
-
 ```
 
 ```{r}
@@ -264,8 +270,8 @@ p <- ggplot(anno_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus, wi
   coord_polar("y", start = 0) +
   theme_void() +
 
-  labs(title = "Cell types proportion", subtitle = "all donors; control vs radiated\n (confidence score)",
-       fill = "Cell type") +
+  labs(title = "Cell states proportion", subtitle = "all donors; control vs radiated\n (confidence score)",
+       fill = "Cell state") +
   theme(strip.text = element_text(size = 6)) +
   scale_fill_manual(values = palette)
 
@@ -339,9 +345,88 @@ ggplot(anno_score_meta_ggplot, aes(x = confidence, y = count,fill = consensus, c
   theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1,size = 5)) +
   facet_wrap(~donor_radiation) 
 ```
+#Explore under more sophisticate dimention
+```{r}
+gbm <- readRDS("output/seurat_gbm_qc")
+
+gbm.list <- SplitObject(gbm, split.by = "donor_radiation")
 
 
-  
+
+```
+
+```{r}
+library(Seurat)
+anno_score_short.df <- data.frame(anno_score_short)
+
+rownames(anno_score_short.df) <- anno_score_short.df$rn
+anno_score_short.df$rn <- NULL
+anno_score_short.df
+gbm <- AddMetaData(object = gbm,metadata = anno_score_short.df)
+
+gbm@meta.data
+```
+
+```{r}
+set(7)
+gbm <- gbm %>%
+  NormalizeData() %>%
+  ScaleData() %>%
+  FindVariableFeatures() %>%
+  RunPCA()
+```
+
+
+```{r}
+gbm <- gbm %>%  
+  RunUMAP(dims = 1:15) 
+```
+```{r}
+DimPlot(gbm,reduction = "umap",group.by = "consensus")
+```
+```{r}
+DimPlot(gbm,reduction = "umap",group.by = "consensus",split.by = "donor_radiation",ncol = 5)
+```
+
+
+```{r}
+gbm.list <- SplitObject(gbm, split.by = "donor_radiation")
+```
+
+
+```{r}
+gbm.list <- lapply(gbm.list,function(x){
+  x <- x %>% NormalizeData() %>%
+  ScaleData(features = rownames(x)) %>%
+  FindVariableFeatures() %>%
+  RunPCA() %>%
+  RunUMAP(dims = 1:15) %>%
+  RunTSNE(dims = 1:15)
+  return(x)
+})
+```
+
+```{r}
+gc()
+```
+
+```{r}
+lapply(gbm.list,
+```
+
+```{r}
+signatures <- read.csv(file = paste0("output/signature_subtype_", sig,"_","bulk", ".csv"))
+gbm.list.signatures <- lapply(gbm.list,function(x){
+  x <- x %>% NormalizeData() %>%
+  ScaleData(features = rownames(x)) %>%
+  FindVariableFeatures() %>%
+  RunPCA() %>%
+  RunUMAP(dims = 1:15) %>%
+  RunTSNE(dims = 1:15)
+  return(x)
+})
+```
+
 #old -->
 <!-- ```{r} -->
 <!-- anno_mes_each <- fread(file = "output/annotation/annotation_mes_each__.csv") -->

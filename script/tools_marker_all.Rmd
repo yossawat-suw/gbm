@@ -39,6 +39,8 @@ source("script/function.R")
 sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
+#signatures.gen <- c("signature_new","signature_bulk")
+
 ```
 
 
@@ -59,6 +61,8 @@ if (run_each) {
   run <- runs[2]
 }
 ```
+
+
 # load gbm
 ```{r}
 
@@ -85,7 +89,10 @@ rm(gbm)
 ```{r}
 
 # automatic convert gene list
-signatures <- read.csv(paste0("output/signature_subtype_", sig, ".csv"))
+#signatures <- read.csv(paste0("output/signature_subtype_", sig, ".csv"))
+signatures <- read.csv( file = paste0("output/signature_subtype_", sig,"_","bulk", ".csv"))
+
+signatures
 
 # scsorter
 signatures.split <- list()
@@ -209,7 +216,7 @@ gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
 
   x <- RunPCA(x, verbose = FALSE, features = features, npcs = 20)
   x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
-  x <- FindClusters(x, verbose = FALSE)
+  x <- FindClusters(x, verbose = FALSE,resolution = 1.2)
 })
 ```
 
@@ -258,13 +265,12 @@ for (i in gbm.list.res) {
   each.meta <- i@meta.data[,c("scType","scType_no_unknown")]
   each.meta.all <- rbind(each.meta.all, each.meta)
 }
-
 ```
 
 
 
 ```{r}
-write.csv(each.meta.all, paste0("output/scType_", object, "_", sig,"_",run, ".csv"), row.names = TRUE)
+write.csv(each.meta.all, paste0("output/tools/scType_", object, "_", sig,"_",run, ".csv"), row.names = TRUE)
 ```
 
 ```{r}
@@ -292,9 +298,12 @@ gbm.list <- gbm.list.original
 
 
 
+
+
 ```{r}
 gbm.list.res <- mclapply(gbm.list,mc.cores = 2, FUN = function(x){
 #gbm.list.res <- lapply(gbm.list,FUN = function(x){ 
+  #x <- gbm.list[[1]]
   exp <- log(x@assays$RNA@counts + 1)
   exp[] = normalize.quantiles(as.matrix(exp))
   results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=TRUE)
@@ -326,7 +335,7 @@ for (i in gbm.list.res) {
 
 
 ```{r}
-write.csv(res.df,paste0("output/SCINA_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
+write.csv(res.df,paste0("output/tools/SCINA_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
 ```
 
 ```{r}
@@ -363,9 +372,7 @@ system.time(gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = functio
 
 }))
 ```
-```{r}
-gbm.list
-```
+
 
 ```{r}
 #system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
@@ -553,7 +560,7 @@ rts.list <- lapply(gbm.list.res, "[[", 1)
 
 
 #Keep rts results of all
-saveRDS(rts.list,paste0("output/scsorter_rts_",object,"_",sig), compress = TRUE)
+saveRDS(rts.list,paste0("output/tools/scsorter_rts_",object,"_",sig), compress = TRUE)
 ```
 
 
@@ -575,7 +582,7 @@ colnames(each.meta.df)[1] <- "cell_id"
 
 
 ```{r}
-write.csv(each.meta.df,paste0("output/scsorter_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
+write.csv(each.meta.df,paste0("output/tools/scsorter_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
 ```
 
 ```{r}
