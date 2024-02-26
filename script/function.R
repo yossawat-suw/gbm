@@ -244,8 +244,15 @@ scid_multiclass_edited <- function(target_gem = NULL, reference_gem = NULL,
     full_scores_unassigned <- full_scores[, unassigned_index, drop = FALSE]
     
     labels_unassigned <- apply(full_scores_unassigned, 2, function(x) {
-      rownames(full_scores_unassigned)[which(x == max(x, na.rm = T))]
+      max_value <- max(x, na.rm = TRUE)
+      tie_indices <- which(x == max_value)
+      if (length(tie_indices) > 1) {
+        "unassigned"  # Assign "unassigned" when tie condition occurs
+      } else {
+        rownames(full_scores_unassigned)[tie_indices]
+      }
     })
+    
     # check whether the labels_unassigned and the same name/order of labels_edited[unassigned_index]
     if (sum(names(labels_edited[unassigned_index]) == names(labels_unassigned)) == length(labels_unassigned)) {
       labels_edited[unassigned_index] <- unname(labels_unassigned)

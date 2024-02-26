@@ -54,21 +54,31 @@ gbm.meta <- read.csv("output/gbm_meta.csv", row.names = 1)
 anno_score_short
 ```
 
-
-
 ```{r}
-anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+anno_score[,consensus_threshold := consensus]
+
+anno_score[confidence < 0.5 ,consensus_threshold := "unknown" ]
+#anno_score[confidence == 0 ,consensus_threshold := "unknown" ]
 ```
 
 ```{r}
-anno_score$consensus <- as.character(anno_score$consensus)
-possible_cellstate <- unique(unname(unlist(anno_score[,c("stochastic_consensus","consensus_with_stochastic_of_tie","consensus")])))
+anno_score$consensus_threshold <- as.character(anno_score$consensus_threshold)
+possible_cellstate <- unique(unname(unlist(anno_score[,c("stochastic_consensus","consensus_with_stochastic_of_tie","consensus_threshold")])))
 
 possible_cellstate_with_unknown <- c(setdiff(possible_cellstate,"unknown"),"unknown")
 possible_cellstate_with_unassign <- c(setdiff(possible_cellstate,"unassign"),"unassign")
 possible_cellstate_with_unassign_tie <- c(setdiff(possible_cellstate,c("unassign","tie")),"unassign","tie")
 possible_cellstate_with_tie <- c(setdiff(possible_cellstate,"tie"),"tie")
 ```
+
+```{r}
+anno_score$consensus_threshold <- factor(anno_score$consensus_threshold ,level = possible_cellstate_with_unknown)
+```
+
+```{r}
+anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+```
+
 
 
 #consensus
@@ -80,20 +90,26 @@ plot(x = anno_score$known,y = anno_score$agreement)
 
 ```{r}
 # Assuming you have a predefined set of levels for 'consensus'
-anno_score_meta$consensus <- factor(anno_score_meta$consensus,levels = possible_cellstate_with_unknown)
+#anno_score_meta$consensus_threshold <- factor(anno_score_meta$consensus_threshold,levels = possible_cellstate_with_unknown)
 # Your original code with complete
-
-
-count_consensus <- anno_score_meta %>%
-  group_by(radiation, donor_id, consensus) %>%
-  summarise(count_consensus = n()) %>%
-  complete(consensus, fill = list(count_consensus = 0))
-
-
 ```
+
+
 ```{r}
 anno_score_meta
 ```
+
+
+```{r}
+count_consensus <- anno_score_meta %>%
+  group_by(radiation, donor_id, consensus_threshold) %>%
+  summarise(count_consensus = n()) %>%
+  complete(consensus_threshold, fill = list(count_consensus = 0))
+
+
+```
+
+
 
 ```{r}
 mean_score <- anno_score_meta %>%
@@ -119,7 +135,7 @@ ggplot(mean_score,
 
 ```{r}
 mean_score_cellstate <- anno_score_meta %>%
-  group_by(radiation, donor_id,consensus) %>%
+  group_by(radiation, donor_id,consensus_threshold) %>%
   summarise(confidence = mean(confidence),
             agreement = mean(agreement),
             known_prop = mean(known),
@@ -133,7 +149,7 @@ ggplot(mean_score_cellstate,
     geom_point() +
     labs(title = "mean Score from each donor_id") +
      # facet_grid(radiation ~ consensus)
-    facet_grid(consensus ~ radiation)
+    facet_grid(consensus_threshold ~ radiation)
 ```
 
 
@@ -151,23 +167,25 @@ text(x = 7, y = 0.5, "confidence", srt = 25)
 
 ```
 
+```{r}
+consensus_unique <- possible_cellstate_with_unknown
+```
+
+
 
 ```{r}
-consensus_unique <- as.vector(unique(anno_score$consensus))
-
-anno_score_meta <- merge(anno_score,data.table(gbm.meta,keep.rownames = TRUE), by = "rn")
 anno_score_mean <- anno_score_meta[, .(confidence_mean = mean(confidence),
                                             agreement_mean = mean(agreement),
                                             known_mean = mean(known)),
                                     by = c("radiation", "donor_id")]
 
-anno_consensus_count <- dcast(anno_score_meta, formula = donor_id + radiation ~ consensus)
-
+anno_consensus_count <- dcast(anno_score_meta, formula = donor_id + radiation ~ consensus_threshold,drop = FALSE)
+possible_cellstate_with_unknown
 
 anno_consensus_count[, n_cell:= rowSums(.SD),.SDcols = consensus_unique]
 anno_consensus_count <- merge(anno_consensus_count,anno_score_mean,by = c("donor_id","radiation"))
 
-anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean","agreement_mean","known_mean"), measure.vars = consensus_unique,variable.name = "consensus",value.name = "count")
+anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean","agreement_mean","known_mean"), measure.vars = consensus_unique,variable.name = "consensus_threshold",value.name = "count")
 
 
 #common
@@ -183,26 +201,38 @@ anno_consensus_count_long[, rad_con := paste0(radiation,"(",n_cell,")","\n","[",
 
 library(grid)
 library(randomcoloR)
-anno_consensus_count_long$consensus <- factor(anno_consensus_count_long$consensus ,
+anno_consensus_count_long$consensus_threshold <- factor(anno_consensus_count_long$consensus_threshold ,
                                                        levels = 
-                                                         sort(union(levels(anno_consensus_count_long$consensus),consensus_unique)))
+                                                         sort(union(levels(anno_consensus_count_long$consensus_threshold),consensus_unique)))
 
 
-dummy_data <- data.frame(consensus = levels(anno_consensus_count_long$consensus))
+dummy_data <- data.frame(consensus_threshold = levels(anno_consensus_count_long$consensus_threshold))
 
 
 set.seed(167)
-n <-  length(levels(anno_consensus_count_long$consensus))
+n <-  length(levels(anno_consensus_count_long$consensus_threshold))
 palette <- distinctColorPalette(n)
 
-anno_consensus_count_long
+```
+```{r}
+cellstate_colors <- c(
+  "OPClike" = "#1f77b4",  # Replace 'cellstate1' with actual cellstate names
+  "unknown" = "grey",
+  "NPClike" = "#2ca02c",
+  "AClike" = "#d62728",
+  "MESlike" = "#9467bd"
+  # Add more colors as needed for each cellstate
+)
+anno_consensus_count_long$consensus_threshold <-factor(anno_consensus_count_long$consensus_threshold, levels = c("MESlike" ,"OPClike","AClike" , "NPClike", "unknown" ))
+
+anno_consensus_count_long[,]
 ```
 
 
 ```{r}
 p <- ggplot() +
-    geom_blank(data = dummy_data, aes(fill = consensus)) +
-    geom_col(data = anno_consensus_count_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus, width = sqrt(n_cell))) +
+    geom_blank(data = dummy_data, aes(fill = consensus_threshold)) +
+    geom_col(data = anno_consensus_count_long, aes(x = sqrt(n_cell)/2, y = per, fill = consensus_threshold, width = sqrt(n_cell))) +
   facet_nested_wrap(~ donor_id + rad_con,strip = strip_nested(size = "variable")) +
   ggtitle("") +
   coord_polar("y", start = 0) +
@@ -211,7 +241,7 @@ p <- ggplot() +
   labs(title = "Cell states proportion", subtitle = paste(object,run,"control vs radiated\n [confidence/agreement/known score)]",sep = "; "), 
        fill = "Cell state") + 
   theme(strip.text = element_text(size = 6)) +
-  scale_fill_manual(values = palette) 
+  scale_fill_manual(values = cellstate_colors) 
 
 
 # Convert the plot to a grob
@@ -235,19 +265,26 @@ grid.draw(g)
 grid.draw(caption)
 ```
 
+
 ```{r}
 #control vs radiated
-consensus_unique <- as.vector(unique(anno_score$consensus))
-consensus_unique
+```
+
+
+
+```{r}
 anno_count_sum <- anno_score_meta[, c(lapply(.SD, sum), confidence_mean = mean(confidence),n_cell = as.character(.N)),
                                     .SDcols = consensus_unique,
                                     by = c("radiation")]
 
-anno_count_sum_long <-  melt(anno_count_sum,id.vars = c("radiation","confidence_mean","n_cell"), measure.vars = consensus_unique,variable.name = "consensus",value.name = "count")
+anno_count_sum_long <-  melt(anno_count_sum,id.vars = c("radiation","confidence_mean","n_cell"), measure.vars = consensus_unique,variable.name = "consensus_threshold",value.name = "count")
+
+anno_count_sum
+anno_count_sum_long
 
 anno_count_sum_long[,per := count/sum(count),by = c("radiation")]
 
-anno_count_sum_long <- anno_count_sum_long[order( radiation,consensus)]
+anno_count_sum_long <- anno_count_sum_long[order( radiation,consensus_threshold)]
 
 anno_count_sum_long[,n_cell := as.integer(n_cell)]
 anno_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean,digits = 2),")")]
@@ -259,11 +296,11 @@ anno_count_sum_long[, rad_con := paste0(radiation,"\n","(",round(confidence_mean
 library(grid)
 library(randomcoloR)
 
-set.seed(167)
-n <-  length(unique(anno_count_sum_long$consensus))
-palette <- distinctColorPalette(n)
-
-p <- ggplot(anno_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus, width = n_cell)) +
+# set.seed(167)
+# n <-  length(unique(anno_count_sum_long$consensus_threshold))
+# palette <- distinctColorPalette(n)
+anno_count_sum_long$consensus_threshold <-factor(anno_count_sum_long$consensus_threshold, levels = c("MESlike" ,"OPClike","AClike" , "NPClike", "unknown" ))
+p <- ggplot(anno_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus_threshold, width = n_cell)) +
   geom_col() +
   facet_nested_wrap(~ rad_con,strip = strip_nested(size = "variable")) +
   ggtitle("") +
@@ -273,7 +310,7 @@ p <- ggplot(anno_count_sum_long, aes(x = n_cell/2, y = per, fill = consensus, wi
   labs(title = "Cell states proportion", subtitle = "all donors; control vs radiated\n (confidence score)",
        fill = "Cell state") +
   theme(strip.text = element_text(size = 6)) +
-  scale_fill_manual(values = palette)
+  scale_fill_manual(values = cellstate_colors)
 
 
 # Convert the plot to a grob
@@ -293,9 +330,13 @@ grid.draw(caption)
 
 ```
 ```{r}
+anno_count_sum_long
+```
+
+```{r}
 
 p1 <- anno_score_meta %>%
-  ggplot( aes(x=confidence, fill=consensus)) +
+  ggplot( aes(x=confidence, fill=consensus_threshold)) +
     geom_histogram( color="#e9ecef", alpha=0.6, position = 'dodge',) +
     labs(fill="")
 p1
@@ -303,7 +344,7 @@ p1
 
 ```{r}
 p2 <- anno_score_meta %>%
-  ggplot( aes(x=confidence, fill=consensus)) +
+  ggplot( aes(x=confidence, fill=consensus_threshold)) +
     geom_histogram( color="#e9ecef", alpha=0.6, position = 'dodge',bins = 10) +
   facet_wrap(~donor_id) +
     labs(fill="")
@@ -312,7 +353,7 @@ p2
 ```
 ```{r}
 p3 <- anno_score_meta %>%
-  ggplot( aes(x=confidence, fill=consensus)) +
+  ggplot( aes(x=confidence, fill=consensus_threshold)) +
     geom_histogram( color="#e9ecef", alpha=0.6, position = 'dodge',bins = 5) +
   facet_wrap(~donor_radiation) +
     labs(fill="")
@@ -321,11 +362,11 @@ p3
 ```
 ```{r}
 test <- anno_score_meta %>% 
-  group_by(consensus,confidence) %>% 
+  group_by(consensus_threshold,confidence) %>% 
   summarise(count = n())
 
 # Plotting
-ggplot(test, aes(x = confidence, y = count,fill = consensus, color = consensus)) +
+ggplot(test, aes(x = confidence, y = count,fill = consensus_threshold, color = consensus_threshold)) +
   geom_point() +
   geom_line() +
   labs(y = "Cell Number")
@@ -333,11 +374,11 @@ ggplot(test, aes(x = confidence, y = count,fill = consensus, color = consensus))
 
 ```{r}
 anno_score_meta_ggplot <- anno_score_meta %>% 
-  group_by(consensus,confidence,donor_radiation) %>% 
+  group_by(consensus_threshold,confidence,donor_radiation) %>% 
   summarise(count = n()) %>% ungroup()
 
 # Plotting
-ggplot(anno_score_meta_ggplot, aes(x = confidence, y = count,fill = consensus, color = consensus)) +
+ggplot(anno_score_meta_ggplot, aes(x = confidence, y = count,fill = consensus_threshold, color = consensus_threshold)) +
   geom_point() +
   geom_line() +
   scale_y_log10() +
@@ -345,6 +386,8 @@ ggplot(anno_score_meta_ggplot, aes(x = confidence, y = count,fill = consensus, c
   theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust=1,size = 5)) +
   facet_wrap(~donor_radiation) 
 ```
+
+
 #Explore under more sophisticate dimention
 ```{r}
 gbm <- readRDS("output/seurat_gbm_qc")
@@ -382,10 +425,10 @@ gbm <- gbm %>%
   RunUMAP(dims = 1:15) 
 ```
 ```{r}
-DimPlot(gbm,reduction = "umap",group.by = "consensus")
+DimPlot(gbm,reduction = "umap",group.by = "consensus_threshold")
 ```
 ```{r}
-DimPlot(gbm,reduction = "umap",group.by = "consensus",split.by = "donor_radiation",ncol = 5)
+DimPlot(gbm,reduction = "umap",group.by = "consensus_threshold",split.by = "donor_radiation",ncol = 5)
 ```
 
 

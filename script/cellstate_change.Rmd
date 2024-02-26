@@ -1,0 +1,240 @@
+
+
+```{r}
+
+#library(UCell)
+library(ggplot2)
+library(data.table)
+library(tibble)
+library(rstatix)
+library(dplyr)
+library(ggpubr)
+```
+
+
+
+
+```{r}
+#Set working directory
+setwd(here::here())
+source("script/function.R")
+
+# Parameter
+source("script/parameter.R")
+
+```
+
+```{r}
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
+
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+
+#choose what to analyse
+
+pick <- 4
+
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+```
+
+```{r}
+#load pre-post matching cell
+matching <- fread("data/matched_cell_data.csv")
+table(matching$donor_id,matching$cell_state)
+
+#change the value so that it match with my dataset
+matching[,radiation := gsub(pattern = "Control",replacement = "control",x = cell_state)]
+matching[,runs := gsub(pattern = "Run ",replacement = "run",x = scRNA_run)]
+
+
+matching[,rn := paste(runs,radiation,V1,sep = "_") ]
+#matching[,rn2 := paste(runs,"radiated",matched_cell,sep = "_") ]
+```
+
+```{r}
+#load cellstate annotation
+annotation <- fread(input = "output/annotation/annotation_4_merge_metamodules_each__.csv",header = TRUE)
+```
+```{r}
+#load gbm metadata 
+gbm.meta <- fread(input = "output/gbm_meta.csv",header = TRUE)
+setnames(gbm.meta,"V1","rn")
+dim(gbm.meta)
+
+```
+```{r}
+cellstate.meta <- merge(annotation,gbm.meta,by = "rn",all.x = TRUE,all.y = FALSE)
+cellstate.meta
+
+cellstate.meta.control <- cellstate.meta[radiation == "control"]
+cellstate.meta.radiated <- cellstate.meta[radiation == "radiated"]
+cellstate.meta.radiated
+```
+
+
+```{r}
+matching
+ggVennDiagram::ggVennDiagram(list(match = matching$rn, cellstate = cellstate.meta.control$rn))
+setdiff(matching$rn, cellstate.meta.control$rn)
+matching$rn <- gsub(pattern = "1-1",replacement = "1",x = matching$rn)
+ggVennDiagram::ggVennDiagram(list(match = matching$rn, cellstate = cellstate.meta.control$rn))
+```
+```{r}
+nrow(matching)
+length(unique(matching$matched_cell))
+length(unique(matching$V1))
+```
+
+```{r}
+matching
+```
+
+```{r}
+
+duplicated_radiated <- matching[matched_cell %in% names(table(matching$matched_cell))[table(matching$matched_cell) > 1],]
+
+
+duplicated_radiated %>% arrange(matched_cell) %>% select(V1,donor_id,cell_state,scRNA_run,matched_cell)
+```
+
+
+```{r}
+matching[,rn2 := paste(runs,"radiated",matched_cell,sep = "_")]
+ggVennDiagram::ggVennDiagram(list(match = matching$rn2, cellstate = cellstate.meta.radiated$rn))
+setdiff(matching$rn2, cellstate.meta.radiated$rn)
+```
+```{r}
+matching[,rn2 := paste(runs,"radiated",matched_cell,sep = "_")]
+table(grepl("-1",matching$rn2))
+table(grepl("-1-1",matching$rn2))
+table(grepl("-1-2",matching$rn2))
+table(grepl("-1",matching$V1))
+table(grepl("-1-1",matching$V1))
+table(grepl("-1-2",matching$V1))
+table(grepl("-1-",matching$V1))
+```
+```{r}
+rbind(matching[grepl("-1-",matching$V1),],matching[V1 == "GCCATTCGTAGATTAG-1" | V1 == "AAACCCACATGCGTGC-1",])
+```
+```{r}
+dup <- gsub(x =matching[grepl("-1-",matching$rn2),matched_cell],pattern = "-1-1",replacement = "-1")
+
+dup
+filter(matching, grepl(paste(dup, collapse='|'), matched_cell)) %>% arrange(matched_cell) %>% select(donor_id,scRNA_run,matched_cell)
+
+```
+```{r}
+matching[,donor_cell := paste(donor_id,matched_cell,sep = "_")]
+matching$donor_cell <- gsub(x= matching$donor_cell,pattern = "-1-1",replacement = "-1")
+
+
+cellstate.meta.radiated <- cellstate.meta[radiation == "radiated"]
+rn <- cellstate.meta.radiated[,rn]
+rn <- gsub(pattern = "run2_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run2_control_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_control_",replacement = "",x = rn)
+cellstate.meta.radiated$matched_cell <- rn
+
+cellstate.meta.radiated[,donor_cell := paste(donor_id,matched_cell,sep = "_")]
+```
+
+```{r}
+matching
+cellstate.meta.radiated
+```
+
+```{r}
+cellstate.meta[grepl("GCCATTCGTAGATTAG-1",cellstate.meta$rn ),.(rn,split)]
+cellstate.meta[grepl("AAACCCACATGCGTGC-1",cellstate.meta$rn ),.(rn,split)]
+```
+
+
+```{r}
+#check the cellstate data
+# cellstate.meta$barcode
+# cellstate.meta[,barcode := gsub(pattern = "run2_",replacement = "",x = rn)]
+# cellstate.meta[,barcode := gsub(pattern = "run1_",replacement = "",x = barcode)]
+
+
+table(grepl("-1",cellstate.meta$rn))
+table(grepl("-1-1",matching$rn2))
+table(grepl("-1-2",matching$rn2))
+table(grepl("-1",matching$V1))
+table(grepl("-1-1",matching$V1))
+table(grepl("-1-2",matching$V1))
+```
+
+
+```{r}
+matching[,rn2_orig := paste(runs,"radiated",matched_cell,sep = "_")]
+matching$rn2 <- gsub(pattern = "-1-1",replacement = "-1",x = matching$rn2_orig)
+matching$rn2 <- gsub(pattern = "-1-2",replacement = "-1",x = matching$rn2)
+match_extra <- setdiff(matching$rn2, cellstate.meta$rn)
+matching[rn2 %in% match_extra, ]
+ggVennDiagram::ggVennDiagram(list(match = matching$rn2, cellstate = cellstate.meta.radiated$rn))
+```
+```{r}
+match_extra <- gsub(pattern = "run2_radiated_",replacement = "",x = match_extra)
+match_extra <- gsub(pattern = "run1_radiated_",replacement = "",x = match_extra)
+match_extra <- gsub(pattern = "run2_control_",replacement = "",x = match_extra)
+match_extra <- gsub(pattern = "run1_control_",replacement = "",x = match_extra)
+match_extra
+matching[matched_cell %in% match_extra]
+```
+```{r}
+rn <- cellstate.meta[,rn]
+rn <- gsub(pattern = "run2_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run2_control_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_control_",replacement = "",x = rn)
+cellstate.meta$matched_cell <- rn
+
+cellstate.meta[matched_cell %in% match_extra]
+```
+```{r}
+matching[matched_cell %in% match_extra,.(matched_cell,donor_id,scRNA_run)][order(matched_cell)]
+cellstate.meta[matched_cell %in% match_extra,.(matched_cell,split)][order(matched_cell)]
+
+matching[,subset_lucy := paste(runs,"radiated",donor_id,sep = "_")]
+cellstate.meta[,subset_yossawat := split]
+
+matching.diff <- matching[matched_cell %in% match_extra,.(matched_cell,subset_lucy)][order(matched_cell)]
+cellstate.meta.diff <- cellstate.meta[matched_cell %in% match_extra,.(matched_cell,subset_yossawat)][order(matched_cell)]
+```
+```{r}
+cell_diff <- merge(matching.diff,cellstate.meta.diff,by = "matched_cell", all = TRUE)
+
+View(cell_diff)
+```
+
+```{r}
+matching[,rn2 := paste("radiated",matched_cell,sep = "_")]
+cellstate.meta[,rn2 := gsub(pattern = "run2_",replacement = "",x = rn)]
+cellstate.meta[,rn2 := gsub(pattern = "run1_",replacement = "",x = rn2)]
+ggVennDiagram::ggVennDiagram(list(match = matching$rn2, cellstate = cellstate.meta$rn2))
+setdiff(matching$rn2, cellstate.meta$rn2)
+
+matching$rn2 <- gsub(pattern = "-1-1",replacement = "-1",x = matching$rn2)
+matching$rn2 <- gsub(pattern = "-1-2",replacement = "-1",x = matching$rn2)
+
+ggVennDiagram::ggVennDiagram(list(match = matching$rn2, cellstate = cellstate.meta$rn2))
+setdiff(matching$rn2, cellstate.meta$rn2)
+```
+
+#try remove myself
+```{r}
+cellstate.meta.radiated
+matching$rn2_orig
+```
+

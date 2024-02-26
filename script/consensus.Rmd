@@ -56,19 +56,20 @@ possible_cellstate_with_tie <- c(possible_cellstate,"tie")
 
 
 ```{r}
-### import all data
-## marker.based
+# import all data
+# marker.based
 sc.type <- read.csv(paste0("output/tools/scType_", object, "_", sig,"_",run, ".csv"), row.names = 1)
 sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE]
 
 scina <- read.csv(paste0("output/tools/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1)
 scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
 
-
-# # add full option
-sc.sorter <- read.csv(paste0("output/tools/scsorter_", object, "_", sig, "_",run,".csv"), row.names = 1)
-sc.sorter$scSorter_no_unknown <- NA
+scina
+# add full option
+sc.sorter <- read.csv(paste0("output/tools/scsorter_", object, "_", sig, "_",run,".csv"), row.names = "cell_id")
+sc.sorter$scSorter_no_unknown <- sc.sorter$scSorter
 sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+
 ```
 
 
@@ -80,12 +81,15 @@ clustify.r <- read.csv(paste0("output/clustifyr_", object, "_", merge, "_",run,"
 clustify.r <- clustify.r[,paste0("clustifyr_ref") ,drop = FALSE]
 
 scid <- read.csv(paste0("output/scID_", object, "_", merge,"_allassigned","_",run,".csv"), row.names = 1)
+scid$scid_no_unknown <- scid$scID_no_unknown #the current ScID is edited is not working
+#scid$scID_no_unknown <- scid$scID
 scid <- scid[,paste0("scID",unknown) ,drop = FALSE]
+
 ```
 
 
 ```{r}
-# Add Full option
+#Add Full option
 sc.pred <- read.csv(paste0("output/scpred_", object, "_", merge, "_",run, ".csv"), row.names = 1)
 sc.pred <- sc.pred[,2:1]
 colnames(sc.pred) <- c("scPred",paste0("scPred",unknowns[2]))
@@ -106,23 +110,23 @@ chetah$CHETAH_no_unknown <- chetah$CHETAH
 chetah <- chetah[,paste0("CHETAH",unknown) ,drop = FALSE]
 
 scmap_cluster <- read.csv(paste0("output/scmap_cluster_", object, "_", merge,  "_",run,".csv"), row.names = 1)
-scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster #cannot tweak to have no unknown
+scmap_cluster$scmap_cluster_no_unknown <- scmap_cluster$scmap_cluster_adjust #cannot tweak to have no unknown
 scmap_cluster <- scmap_cluster[,paste0("scmap_cluster",unknown) ,drop = FALSE]
 
 scmap_cell <- read.csv(paste0("output/scmap_cell_", object, "_", merge,  "_",run,".csv"), row.names = 1)
-scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell #cannot tweak to have no unknown
+scmap_cell$scmap_cell_no_unknown <- scmap_cell$scmap_cell_adjust #cannot tweak to have no unknown
 scmap_cell <- scmap_cell[,paste0("scmap_cell",unknown) ,drop = FALSE]
 ```
 
 ```{r}
-#sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
+sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cluster;scmap_cluster
 ```
 
 
 ```{r}
 #choose the tool to be used
-#anno <- bind_cols(sc.type, scina, clustify.r,scid,sc.sorter) #first version
-anno <- bind_cols(sc.type, clustify.r,scid) # version Feb 1st 24
+anno <- bind_cols(sc.type, scina, clustify.r,scid,sc.sorter) #first version
+#anno <- bind_cols(sc.type, clustify.r,scid) # version Feb 1st 24
 ```
 
 
@@ -497,7 +501,7 @@ anno.count
 
 possible_cellstate_with_multi_unknown <- colnames(anno.count)
 
-combinations <- as.data.frame(combinations(length(possible_cellstate_with_multi_unknown),length(tool_names),possible_cellstate_with_multi_unknown,repeats=TRUE))
+combinations <- as.data.frame(gtools::combinations(length(possible_cellstate_with_multi_unknown),length(tool_names),possible_cellstate_with_multi_unknown,repeats=TRUE))
 
 colnames(combinations) <- tool_names
 rownames(combinations) <- 1:nrow(combinations)
@@ -514,7 +518,7 @@ combinations <- dcast(anno_long, cellname ~ cellstate, fun.aggregate = length)
 combinations[is.na(combinations)] <- 0
 
 combinations <- column_to_rownames(combinations,var = "cellname")
-combinations
+
 rm(anno_long)
 
 
@@ -908,13 +912,12 @@ thresholds <- 0.5
 
 #Option 1: 1. call unknown only when all tool are unknown 2. stocastic tie
 anno_score[,consensus := consensus_with_stochastic_of_tie] #create consensus column
-anno_score[unknown == 1, consensus:= "unassign"]
-#anno_score[confidence < thresholds,consensus:= "unassign"] dont need this because we already use stocastic
+anno_score[unknown == 1, consensus:= "unknown"]
+#anno_score[confidence < thresholds,consensus:= "unknown"] dont need this because we already use stocastic
 
 
 
 anno_score$consensus <- as.factor(anno_score$consensus)
-
 
 
 table(anno_score$consensus)
@@ -932,7 +935,15 @@ anno.all <- merge(anno_score,anno.agreement.chosen,
 
 fwrite(anno.all, file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
 
-anno.all
+
+```
+```{r}
+sum(anno.all$Tie)*100/nrow(anno.all)
+
+hist(anno.all$confidence)
+```
+```{r}
+head(anno.all)
 ```
 
 
@@ -945,6 +956,11 @@ anno.all.short
 fwrite(anno.all.short, file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
 ```
 
+```{r}
+table(anno.all.short$confidence > 0.5)
+table(anno.all.short$confidence)
+table(anno.all.short$known)
+```
 
 
 

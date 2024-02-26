@@ -51,3 +51,13 @@ unknowns <- c("","_no_unknown")
 radiations <- c("control","radiated")
 
 radiation <- c("control","radiated")
+
+
+cellstate_colors <- c(
+  "OPClike" = "#1f77b4",  # Replace 'cellstate1' with actual cellstate names
+  "unknown" = "grey",
+  "NPClike" = "#2ca02c",
+  "AClike" = "#d62728",
+  "MESlike" = "#9467bd"
+  # Add more colors as needed for each cellstate
+)

@@ -2,19 +2,27 @@
 #Calculate score and 95% for each patient (9 Oct 2023)
 ```{r}
 library(Seurat)
-library(UCell)
+#library(UCell)
 library(ggplot2)
 library(data.table)
 library(tibble)
 library(rstatix)
+library(dplyr)
+library(ggpubr)
 ```
+
+
 
 
 ```{r}
-gbm <- readRDS("output/seurat_gbm_qc")
+#Set working directory
+setwd(here::here())
+source("script/function.R")
+
+# Parameter
+source("script/parameter.R")
+
 ```
-
-
 ```{r}
 # create senescence score
 signatures <- list(senescence = scan("data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
@@ -30,7 +38,7 @@ run_each <- run_eachs[1]
 
 #choose what to analyse
 
-pick <- 3
+pick <- 4
 
 merge <- merges[pick]
 
@@ -41,207 +49,550 @@ if (run_each) {
   run <- runs[2]
 }
 ```
+
+
+#senescence lucy way
+```{r}
+gbm <- readRDS("output/seurat_gbm_qc")
+```
 ```{r}
 gbm <- NormalizeData(gbm)
 gbm <- ScaleData(gbm, features = rownames(gbm))
 ```
 
-#Ucell
-```{r}
-gbm <- AddModuleScore_UCell(gbm, features = signatures, name = NULL)
-```
-
 ```{r}
 gbm$donor_id <- as.factor(gbm$donor_id)
-gbm$sen_label <- NA
-gbm$cutoff_sen <- NA
 
-p <- c()
+# Initialize sen_score as zeros
+gbm$sen_score <- 0
+
 for (i in levels(gbm$donor_id)) {
-  q <- quantile(gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i, "senescence"], 0.95)
-
-  gbm@meta.data[gbm$donor_id == i, "cutoff_sen"] <- q
-  gbm@meta.data[gbm$radiation == "radiated" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence" #assign senescence to radiated group
-  gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence" #assign senescence to control group
+  control_donor_ids <- rownames(gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i,])
+  
+  for (q in signatures$senescence) {
+    q_gene_donor <- quantile(gbm@assays$RNA@data[q, control_donor_ids], 0.95)
+    
+    donor_ids <- rownames(gbm@meta.data[gbm$donor_id == i,])
+    sen_logic <- gbm@assays$RNA@data[q, donor_ids] > q_gene_donor
+    
+    # Increment sen_score for the donor based on sen_logic
+    gbm@meta.data[gbm$donor_id == i,"sen_score"] <- gbm@meta.data[gbm$donor_id == i,"sen_score"] + as.numeric(sen_logic)
+  }
 }
-gbm@meta.data[is.na(gbm$sen_label), "sen_label"] <- "not_senescence"
-```
-```{r}
-senescene_score <- gbm@meta.data
-
-senescene_score
-```
-```{r}
-fwrite(gbm@meta.data, file = paste("output/senescence_score.csv",sep = "_"))
-senescene_score <- fread(file = paste("output/senescence_score.csv",sep = "_"))
-```
-
-```{r}
-ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) +
-  geom_histogram(position = "identity", bins = 40, alpha = 0.5)
 ```
 
 
 ```{r}
-# visualization
-library(ggplot2)
+table(gbm$sen_score)
+```
 
-ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) +
-  geom_histogram(position = "identity", bins = 40, alpha = 0.5) +
-  facet_wrap(~runs, ncol = 1)
+```{r}
+fwrite(gbm@meta.data[,c("sen_score","donor_id","radiation"),drop = FALSE],file = "output/sen_score.csv",row.names = TRUE)
 ```
 
 
 
+
+
+#start analysis
+
 ```{r}
-ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) +
-  geom_histogram(position = "identity", bins = 40, alpha = 0.5) +
-  facet_wrap(~donor_id, ncol = 4) +
-  scale_y_sqrt(breaks = c(0, 100, 500))
+library(data.table)
 ```
 
 ```{r}
-library(dplyr)
-library(ggplot2)
-
-p <- ggplot(gbm@meta.data, aes(x = senescence, fill = radiation)) +
-  geom_histogram(position = "identity", bins = 40, alpha = 0.5) +
-  facet_wrap(~donor_id, ncol = 4) +
-  scale_y_sqrt(breaks = c(0, 100, 500)) +
-  geom_vline(mapping = aes(xintercept = cutoff_sen))
-
-p
-```
-```{r}
-# Add percentage of senescence state in radiated group
-
-cols_to_convert <- c("donor_id", "radiation", "runs", "batch", "split", "donor_run", "donor_radiation", "sen_label")
-
-gbm@meta.data[cols_to_convert] <- lapply(gbm@meta.data[cols_to_convert], factor)
+sen_score <- fread(file = "output/sen_score.csv",data.table = FALSE)
+sen_score  <- column_to_rownames(sen_score,var = "V1")
 ```
 
-
 ```{r}
-# calculate the
-
-rad.sen.prop <- gbm@meta.data[gbm$radiation == "radiated", ] %>%
-  group_by(donor_id, sen_label) %>% # Group by "Group" and "Category"
-  summarize(
-    Count = n(), # Count the number of occurrences of each category within each group
-  ) %>%
-  group_by(donor_id) %>%
-  mutate(
-    Proportion = Count / sum(Count),
-    Percentage = ceiling(Proportion * 100)
-  )
-
-
-
-
-dat_text <- data.frame(
-  label = paste0(as.character(rad.sen.prop[rad.sen.prop$sen_label == "senescence", "Percentage", drop = TRUE]), "%"),
-  donor_id = as.factor(levels(rad.sen.prop$donor_id)),
-  radiation = as.factor(rep("radiated", times = nrow(rad.sen.prop)))
-)
-
-p <- p + geom_text(
-  data = dat_text,
-  mapping = aes(x = 0.4, y = 350, label = label),
-  size = 3
-)
-p <- p + labs(title = "Post-radiation senescence", subtitle = "vertical line are 95% percentile of control group for each donor", caption = "percentage of senescence in radiated condition are labeled in right-upper graph")
-
-p <- p +
-  xlab("Senescence score") +
-  ylab("Count")
-
-p
-```
-
-#Add annotation data
-```{r}
-senescene_score <- fread(file = paste("output/senescence_score.csv",sep = "_"))
 anno.all.short <- fread(file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
 anno.all.short_edited <- column_to_rownames(anno.all.short,var = "rn")
 
-anno.senesence <- cbind(anno.all.short_edited,senescene_score)
+
+
+anno.senesence <- cbind(anno.all.short_edited,sen_score,drop = FALSE)
+anno.senesence <- anno.senesence %>% mutate(donor_radiation = paste(donor_id,radiation,sep = "_"))
+
+anno.senesence$consensus <- as.factor(anno.senesence$consensus)
 
 anno.senesence
 ```
-#analysis
-```{r}
-#filter before analysis
-
-# threshold.vec <- c(unknown = 0.5,
-#                    confidence = 0.5,
-#                    agreement = 0.25)
-
-# no threshold
-threshold.vec <- c(unknown = 1,
-                   confidence = 0,
-                   agreement = 0)
-
-anno.senesence.filtered <- anno.senesence[anno.senesence$unknown <= threshold.vec["unknown"] &
-                                            anno.senesence$confidence >= threshold.vec["confidence"] &
-                                            anno.senesence$agreement >= threshold.vec["agreement"],]
-
-anno.senesence.filtered
-```
-#intercellstate senescence heterogeneity
-```{r}
-
-#subset only control 
-anno.senesence.filtered.radiation <- anno.senesence.filtered[anno.senesence.filtered$radiation == "control",]
-anno.senesence.filtered.radiation
-```
 
 ```{r}
-#contingency table: Chi square
-contingency_table <- table(anno.senesence.filtered.radiation$consensus, anno.senesence.filtered.radiation$sen_label)
-contingency_table
-```
-```{r}
-prop_table <- prop.table(contingency_table, margin = 1) #proportion row-wise
-prop_table
-```
-
-```{r}
-overall_chi_square <- chisq.test(contingency_table)
-overall_chi_square
+anno.senesence %>%
+  mutate(sens_logic = sen_score > 4) %>% # Create a logical column indicating if sen_score > 4
+  group_by(donor_id, radiation) %>%
+  summarise(ncell = n(),
+            senescence_count = sum(sens_logic, na.rm = TRUE),
+            senescence_per = 100*sum(sens_logic, na.rm = TRUE)/n(),.groups = 'drop') # Count TRUE conditions in sens_logic
 ```
 
 
 ```{r}
-pairwise_chi_square <- pairwise_prop_test(contingency_table)
+ggplot(data = anno.senesence, aes(x = radiation,y = sen_score)) + 
+  geom_boxplot() +
+  facet_wrap(~donor_id)
 
-prop_table
-pairwise_chi_square
-```
-#intracellstate pre-post radiation senescence change
-```{r}
-cellstates <- unique(anno.senesence.filtered$consensus)
-cellstates
-```
+ggplot(data = anno.senesence, aes(x = consensus,y = sen_score)) + 
+  geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~donor_id)
 
 
-```{r}
-anno.senesence.filtered.cellstate <-  anno.senesence.filtered[anno.senesence.filtered$consensus == cellstates[4],]
-anno.senesence.filtered.cellstate
 ```
 
 ```{r}
-#contingency table: Chi square
+anno.senesence
+```
 
 
-contingency_table <- table(anno.senesence.filtered.cellstate$radiation, anno.senesence.filtered.cellstate$sen_label)
-contingency_table
-```
-```{r}
-prop_table <- prop.table(contingency_table, margin = 1) #proportion row-wise
-prop_table
-```
+
 
 ```{r}
-overall_chi_square <- chisq.test(contingency_table)
-overall_chi_square
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+
+plot_cellstate_prepost_per_donor <- function(anno.senesence, confidence_threshold = 0,ref.group = NULL) {
+  # Perform Wilcoxon test
+  stat.test <- anno.senesence %>%
+    filter(confidence >= confidence_threshold) %>%
+    group_by(donor_radiation, donor_id, radiation) %>%
+    wilcox_test(sen_score ~ consensus, paired = FALSE,ref.group = ref.group)
+  
+  # Add XY position for dodge
+  stat.test <- stat.test %>%
+    add_xy_position(x = "radiation", dodge = 0.8)
+  
+  # Create box plots
+  bxp <- ggboxplot(anno.senesence %>% filter(confidence >= confidence_threshold), 
+                   x = "radiation", y = "sen_score", fill = "consensus", facet.by = "donor_id") 
+  
+  # Add p-values
+  plot <- bxp + 
+    stat_pvalue_manual(
+      stat.test, label = "p.adj.signif", tip.length = 0.01,
+      hide.ns = TRUE
+    ) +
+    scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere
+  
+  return(plot)
+}
 ```
+
+
+
+
+```{r}
+# Example usage
+p0_0 <- plot_cellstate_prepost_per_donor(anno.senesence, confidence_threshold = 0)
+p0_0
+```
+
+```{r}
+# Example usage
+p0_0.5 <- plot_cellstate_prepost_per_donor(anno.senesence, confidence_threshold = 0.5)
+p0_0.5
+```
+
+```{r}
+
+# p0.all <- plot_cellstate_prepost_per_donor(anno.senesence, confidence_threshold = 0,ref.group = "all")
+# p0.all
+```
+
+```{r}
+plot_cellstate_prepost<- function(anno.senesence, confidence_threshold = 0,ref.group = NULL) {
+  # Perform Wilcoxon test
+  stat.test <- anno.senesence %>%
+    filter(confidence >= confidence_threshold) %>%
+    group_by(radiation) %>%
+    wilcox_test(sen_score ~ consensus, paired = FALSE,ref.group = ref.group)
+  
+  # Add XY position for dodge
+  stat.test <- stat.test %>%
+    add_xy_position(x = "radiation", dodge = 0.8)
+  
+  # Create box plots
+  bxp <- ggboxplot(anno.senesence %>% filter(confidence >= confidence_threshold), 
+                   x = "radiation", y = "sen_score", fill = "consensus",notch = TRUE )
+  
+  # Add p-values
+  plot <- bxp + 
+    stat_pvalue_manual(
+      stat.test, label = "p.adj.signif", tip.length = 0.01,
+      hide.ns = TRUE
+    ) +
+    scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere
+  
+  return(plot)
+}
+```
+
+```{r}
+p4_0 <- plot_cellstate_prepost(anno.senesence, confidence_threshold = 0)
+p4_0
+```
+```{r}
+p4_0.5 <- plot_cellstate_prepost(anno.senesence, confidence_threshold = 0.5)
+p4_0.5
+```
+
+```{r}
+#Find the median 
+sen_score_average <- anno.senesence %>% group_by(consensus,donor_id,radiation) %>% summarise(median = median(sen_score),
+                                                                                             mean = mean(sen_score)) %>% ungroup()
+
+``` 
+
+```{r}
+sen_score_average %>% filter(radiation == "control") %>%
+  ggplot(data = ., aes(x=donor_id,y= median,fill = consensus,color = consensus,group = consensus)) +
+  geom_point() + geom_line() + theme_classic()
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+anno.senesence.dt <- as.data.table(anno.senesence,keep.rownames = TRUE)
+anno.senesence.dt[,consensus_donor := paste(consensus,donor_id,sep = "_")] 
+```
+
+
+
+```{r}
+library(data.table)
+library(rstatix)
+library(ggplot2)
+library(ggpubr)
+
+plot_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
+  # Convert anno.senesence to data.table
+  setDT(anno.senesence.dt)
+  anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold]
+  # Perform Wilcoxon test
+  anno.senesence.wide <- dcast(anno.senesence.filtered, consensus_donor
+ ~ radiation, value.var = "sen_score")
+  
+  missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+  anno.senesence.filtered <- anno.senesence.filtered[!consensus_donor %in% missing,]
+  
+  stat.test <- anno.senesence.filtered %>%
+  group_by(consensus, donor_id) %>%
+  wilcox_test(sen_score ~ radiation, paired = FALSE,ref.group = ref.group)
+
+  # Add XY position for dodge
+  stat.test <- stat.test %>%
+    add_xy_position(x = "consensus", dodge = 0.8) %>%
+    add_significance()  
+  # Create box plots
+  bxp <- ggboxplot(anno.senesence.filtered , 
+                   x = "consensus", y = "sen_score", fill = "radiation", facet.by = "donor_id") 
+  
+  # Add p-values
+  plot <- bxp + 
+    stat_pvalue_manual(
+      stat.test, label = "p.signif", tip.length = 0.01,
+      hide.ns = TRUE
+    ) 
+  
+  return(plot)
+}
+```
+
+
+
+```{r}
+p1_0 <- plot_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
+p1_0
+```
+```{r}
+p1_0.5 <- plot_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0.5)
+p1_0.5
+```
+
+```{r}
+plot_prepost_cellstate <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
+  # Convert anno.senesence to data.table
+  setDT(anno.senesence.dt)
+  anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold]
+  # Perform Wilcoxon test
+  anno.senesence.wide <- dcast(anno.senesence.filtered, consensus
+ ~ radiation, value.var = "sen_score")
+  
+  missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus]
+
+  anno.senesence.filtered <- anno.senesence.filtered[!consensus %in% missing,]
+  
+  stat.test <- anno.senesence.filtered %>%
+  group_by(consensus) %>%
+  wilcox_test(sen_score ~ radiation, paired = FALSE,ref.group = ref.group)
+
+  # Add XY position for dodge
+  stat.test <- stat.test %>%
+    add_xy_position(x = "consensus", dodge = 0.8) %>%
+    add_significance()  
+  # Create box plots
+  bxp <- ggboxplot(anno.senesence.filtered , 
+                   x = "consensus", y = "sen_score", fill = "radiation") 
+  
+  # Add p-values
+  plot <- bxp + 
+    stat_pvalue_manual(
+      stat.test, label = "p.signif", tip.length = 0.01,
+      hide.ns = TRUE
+    ) 
+  
+  return(plot)
+}
+```
+
+
+```{r}
+p3_0 <- plot_prepost_cellstate(anno.senesence.dt, confidence_threshold = 0)
+p3_0
+```
+
+```{r}
+p3_0.5 <- plot_prepost_cellstate(anno.senesence.dt, confidence_threshold = 0.5)
+p3_0.5
+```
+
+
+```{r}
+# library(lme4)
+# 
+# lme4::lmer(sen_score ~ 0+ consensus + (1 | donor_radiation) ,data = anno.senesence[anno.senesence$radiation == "control",])
+# 
+# lme4::lmer(sen_score ~ 0+ consensus + (0 + consensus | donor_radiation) ,data = anno.senesence[anno.senesence$radiation == "control",])
+# 
+# model1 <- lme4::lmer(sen_score ~ 0+ consensus + (0 + consensus | donor_id) + (0 + consensus | radiation) ,data = anno.senesence)
+# 
+# summary(model1)
+# 
+# model2 <- lme4::lmer(sen_score ~ 0+ consensus + (0 + consensus | donor_id) + (0 + consensus | radiation) ,data = anno.senesence)
+
+# model3 <- lme4::lmer(sen_score ~ 0+ consensus*radiation + (0 + consensus | donor_id) + (0 + consensus | radiation) ,data = anno.senesence)
+# 
+# summary(model3)
+```
+
+
+<!-- #Ucell -->
+<!-- ```{r} -->
+<!-- gbm <- AddModuleScore_UCell(gbm, features = signatures, name = NULL) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm$donor_id <- as.factor(gbm$donor_id) -->
+<!-- gbm$sen_label <- NA -->
+<!-- gbm$cutoff_sen <- NA -->
+
+<!-- p <- c() -->
+<!-- for (i in levels(gbm$donor_id)) { -->
+<!--   q <- quantile(gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i, "senescence"], 0.95) -->
+
+<!--   gbm@meta.data[gbm$donor_id == i, "cutoff_sen"] <- q -->
+<!--   gbm@meta.data[gbm$radiation == "radiated" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence" #assign senescence to radiated group -->
+<!--   gbm@meta.data[gbm$radiation == "control" & gbm$donor_id == i & gbm$senescence > q, "sen_label"] <- "senescence" #assign senescence to control group -->
+<!-- } -->
+<!-- gbm@meta.data[is.na(gbm$sen_label), "sen_label"] <- "not_senescence" -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- senescene_score <- gbm@meta.data -->
+
+<!-- senescene_score -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- fwrite(gbm@meta.data, file = paste("output/senescence_score.csv",sep = "_")) -->
+<!-- senescene_score <- fread(file = paste("output/senescence_score.csv",sep = "_")) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) + -->
+<!--   geom_histogram(position = "identity", bins = 40, alpha = 0.5) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # visualization -->
+<!-- library(ggplot2) -->
+
+<!-- ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) + -->
+<!--   geom_histogram(position = "identity", bins = 40, alpha = 0.5) + -->
+<!--   facet_wrap(~runs, ncol = 1) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- ggplot(gbm@meta.data, aes(x = senescence, fill = sen_label)) + -->
+<!--   geom_histogram(position = "identity", bins = 40, alpha = 0.5) + -->
+<!--   facet_wrap(~donor_id, ncol = 4) + -->
+<!--   scale_y_sqrt(breaks = c(0, 100, 500)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+<!-- library(ggplot2) -->
+
+<!-- p <- ggplot(gbm@meta.data, aes(x = senescence, fill = radiation)) + -->
+<!--   geom_histogram(position = "identity", bins = 40, alpha = 0.5) + -->
+<!--   facet_wrap(~donor_id, ncol = 4) + -->
+<!--   scale_y_sqrt(breaks = c(0, 100, 500)) + -->
+<!--   geom_vline(mapping = aes(xintercept = cutoff_sen)) -->
+
+<!-- p -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- # Add percentage of senescence state in radiated group -->
+
+<!-- cols_to_convert <- c("donor_id", "radiation", "runs", "batch", "split", "donor_run", "donor_radiation", "sen_label") -->
+
+<!-- gbm@meta.data[cols_to_convert] <- lapply(gbm@meta.data[cols_to_convert], factor) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # calculate the -->
+
+<!-- rad.sen.prop <- gbm@meta.data[gbm$radiation == "radiated", ] %>% -->
+<!--   group_by(donor_id, sen_label) %>% # Group by "Group" and "Category" -->
+<!--   summarize( -->
+<!--     Count = n(), # Count the number of occurrences of each category within each group -->
+<!--   ) %>% -->
+<!--   group_by(donor_id) %>% -->
+<!--   mutate( -->
+<!--     Proportion = Count / sum(Count), -->
+<!--     Percentage = ceiling(Proportion * 100) -->
+<!--   ) -->
+
+
+
+
+<!-- dat_text <- data.frame( -->
+<!--   label = paste0(as.character(rad.sen.prop[rad.sen.prop$sen_label == "senescence", "Percentage", drop = TRUE]), "%"), -->
+<!--   donor_id = as.factor(levels(rad.sen.prop$donor_id)), -->
+<!--   radiation = as.factor(rep("radiated", times = nrow(rad.sen.prop))) -->
+<!-- ) -->
+
+<!-- p <- p + geom_text( -->
+<!--   data = dat_text, -->
+<!--   mapping = aes(x = 0.4, y = 350, label = label), -->
+<!--   size = 3 -->
+<!-- ) -->
+<!-- p <- p + labs(title = "Post-radiation senescence", subtitle = "vertical line are 95% percentile of control group for each donor", caption = "percentage of senescence in radiated condition are labeled in right-upper graph") -->
+
+<!-- p <- p + -->
+<!--   xlab("Senescence score") + -->
+<!--   ylab("Count") -->
+
+<!-- p -->
+<!-- ``` -->
+
+
+
+
+
+<!-- #Add annotation data -->
+<!-- ```{r} -->
+<!-- senescene_score <- fread(file = paste("output/senescence_score.csv",sep = "_")) -->
+<!-- anno.all.short <- fread(file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_")) -->
+<!-- anno.all.short_edited <- column_to_rownames(anno.all.short,var = "rn") -->
+
+<!-- anno.senesence <- cbind(anno.all.short_edited,senescene_score) -->
+
+<!-- anno.senesence -->
+<!-- ``` -->
+<!-- #analysis -->
+<!-- ```{r} -->
+<!-- #filter before analysis -->
+
+<!-- # threshold.vec <- c(known = 0.5, -->
+<!-- #                    confidence = 0.5, -->
+<!-- #                    agreement = 0.25) -->
+
+<!-- threshold.vec <- c(known = 0, -->
+<!--                    confidence = 0.5, -->
+<!--                    agreement = 0) -->
+
+<!-- # # no threshold -->
+<!-- # threshold.vec <- c(known = 1, -->
+<!-- #                    confidence = 0, -->
+<!-- #                    agreement = 0) -->
+
+<!-- anno.senesence.filtered <- anno.senesence[anno.senesence$known >= threshold.vec["known"] & -->
+<!--                                             anno.senesence$confidence >= threshold.vec["confidence"] & -->
+<!--                                             anno.senesence$agreement >= threshold.vec["agreement"],] -->
+
+<!-- anno.senesence.filtered -->
+<!-- ``` -->
+<!-- #intercellstate senescence heterogeneity -->
+<!-- ```{r} -->
+
+<!-- #subset only control  -->
+<!-- anno.senesence.filtered.radiation <- anno.senesence.filtered[anno.senesence.filtered$radiation == "control",] -->
+<!-- anno.senesence.filtered.radiation -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #contingency table: Chi square -->
+<!-- contingency_table <- table(anno.senesence.filtered.radiation$consensus, anno.senesence.filtered.radiation$sen_label) -->
+<!-- contingency_table -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- prop_table <- prop.table(contingency_table, margin = 1) #proportion row-wise -->
+<!-- prop_table -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- overall_chi_square <- chisq.test(contingency_table) -->
+<!-- overall_chi_square -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- pairwise_chi_square <- rstatix::pairwise_prop_test(contingency_table) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- prop_table -->
+<!-- pairwise_chi_square -->
+<!-- ``` -->
+<!-- #intracellstate pre-post radiation senescence change -->
+<!-- ```{r} -->
+<!-- cellstates <- unique(anno.senesence.filtered$consensus) -->
+<!-- cellstates -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- anno.senesence.filtered.cellstate <-  anno.senesence.filtered[anno.senesence.filtered$consensus == cellstates[2],] -->
+<!-- anno.senesence.filtered.cellstate -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #contingency table: Chi square -->
+
+
+<!-- contingency_table <- table(anno.senesence.filtered.cellstate$radiation, anno.senesence.filtered.cellstate$sen_label) -->
+<!-- contingency_table -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- prop_table <- prop.table(contingency_table, margin = 1) #proportion row-wise -->
+<!-- prop_table -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- overall_chi_square <- chisq.test(contingency_table) -->
+<!-- overall_chi_square -->
+<!-- ``` -->
