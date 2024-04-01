@@ -134,6 +134,36 @@ filter(matching, grepl(paste(dup, collapse='|'), matched_cell)) %>% arrange(matc
 
 ```
 ```{r}
+matching[,donor_cell_control := paste(donor_id,V1,sep = "_")]
+matching$donor_cell_control <- gsub(x= matching$donor_cell_control,pattern = "-1-1",replacement = "-1")
+
+
+cellstate.meta.radiated <- cellstate.meta[radiation == "radiated"]
+rn <- cellstate.meta.radiated[,rn]
+rn <- gsub(pattern = "run2_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run2_control_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_control_",replacement = "",x = rn)
+cellstate.meta.radiated$V1 <- rn
+
+cellstate.meta.radiated[,donor_cell_control := paste(donor_id,V1,sep = "_")]
+
+nrow(matching)
+table(table(matching$V1))
+table(table(matching$donor_cell_control))
+length(unique(matching$donor_cell_control))
+table(table(cellstate.meta.radiated$donor_cell_control))
+
+ggVennDiagram::ggVennDiagram(list(match = matching$donor_cell_control, cellstate = cellstate.meta.radiated$donor_cell_control))
+
+matched_donor_cell_control <- unique(matching$donor_cell_control)
+
+cellstate.meta.radiated[cellstate.meta.radiated$donor_cell %in% matched_donor_cell,.]
+
+ggVennDiagram::ggVennDiagram(list(match = matching$V1, cellstate = matching$matched_cell))
+```
+
+```{r}
 matching[,donor_cell := paste(donor_id,matched_cell,sep = "_")]
 matching$donor_cell <- gsub(x= matching$donor_cell,pattern = "-1-1",replacement = "-1")
 
@@ -147,11 +177,24 @@ rn <- gsub(pattern = "run1_control_",replacement = "",x = rn)
 cellstate.meta.radiated$matched_cell <- rn
 
 cellstate.meta.radiated[,donor_cell := paste(donor_id,matched_cell,sep = "_")]
+
+nrow(matching)
+table(table(matching$matched_cell))
+table(table(matching$donor_cell))
+length(unique(matching$donor_cell))
+table(table(cellstate.meta.radiated$donor_cell))
+
+ggVennDiagram::ggVennDiagram(list(match = matching$donor_cell, cellstate = cellstate.meta.radiated$donor_cell))
+
+matched_donor_cell <- unique(matching$donor_cell)
+
+cellstate.meta.radiated[cellstate.meta.radiated$donor_cell %in% matched_donor_cell,.]
+
+
 ```
 
 ```{r}
-matching
-cellstate.meta.radiated
+
 ```
 
 ```{r}

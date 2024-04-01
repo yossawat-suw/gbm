@@ -1,0 +1,467 @@
+
+
+#Figure 1: Heatmap
+```{r}
+library(data.table)
+library(dplyr)
+library(circlize)
+library(ComplexHeatmap)
+library(here)
+```
+
+```{r}
+setwd(here())
+```
+
+```{r}
+annotation <- fread("output/annotation/sen_RSI_cellstate.csv")
+annotation
+
+pathways <- fread("output/annotation/annotation_short_4pathways_each__.csv")
+
+setnames(pathways,c("rn","consensus"),c("cell_id_Yossawat","pathway"))
+
+annotation <- merge(annotation,pathways[,.(cell_id_Yossawat,pathway)],by = "cell_id_Yossawat")
+
+
+annotation
+```
+
+
+
+
+```{r}
+cellstate <- dcast(annotation,formula = donor_id + radiation ~ consensus)
+
+
+
+cellstate <- cbind(cellstate[,1:2],t(apply(cellstate[,3:6],1,FUN = function(x) x / sum(x))))
+
+cellstate_control <- cellstate[radiation == "control", -"radiation"] %>% tibble::column_to_rownames(var = "donor_id")
+
+cellstate_radiated <- cellstate[radiation == "radiated", -"radiation"] %>% tibble::column_to_rownames(var = "donor_id")
+
+
+cellstate_control
+```
+```{r}
+pathway <- dcast(annotation,formula = donor_id + radiation ~ pathway)
+
+
+
+pathway <- cbind(pathway[,1:2],t(apply(pathway[,3:6],1,FUN = function(x) x / sum(x))))
+
+pathway_control <- pathway[radiation == "control", -"radiation"] %>% tibble::column_to_rownames(var = "donor_id")
+
+pathway_radiated <- pathway[radiation == "radiated", -"radiation"] %>% tibble::column_to_rownames(var = "donor_id")
+
+pathway_control
+```
+```{r}
+sen_score_control <- annotation %>% group_by(donor_id,radiation) %>% filter(radiation == "control") %>%
+  summarise(
+  Control = mean(sen_score),
+)
+sen_score_radiated <- annotation %>% group_by(donor_id,radiation) %>% filter(radiation == "radiated") %>%
+  summarise(
+  Radiated = mean(sen_score),
+
+)
+
+sen_score <- merge(sen_score_control[,-2],sen_score_radiated[,-2], by = c("donor_id"))
+sen_score <- sen_score %>% tibble::column_to_rownames(var = "donor_id")
+
+```
+```{r}
+rsi_control <- annotation %>% group_by(donor_id,radiation) %>% filter(radiation == "control") %>%
+  summarise(
+  Control = mean(RSI),
+)
+rsi_radiated <- annotation %>% group_by(donor_id,radiation) %>% filter(radiation == "radiated") %>%
+  summarise(
+  Radiated = mean(RSI),
+
+)
+rsi <- merge(rsi_control[,-2],rsi_radiated[,-2], by = c("donor_id"))
+rsi <- rsi %>% tibble::column_to_rownames(var = "donor_id")
+
+rsi
+```
+
+```{r}
+p11_orig <- fread("output/annotation/p11_score.csv")
+setnames(p11_orig,c("cell_id","p11_lognorm_score"),c("cell_id_Yossawat","P12"))
+p11 <- merge(p11_orig,annotation[,c("cell_id_Yossawat","radiation","donor_id")],by = "cell_id_Yossawat")
+
+p11_control <- p11 %>% group_by(donor_id,radiation) %>% filter(radiation == "control") %>%
+  summarise(
+  Control = mean(P12),
+)
+p11_radiated <- p11 %>% group_by(donor_id,radiation) %>% filter(radiation == "radiated") %>%
+  summarise(
+  Radiated = mean(P12),
+
+)
+p11 <- merge(p11_control[,-2],p11_radiated[,-2], by = c("donor_id"))
+p11 <- p11 %>% tibble::column_to_rownames(var = "donor_id")
+```
+```{r}
+classification <- data.frame(readxl::read_xlsx("data/lucy_gene_classification.xlsx",sheet = 3))
+rownames(classification) <- classification[,1,drop = TRUE] 
+classification <- classification[,-1]
+
+classification <- data.frame(t(classification))
+
+classification <- classification[,1:6]
+classification
+```
+
+
+```{r}
+col_fun = colorRamp2(c(0, 1), c("white", "green"))
+```
+
+```{r}
+hm_cellstate_control <- Heatmap(cellstate_control,name = "Cellstate",col = colorRamp2(c(0, 1), c("white", "green")), 
+                                cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.1f", cellstate_control[i, j]), x, y, gp = gpar(fontsize = 5))
+})
+
+hm_pathway_control <- Heatmap(pathway_control,name = "Pathway",col = colorRamp2(c(0, 1), c("white", "red")),
+                              cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.1f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5))
+})
+hm_sen_score <- Heatmap(sen_score,name = "Senescence",
+                        col = colorRamp2(c(0, max(sen_score)), c("white", "purple")),
+                        cell_fun = function(j, i, x, y, width, height, fill) {
+                          grid.text(sprintf("%.1f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))},
+                        cluster_columns = FALSE)
+
+hm_rsi <- Heatmap(rsi,name = "RSI",
+                        col = colorRamp2(c(0, min(rsi), max(rsi)), c("white", "grey", "black")),
+                        cell_fun = function(j, i, x, y, width, height, fill) {
+                          grid.text(sprintf("%.1f", rsi[i, j]), x, y, gp = gpar(fontsize = 5))},
+                        cluster_columns = FALSE)
+
+hm_p11 <- Heatmap(p11,name = "P12",
+                        col = colorRamp2(c(0,min(p11), max(p11)), c("black", "grey","white")),
+                        cell_fun = function(j, i, x, y, width, height, fill) {
+                          grid.text(sprintf("%.1f", p11[i, j]), x, y, gp = gpar(fontsize = 5))},
+                        cluster_columns = FALSE)
+
+hm_classification_list <- NULL
+set.seed(7)
+for (n in 1:(ncol(classification))) {
+  hm_classification <- Heatmap(classification[,n,drop = FALSE],name = colnames(classification)[n])
+  hm_classification_list <- hm_classification_list + hm_classification
+}
+```
+
+```{r}
+hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
+```
+```{r}
+hm_classification_list
+```
+
+
+
+
+
+
+```{r}
+hm <- hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11 + hm_classification_list
+
+draw(hm, merge_legend = TRUE, heatmap_legend_side = "bottom", 
+    annotation_legend_side = "bottom")
+```
+
+
+```{r}
+p11_orig[,c("cell_id_Yossawat","P12")]
+annotation <- merge(annotation,p11_orig[,c("cell_id_Yossawat","P12")], by = "cell_id_Yossawat")
+tibble::rownames_to_column(classification,var = "donor_id")
+annotation_classification <- merge(annotation,
+      tibble::rownames_to_column(classification,var = "donor_id"),
+      by = "donor_id",
+      all.x = TRUE)
+```
+```{r}
+annotation_classification
+```
+#transvere cellstate heatmap  -->
+<!-- ```{r} -->
+<!-- library(tidyr) -->
+<!-- annotation_score <- annotation_classification %>%  -->
+<!--   group_by(consensus,radiation) %>% -->
+<!--   summarise(sen_score = mean(sen_score), -->
+<!--             RSI = mean(RSI), -->
+<!--             P12 = mean(P12) -->
+<!--             )  -->
+
+<!-- annotation_cellstate <- annotation_classification %>% group_by(consensus,radiation) %>%  -->
+<!--   summarise(cellstate_count = n()) %>% group_by(radiation) %>%  -->
+<!--   mutate(total = sum(cellstate_count), -->
+<!--          prop = cellstate_count/total) %>% select(consensus,radiation,prop) %>% arrange(radiation) %>% ungroup() -->
+
+
+<!-- annotation_pathway <- annotation_classification %>% -->
+<!--     group_by(consensus,radiation,pathway) %>% -->
+<!--     summarise(sub = n()) %>%   -->
+<!--     group_by(consensus,radiation) %>%  -->
+<!--   mutate(total = sum(sub),prop = sub/total) %>% -->
+<!--   ungroup %>%  -->
+<!--   complete(consensus,radiation,pathway) %>% dplyr::select(consensus,radiation,pathway,prop) %>% spread(key = "pathway",value = "prop") -->
+
+<!-- annotation_cellstate <- merge(annotation_cellstate,annotation_pathway, by = c("consensus","radiation")) -->
+
+<!-- annotation_cellstate <- merge(annotation_cellstate,annotation_score, by = c("consensus","radiation")) -->
+
+<!-- annotation_cellstate -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- library(tidyr) -->
+<!-- annotation_score <- annotation_classification %>%  -->
+<!--   group_by(consensus,radiation,donor_id) %>% -->
+<!--   summarise(sen_score = mean(sen_score), -->
+<!--             RSI = mean(RSI), -->
+<!--             P12 = mean(P12) -->
+<!--             )  -->
+
+<!-- annotation_cellstate <- annotation_classification %>% group_by(consensus,radiation,donor_id) %>%  -->
+<!--   summarise(cellstate_count = n()) %>% group_by(radiation,donor_id) %>%  -->
+<!--   mutate(total = sum(cellstate_count), -->
+<!--          prop = cellstate_count/total) %>% select(consensus,radiation,prop) %>% arrange(radiation) %>% ungroup() -->
+
+
+<!-- annotation_pathway <- annotation_classification %>% -->
+<!--     group_by(consensus,radiation,pathway,donor_id) %>% -->
+<!--     summarise(sub = n()) %>%   -->
+<!--     group_by(consensus,radiation,donor_id) %>%  -->
+<!--   mutate(total = sum(sub),prop = sub/total) %>% -->
+<!--   ungroup %>%  -->
+<!--   complete(consensus,radiation,pathway,donor_id) %>% dplyr::select(consensus,radiation,donor_id,pathway,prop) %>% spread(key = "pathway",value = "prop") -->
+
+<!-- annotation_cellstate <- merge(annotation_cellstate,annotation_pathway, by = c("consensus","radiation","donor_id")) -->
+
+<!-- annotation_cellstate <- merge(annotation_cellstate,annotation_score, by = c("consensus","radiation","donor_id")) -->
+
+<!-- annotation_cellstate[is.na(annotation_cellstate)] <- 0 -->
+
+<!-- annotation_cellstate -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # indexing <- c("consensus","radiation","donor_id") -->
+<!-- # merging <- c("consensus","donor_id") -->
+<!-- # sen_score <- annotation_cellstate[,c(indexing,"sen_score")] -->
+<!-- # sen_score <- merge(sen_score[sen_score$radiation == "control",],sen_score[sen_score$radiation == "radiated",],by = merging) -->
+<!-- # sen_score -->
+<!-- # hm_sen_score <- Heatmap(sen_score,name = "Senescence", -->
+<!-- #                         col = colorRamp2(c(0, max(sen_score)), c("white", "purple")), -->
+<!-- #                         cell_fun = function(j, i, x, y, width, height, fill) { -->
+<!-- #                           grid.text(sprintf("%.1f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))}, -->
+<!-- #                         cluster_columns = FALSE) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- sen_score_control <- annotation %>% group_by(donor_id,radiation,consensus) %>% filter(radiation == "control") %>% -->
+<!--   summarise( -->
+<!--   Control = mean(sen_score), -->
+<!-- ) -->
+<!-- sen_score_radiated <- annotation %>% group_by(donor_id,radiation,consensus) %>% filter(radiation == "radiated") %>% -->
+<!--   summarise( -->
+<!--   Radiated = mean(sen_score), -->
+
+<!-- ) -->
+
+<!-- sen_score <- merge(sen_score_control[,-2],sen_score_radiated[,-2], by = c("donor_id","consensus")) -->
+<!-- sen_score$donor_consensus <- paste(sen_score$donor_id,sen_score$consensus,sep = "_") -->
+<!-- sen_score <- sen_score %>% tibble::column_to_rownames(var = "donor_consensus") %>% select(Control,Radiated) -->
+
+<!-- rsi_control <- annotation %>% group_by(donor_id,radiation,consensus) %>% filter(radiation == "control") %>% -->
+<!--   summarise( -->
+<!--   Control = mean(RSI), -->
+<!-- ) -->
+<!-- rsi_radiated <- annotation %>% group_by(donor_id,radiation,consensus) %>% filter(radiation == "radiated") %>% -->
+<!--   summarise( -->
+<!--   Radiated = mean(RSI), -->
+
+<!-- ) -->
+
+<!-- rsi <- merge(rsi_control[,-2],rsi_radiated[,-2], by = c("donor_id","consensus")) -->
+<!-- rsi$donor_consensus <- paste(rsi$donor_id,rsi$consensus,sep = "_") -->
+<!-- rsi <- rsi %>% tibble::column_to_rownames(var = "donor_consensus") %>% select(Control,Radiated) -->
+
+
+<!-- p11_control <- annotation %>% group_by(donor_id,radiation,consensus) %>% filter(radiation == "control") %>% -->
+<!--   summarise( -->
+<!--   Control = mean(P12), -->
+<!-- ) -->
+<!-- p11_radiated <- annotation %>% group_by(donor_id,radiation,consensus) %>% filter(radiation == "radiated") %>% -->
+<!--   summarise( -->
+<!--   Radiated = mean(P12), -->
+
+<!-- ) -->
+
+<!-- p11 <- merge(p11_control[,-2],p11_radiated[,-2], by = c("donor_id","consensus")) -->
+<!-- p11$donor_consensus <- paste(p11$donor_id,p11$consensus,sep = "_") -->
+<!-- p11 <- p11 %>% tibble::column_to_rownames(var = "donor_consensus") %>% select(Control,Radiated) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- pathway <- dcast(annotation,formula = donor_id + radiation + consensus ~ pathway) -->
+
+
+
+<!-- pathway <- cbind(pathway[,1:3],t(apply(pathway[,4:7],1,FUN = function(x) x / sum(x)))) -->
+<!-- pathway$donor_consensus <- paste(pathway$donor_id,pathway$consensus,sep = "_") -->
+<!-- pathway_control <- pathway[radiation == "control", -"radiation"] %>% tibble::column_to_rownames(var = "donor_consensus") -->
+
+<!-- pathway_radiated <- pathway[radiation == "radiated", -"radiation"] %>% tibble::column_to_rownames(var = "donor_consensus")  -->
+
+<!-- pathway_control -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- hm_pathway_control <- Heatmap(pathway_control,name = "Pathway",col = colorRamp2(c(0, 1), c("white", "red")), -->
+<!--                               cell_fun = function(j, i, x, y, width, height, fill) { -->
+<!--         grid.text(sprintf("%.1f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5)) -->
+<!-- }) -->
+
+<!-- hm_sen_score <- Heatmap(sen_score,name = "Senescence", -->
+<!--                         col = colorRamp2(c(0, max(sen_score)), c("white", "purple")), -->
+<!--                         cell_fun = function(j, i, x, y, width, height, fill) { -->
+<!--                           grid.text(sprintf("%.1f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))}, -->
+<!--                         cluster_columns = FALSE) -->
+
+<!-- hm_rsi <- Heatmap(rsi,name = "RSI", -->
+<!--                         col = colorRamp2(c(0, min(rsi), max(rsi)), c("white", "grey", "black")), -->
+<!--                         cell_fun = function(j, i, x, y, width, height, fill) { -->
+<!--                           grid.text(sprintf("%.1f", rsi[i, j]), x, y, gp = gpar(fontsize = 5))}, -->
+<!--                         cluster_columns = FALSE) -->
+
+<!-- hm_p11 <- Heatmap(p11,name = "P12", -->
+<!--                         col = colorRamp2(c(0,min(p11), max(p11)), c("black", "grey","white")), -->
+<!--                         cell_fun = function(j, i, x, y, width, height, fill) { -->
+<!--                           grid.text(sprintf("%.1f", p11[i, j]), x, y, gp = gpar(fontsize = 5))}, -->
+<!--                         cluster_columns = FALSE) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- hm_pathway_control -->
+<!-- hm_sen_score -->
+<!-- hm_pathway_control + hm_sen_score + hm_rsi + hm_p11 -->
+<!-- ``` -->
+#Try
+```{r}
+library(tidyr)
+sen_score_control <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "control") %>%
+  summarise(
+  Control = mean(sen_score),
+)
+sen_score_radiated <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "radiated") %>%
+  summarise(
+  Radiated = mean(sen_score),
+
+)
+
+sen_score <- merge(sen_score_control[,-2],sen_score_radiated[,-2], by = c("consensus"))
+
+sen_score <- sen_score %>% tibble::column_to_rownames(var = "consensus") 
+
+rsi_control <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "control") %>%
+  summarise(
+  Control = mean(RSI),
+)
+rsi_radiated <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "radiated") %>%
+  summarise(
+  Radiated = mean(RSI),
+
+)
+
+rsi <- merge(rsi_control[,-2],rsi_radiated[,-2], by = c("consensus"))
+
+rsi <- rsi %>% tibble::column_to_rownames(var = "consensus")
+
+
+p11_control <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "control") %>%
+  summarise(
+  Control = mean(P12),
+)
+p11_radiated <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "radiated") %>%
+  summarise(
+  Radiated = mean(P12),
+
+)
+
+p11 <- merge(p11_control[,-2],p11_radiated[,-2], by = c("consensus"))
+
+p11 <- p11 %>% tibble::column_to_rownames(var = "consensus") 
+```
+
+```{r}
+pathway <- dcast(annotation,formula = consensus + radiation ~ pathway)
+
+
+
+pathway <- cbind(pathway[,1:2],t(apply(pathway[,3:6],1,FUN = function(x) x / sum(x))))
+
+pathway_control <- pathway[radiation == "control", -"radiation"] %>% tibble::column_to_rownames(var = "consensus")
+
+pathway_radiated <- pathway[radiation == "radiated", -"radiation"] %>% tibble::column_to_rownames(var = "consensus") 
+
+pathway_control
+```
+
+```{r}
+
+hm_pathway_control <- Heatmap(pathway_control,name = "Pathway\n (Control)",col = colorRamp2(c(0, 1), c("white", "red")),
+                              cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.1f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5))
+})
+
+hm_sen_score <- Heatmap(sen_score,name = "Senescence",
+                        col = colorRamp2(c(0, max(sen_score)), c("white", "purple")),
+                        cell_fun = function(j, i, x, y, width, height, fill) {
+                          grid.text(sprintf("%.1f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))},
+                        cluster_columns = FALSE)
+
+hm_rsi <- Heatmap(rsi,name = "RSI",
+                        col = colorRamp2(c(0, min(rsi), max(rsi)), c("white", "grey", "black")),
+                        cell_fun = function(j, i, x, y, width, height, fill) {
+                          grid.text(sprintf("%.1f", rsi[i, j]), x, y, gp = gpar(fontsize = 5))},
+                        cluster_columns = FALSE)
+
+hm_p11 <- Heatmap(p11,name = "P12",
+                        col = colorRamp2(c(0,min(p11), max(p11)), c("blue", "white","green")),
+                        cell_fun = function(j, i, x, y, width, height, fill) {
+                          grid.text(sprintf("%.1f", p11[i, j]), x, y, gp = gpar(fontsize = 5))},
+                        cluster_columns = FALSE)
+```
+```{r}
+
+hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
+```
+
+#Add information from Lucy
+```{r}
+library(readxl)
+library(ggplot2)
+gbm_line <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 2)
+```
+
+```{r}
+gbm_line
+```
+```{r}
+ggplot(gbm_line,aes(x= doubling_time_hr,y=tumour_formation_month,shape = primary_recurrent,col = MGMT_promoter_methylation
+)) + geom_point()
+```
+
+```{r}
+ggplot(gbm_line,aes(x= primary_recurrent,y=doubling_time_hr,col = MGMT_promoter_methylation)
+) + geom_point()
+```
+

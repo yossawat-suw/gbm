@@ -16,6 +16,26 @@ source("script/parameter.R")
 
 ```
 
+```{r}
+#choose what to analyse
+
+pick <- 7
+sig <- sigs[pick]
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+
+
+possible_cellstate <- all_cellstates[
+  chosing[[pick]]
+  ]
+```
 
 #Combine
 ```{r}
@@ -1289,7 +1309,7 @@ classification <- data.frame(readxl::read_xlsx("data/lucy_gene_classification.xl
 classification[is.na(classification)] <- "na"
 rownames(classification) <- classification[, 1, drop = TRUE]
 classification <- classification[, -1]
-
+heatmap
 classification <- data.frame(t(classification))
 row.names <- rownames(classification)
 classification <- as.data.frame(unclass(classification), stringsAsFactors = TRUE)

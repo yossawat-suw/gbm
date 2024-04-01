@@ -1,0 +1,684 @@
+
+
+```{r}
+
+#library(UCell)
+library(ggplot2)
+library(data.table)
+library(tibble)
+library(rstatix)
+library(dplyr)
+library(ggpubr)
+```
+
+
+
+
+```{r}
+#Set working directory
+setwd(here::here())
+source("script/function.R")
+
+# Parameter
+source("script/parameter.R")
+
+```
+
+```{r}
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
+
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+
+#choose what to analyse
+
+pick <- 4
+
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+```
+
+```{r}
+#load cellstate annotation
+annotation <- fread(input = "output/annotation/annotation_4_merge_metamodules_each__.csv",header = TRUE)
+```
+```{r}
+#load gbm metadata 
+gbm.meta <- fread(input = "output/gbm_meta.csv",header = TRUE)
+setnames(gbm.meta,"V1","rn")
+dim(gbm.meta)
+
+```
+```{r}
+cellstate.meta <- merge(annotation,gbm.meta,by = "rn",all.x = TRUE,all.y = FALSE)
+cellstate.meta
+
+cellstate.meta.control <- cellstate.meta[radiation == "control"]
+cellstate.meta.radiated <- cellstate.meta[radiation == "radiated"]
+```
+
+
+#trasfom matching -->
+
+```{r}
+matching <- fread("data/matched_cell_data.csv")
+matching
+```
+
+```{r}
+matching[,donor_cell_control := paste(donor_id,V1,sep = "_")]
+matching$donor_cell_control <- gsub(x= matching$donor_cell_control,pattern = "-1-1",replacement = "-1")
+
+
+rn <- cellstate.meta.control[,rn]
+rn <- gsub(pattern = "run2_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run2_control_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_control_",replacement = "",x = rn)
+cellstate.meta.control$V1 <- rn
+
+cellstate.meta.control[,donor_cell_control := paste(donor_id,V1,sep = "_")]
+
+nrow(matching)
+table(table(matching$V1))
+table(table(matching$donor_cell_control))
+length(unique(matching$donor_cell_control))
+table(table(cellstate.meta.control$donor_cell_control))
+
+ggVennDiagram::ggVennDiagram(list(match = matching$donor_cell_control, cellstate = cellstate.meta.control$donor_cell_control))
+
+matched_donor_cell_control <- unique(matching$donor_cell_control)
+
+cellstate.meta.control_filter <- cellstate.meta.control[cellstate.meta.control$donor_cell_control %in% matched_donor_cell_control,]
+
+
+setnames(cellstate.meta.control_filter,old = c("rn","consensus","confidence"),new = paste(c("cell_id","consensus","confidence"),"control",sep = "_"))
+cellstate.meta.control_filter
+```
+```{r}
+matching[,donor_cell_radiated := paste(donor_id,matched_cell,sep = "_")]
+matching$donor_cell_radiated <- gsub(x= matching$donor_cell_radiated,pattern = "-1-1",replacement = "-1")
+
+rn <- cellstate.meta.radiated[,rn]
+rn <- gsub(pattern = "run2_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_radiated_",replacement = "",x = rn)
+rn <- gsub(pattern = "run2_control_",replacement = "",x = rn)
+rn <- gsub(pattern = "run1_control_",replacement = "",x = rn)
+cellstate.meta.radiated$matched_cell <- rn
+
+cellstate.meta.radiated[,donor_cell_radiated := paste(donor_id,matched_cell,sep = "_")]
+
+nrow(matching)
+table(table(matching$matched_cell))
+table(table(matching$donor_cell_radiated))
+length(unique(matching$donor_cell_radiated))
+table(table(cellstate.meta.radiated$donor_cell_radiated))
+
+ggVennDiagram::ggVennDiagram(list(match = matching$donor_cell_radiated, cellstate = cellstate.meta.radiated$donor_cell_radiated))
+
+matched_donor_cell_radiated <- unique(matching$donor_cell_radiated)
+
+
+
+cellstate.meta.radiated_filter <- cellstate.meta.radiated[cellstate.meta.radiated$donor_cell_radiated %in% matched_donor_cell_radiated,]
+setnames(cellstate.meta.radiated_filter,old = c("rn","consensus","confidence"),new = paste(c("cell_id","consensus","confidence"),"radiated",sep = "_"))
+cellstate.meta.radiated_filter
+```
+
+
+
+
+```{r}
+matching <- merge(matching,cellstate.meta.control_filter[,.(cell_id_control,consensus_control,confidence_control,donor_cell_control)], by = "donor_cell_control")
+matching <- merge(matching,cellstate.meta.radiated_filter[,.(cell_id_radiated,consensus_radiated,confidence_radiated,donor_cell_radiated)], by = "donor_cell_radiated")
+```
+
+```{r}
+matching
+```
+
+```{r}
+matching <- matching[,!(1:2)]
+```
+
+
+```{r}
+#fwrite(x = matching,"output/matched_cell_data_yossawat_v2.csv")
+```
+#sankey  -->
+<!-- ```{r} -->
+<!-- cellstate_colors <- c( -->
+<!--   "OPClike" = "#1f77b4",  # Replace 'cellstate1' with actual cellstate names -->
+<!--   "unknown" = "grey", -->
+<!--   "NPClike" = "#2ca02c", -->
+<!--   "AClike" = "#d62728", -->
+<!--   "MESlike" = "#9467bd" -->
+<!--   # Add more colors as needed for each cellstate -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # Do sankey -->
+<!-- library(ggsankey) -->
+<!-- library(ggplot2) -->
+
+
+<!-- all.sankey <- matching[,.(consensus_control,consensus_radiated)] -->
+<!-- df <- all.sankey %>% -->
+<!--   make_long(colnames(all.sankey)) -->
+
+<!-- # Chart 1 -->
+<!-- pl <- ggplot(df, aes( -->
+<!--   x = x, -->
+<!--   next_x = next_x, -->
+<!--   node = node, -->
+<!--   next_node = next_node, -->
+<!--   fill = factor(node), -->
+<!--   label = node -->
+<!-- )) -->
+<!-- pl <- pl + geom_sankey( -->
+<!--   flow.alpha = 0.5, -->
+<!--   node.color = "black", -->
+<!--   show.legend = FALSE -->
+<!-- ) -->
+<!-- pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white") -->
+<!-- pl <- pl + theme_bw() -->
+<!-- pl <- pl + theme(legend.position = "none") -->
+<!-- pl <- pl + theme( -->
+<!--   axis.title = element_blank(), -->
+<!--   axis.text.y = element_blank(), -->
+<!--   axis.ticks = element_blank(), -->
+<!--   panel.grid = element_blank() -->
+<!-- ) -->
+
+<!-- # pl <- pl + scale_fill_viridis_d(option = "inferno") -->
+
+<!-- pl <- pl + labs(fill = "Nodes") -->
+<!-- pl +  scale_fill_manual(values = cellstate_colors) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- pl.list <- list() -->
+<!-- for (i in unique(matching$donor_id)) { -->
+<!--   all.sankey <- matching[donor_id == i,.(consensus_control,consensus_radiated)] -->
+<!-- df <- all.sankey %>% -->
+<!--   make_long(colnames(all.sankey)) -->
+
+<!-- # Chart 1 -->
+<!-- pl <- ggplot(df, aes( -->
+<!--   x = x, -->
+<!--   next_x = next_x, -->
+<!--   node = node, -->
+<!--   next_node = next_node, -->
+<!--   fill = factor(node), -->
+<!--   label = node -->
+<!-- )) -->
+<!-- pl <- pl + geom_sankey( -->
+<!--   flow.alpha = 0.5, -->
+<!--   node.color = "black", -->
+<!--   show.legend = FALSE -->
+<!-- ) -->
+<!-- pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white") -->
+<!-- pl <- pl + theme_bw() -->
+<!-- pl <- pl + theme(legend.position = "none") -->
+<!-- pl <- pl + theme( -->
+<!--   axis.title = element_blank(), -->
+<!--   axis.text.y = element_blank(), -->
+<!--   axis.ticks = element_blank(), -->
+<!--   panel.grid = element_blank() -->
+<!-- ) -->
+
+<!-- # pl <- pl + scale_fill_viridis_d(option = "inferno") -->
+
+<!-- pl <- pl + labs(fill = "Nodes") -->
+<!-- pl <- pl + labs(subtitle = i) -->
+<!-- pl.list[[i]] <- pl -->
+<!-- } -->
+
+<!-- pl.list -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- sankey.each.plot <- ggpubr::ggarrange(plotlist = pl.list) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- sankey.each.plot -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ggsave(plot = sankey.each.plot,filename = "sankey_prepost_cellstate.png",path = "figure/",width = 20,height = 12) -->
+<!-- ``` -->
+
+
+#sankey with sene
+
+```{r}
+matching <- fread("output/matched_cell_data_yossawat.csv")
+```
+
+```{r}
+all.sankey <- matching[,.(consensus_control,consensus_radiated,binary_senescence,radiated_binary_senescence)]
+all.sankey$cellstate_sen_control <- paste(all.sankey$consensus_control,all.sankey$binary_senescence,sep = "_")
+all.sankey$cellstate_sen_control <- factor(all.sankey$cellstate_sen_control,levels = c("OPClike_0","OPClike_1","NPClike_0","NPClike_1","AClike_0","AClike_1","MESlike_0","MESlike_1","unknown_0","unknown_1"))
+all.sankey$cellstate_sen_radiated <- paste(all.sankey$consensus_radiated,all.sankey$radiated_binary_senescence,sep = "_")
+all.sankey$cellstate_sen_radiated <- factor(all.sankey$cellstate_sen_radiated,levels = c("OPClike_0","OPClike_1","NPClike_0","NPClike_1","AClike_0","AClike_1","MESlike_0","MESlike_1","unknown_0","unknown_1"))
+
+cellstate_colors <- c(
+  "OPClike_0" = "lightblue",
+  "OPClike_1" = "#1f77b4",  # Replace 'cellstate1' with actual cellstate names
+  "unknown_0" = "grey",
+  "unknown_1" = "black",
+  "NPClike_0" = "lightgreen",
+  "NPClike_1" = "#2ca02c",
+  "AClike_0" = "red",
+  "AClike_1" = "darkred",
+  "MESlike_0" = "violet",
+  "MESlike_1" = "darkviolet"
+  # Add more colors as needed for each cellstate
+)
+```
+
+
+
+```{r}
+# Do sankey
+library(ggsankey)
+library(ggplot2)
+
+all.sankey <- all.sankey[,.(cellstate_sen_control,cellstate_sen_radiated)]
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+
+pl <- pl + labs(fill = "Nodes")
+pl <- pl + scale_fill_manual(values = cellstate_colors)
+pl <- pl + labs(caption = "1 = senescence; 0 = non-senescence")
+
+pl
+```
+```{r}
+#ggsave(plot = pl,filename = "sankey_prepost_cellstate_sen.png",path = "figure/",width = 10,height = 10)
+```
+
+```{r}
+pl.list <- list()
+for (i in unique(matching$donor_id)) {
+  all.sankey <- matching[donor_id == i,.(consensus_control,consensus_radiated,binary_senescence,radiated_binary_senescence)]
+all.sankey$cellstate_sen_control <- paste(all.sankey$consensus_control,all.sankey$binary_senescence,sep = "_")
+all.sankey$cellstate_sen_control <- factor(all.sankey$cellstate_sen_control,levels = c("OPClike_0","OPClike_1","NPClike_0","NPClike_1","AClike_0","AClike_1","MESlike_0","MESlike_1","unknown_0","unknown_1"))
+all.sankey$cellstate_sen_radiated <- paste(all.sankey$consensus_radiated,all.sankey$radiated_binary_senescence,sep = "_")
+all.sankey$cellstate_sen_radiated <- factor(all.sankey$cellstate_sen_radiated,levels = c("OPClike_0","OPClike_1","NPClike_0","NPClike_1","AClike_0","AClike_1","MESlike_0","MESlike_1","unknown_0","unknown_1"))
+
+all.sankey <- all.sankey[,.(cellstate_sen_control,cellstate_sen_radiated)]
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+
+pl <- pl + labs(fill = "Nodes")
+pl <- pl + labs(subtitle = i)
+pl <- pl + scale_fill_manual(values = cellstate_colors)
+pl.list[[i]] <- pl
+}
+
+pl.list
+```
+
+
+```{r}
+sankey.each.plot <- ggpubr::ggarrange(plotlist = pl.list)
+```
+
+```{r}
+sankey.each.plot
+```
+
+```{r}
+#ggsave(plot = sankey.each.plot,filename = "sankey_prepost_cellstate_sen_perdonor.png",path = "figure/",width = 20,height = 20)
+```
+
+#RSI
+```{r}
+matching <- read.csv(file = "output/matched_cell_data_yossawat.csv")
+```
+
+
+
+```{r}
+#initial sens vs diff sens
+matching$sen_diff <- matching$radiated_sen_score-matching$sen_score
+matching$sen_ratio <-(matching$radiated_sen_score + 1)/(matching$sen_score + 1)
+```
+
+
+
+```{r}
+ggplot(matching, aes(y =sen_diff, x = sen_score)) + geom_count() + ylab("radiated_sen_score - control_sen_score") + xlab("control_sen_score") + labs(caption = paste("total cell:",nrow(matching),"* 2",sep = " "))
+```
+```{r}
+ggplot(matching, aes(y =sen_diff, x = sen_score)) + geom_count() + ylab("radiated_sen_score - control_sen_score") + xlab("control_sen_score") + labs(caption = paste("total cell:",nrow(matching),"* 2",sep = " ")) + geom_hline(yintercept = 0,col = "red",linetype = "dashed")+ geom_smooth(method = "lm", se = FALSE) +facet_wrap(~donor_id) 
+#ggsave(filename = "figure/sen_change_perdonor.png",width = 20,height = 15)
+```
+
+```{r}
+ggplot(matching, aes(y =log(sen_ratio), x = sen_score)) + geom_point() + ylab("log((radiated_sen_score + 1)/(control_sen_score + 1))") + xlab("control_sen_score")
+```
+```{r}
+sen_rsi <- ggplot(data = matching,aes(x = sen_score,y = RSI)) + geom_point(size = 0.1) + geom_smooth(method = "lm",se = FALSE,linewidth = 0.1,color = "red") + facet_wrap(vars(consensus_control))
+sen_rsi_perdonor <- ggplot(data = matching,aes(x = sen_score,y = RSI)) + geom_point(size = 0.1) + geom_smooth(method = "lm",se = FALSE,linewidth = 0.1,color = "red") + facet_grid(vars(consensus_control),vars(donor_id))
+
+sen_rsi
+sen_rsi_perdonor
+
+#ggsave(filename = "figure/sen_sri.png",sen_rsi)
+#ggsave(filename = "figure/sen_sri_perdonor.png",sen_rsi_perdonor,width = 16,height = 5)
+```
+```{r}
+ggplot(matching, aes(x= consensus_control, y = donor_id, fill= sen_score)) + 
+  geom_tile() + labs(title = "cellstate of control cells VS donor_id VS sen_score")
+#ggsave(filename = "figure/cellstate_control_donor_id_sen_score.png",width = 10,height = 10)
+```
+
+```{r}
+ggplot(matching, aes(x= consensus_control, y = donor_id, fill= radiated_sen_score-sen_score)) + 
+  geom_tile() + labs(title = "cellstate of control cells VS donor_id VS change in sen_score")
+#ggsave(filename = "figure/cellstate_control_donor_id_change_sen_score.png",width = 10,height = 10)
+```
+```{r}
+ggplot(matching, aes(x= consensus_control, y = consensus_radiated, fill= radiated_sen_score-sen_score)) + 
+  geom_tile() + labs(title = "cellstate of control cells VS cellstate of matched radiated cells VS\nchange in sen_score")
+#ggsave(filename = "figure/cellstate_control_cellstate_radiated_change_sen_score.png",width = 10,height = 8)
+ggplot(matching, aes(x= consensus_control, y = consensus_radiated, fill= radiated_sen_score-sen_score)) + 
+  geom_tile() + facet_wrap(vars(donor_id)) + theme(axis.text.x = element_text(angle = 90)) + labs(title = "cellstate of control cells vs cellstate of matched radiated cells VS\nchange in sen_score",subtitle = "per donor")
+#ggsave(filename = "figure/cellstate_control_cellstate_radiated_change_sen_score_perdonor.png",width = 16,height = 14)
+```
+
+
+#normalized sankey
+ 
+```{r}
+matching_sankey <-matching[,c("donor_id","consensus_control","consensus_radiated")]
+matching_sankey$donor_id <- as.factor(matching_sankey$donor_id)
+matching_sankey$consensus_control <- as.factor(matching_sankey$consensus_control)
+matching_sankey$consensus_radiated <- as.factor(matching_sankey$consensus_radiated)
+n_cell_per_donor <- table(matching_sankey$donor_id)
+
+lcm <- mathrrr::least_common_multiple(n_cell_per_donor)
+weight_lcm <- lcm/n_cell_per_donor
+
+weight_lcm
+```
+
+```{r}
+weight_100k <- 10000/n_cell_per_donor
+weight_100k_round <- round(weight_100k)
+
+
+weight_100k_round
+```
+
+```{r}
+donor_id_name <- unique(matching_sankey$donor_id)
+
+matching_sankey_weight <- data.frame(matrix(nrow = 0,ncol = 3))
+for (d in donor_id_name) {
+  matching_sankey_weight <- rbind(matching_sankey_weight,
+                                    matching_sankey[matching_sankey$donor_id == d,]  %>%
+                                    uncount(weight_100k_round[d]))
+}
+
+```
+
+
+
+```{r}
+
+df <- matching_sankey[,-1] %>%
+  make_long(colnames(matching_sankey[,-1]))
+
+cellstate_colors <- c(
+  "OPClike" = "#1f77b4",  
+  "unknown" = "black",
+  "NPClike" = "#2ca02c",
+  "AClike" = "red",
+  "MESlike" = "darkviolet"
+  # Add more colors as needed for each cellstate
+)
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+
+pl <- pl + labs(fill = "Nodes",subtitle = "no_weight",caption = paste("the number of cell:",nrow(matching_sankey),"* 2",sep = " "))
+pl <- pl + scale_fill_manual(values = cellstate_colors)
+
+pl
+```
+
+```{r}
+matching_sankey_weight_nodonor <- matching_sankey_weight[,-1]
+
+df <- matching_sankey_weight_nodonor %>%
+  make_long(colnames(matching_sankey_weight_nodonor))
+
+cellstate_colors <- c(
+  "OPClike" = "#1f77b4",  
+  "unknown" = "black",
+  "NPClike" = "#2ca02c",
+  "AClike" = "red",
+  "MESlike" = "darkviolet"
+  # Add more colors as needed for each cellstate
+)
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+
+pl <- pl + scale_fill_manual(values = cellstate_colors)
+pl <- pl + labs(fill = "Nodes",subtitle = "Weighted by donor",caption = paste("the number of cell:",nrow(matching_sankey),"* 2",sep = " "))
+
+pl
+
+```
+#test MES increase
+```{r}
+matching <- fread(file = "output/matched_cell_data_yossawat_v2.csv")
+anno <- fread("output/annotation/annotation_5_tools_4_merge_metamodules_each__.csv",header = TRUE)
+setnames(anno,"V1","cell_id")
+matching
+anno
+```
+```{r}
+matching_id <- matching[,.(cell_id_control,cell_id_radiated)]
+matching_id <- melt(matching_id, 
+                measure.vars = c("cell_id_control", "cell_id_radiated"),variable.name = "radiation",value.name = "cell_id")
+matching_id$radiation <- gsub("cell_id_","",matching_id$radiation)
+
+matching_id
+
+matching_anno <- merge(matching_id,anno,by = "cell_id",all.y = FALSE)
+
+matching_anno_long <- melt(matching_anno, 
+                           id.vars = c("cell_id","radiation"),
+                measure.vars = c("scType", "SCINA","clustifyr_ref","scID","scSorter"),variable.name = "tools",value.name = "cellstate")
+
+matching_anno_long
+```
+```{r}
+gbm.meta <- fread("output/gbm_meta.csv",header =TRUE)
+setnames(gbm.meta,"V1","cell_id")
+
+matching_anno_meta_long <- merge(matching_anno_long,gbm.meta[,!c("radiation")],by = "cell_id",all.y = FALSE)
+
+matching_anno_meta_long[cellstate == "MESlike"] %>% ggplot(aes(x=radiation,group = cellstate,col = radiation,fill = radiation)) + geom_bar(position  = "dodge") + facet_grid(vars(donor_id),vars(tools)) 
+```
+```{r}
+matching_anno_meta_long
+dcast(matching_anno_meta_long, tools  + donor_id ~ radiation, value.var = "cellstate")
+```
+```{r}
+matching_used <- matching[,.(donor_id,cell_id_control,cell_id_radiated)]
+
+matching_used
+anno
+```
+```{r}
+anno_df <- data.frame(anno)
+matching_anno_list <- list()
+for (col in 2:ncol(anno)) {
+  matching_anno_eachtool <- matching_used
+  anno_radiation <- anno_df[,c(1,col)]
+  colnames(anno_radiation) <- c("cell_id_control","cellstate_control")
+  matching_anno_eachtool <- merge(matching_anno_eachtool,anno_radiation,by = "cell_id_control",all.y = FALSE)
+  colnames(anno_radiation) <- c("cell_id_radiated","cellstate_radiated")
+  matching_anno_eachtool <- merge(matching_anno_eachtool,anno_radiation,by = "cell_id_radiated",all.y = FALSE)
+  matching_anno_eachtool$tool <- colnames(anno)[col]
+  matching_anno_list[[colnames(anno)[col]]] <- matching_anno_eachtool
+}
+
+# colnames(anno)[col]
+# matching_anno_eachtool
+matching_anno_list
+```
+```{r}
+matching_anno <- Reduce(rbind,matching_anno_list)
+matching_anno$donor_id <- factor(matching_anno$donor_id)
+
+matching_anno$cellstate_control <- factor(matching_anno$cellstate_control,levels = c("MESlike","NPClike","AClike","OPClike","unknown"))
+matching_anno$cellstate_radiated <- factor(matching_anno$cellstate_radiated,levels = c("MESlike","NPClike","AClike","OPClike","unknown"))
+
+matching_anno$donor_id <- factor(matching_anno$donor_id)
+matching_anno$tool <- factor(matching_anno$tool)
+
+matching_anno
+```
+```{r}
+matching_anno$state_change <- paste(matching_anno$cellstate_control,matching_anno$cellstate_radiated,sep = "_")
+
+table(matching_anno[grep("*_MESlike",x = matching_anno$state_change),cellstate_radiated])
+table(matching_anno[grep("*_MESlike",x = matching_anno$state_change),cellstate_radiated])
+matching_anno$MES_change <- "Others"
+matching_anno[cellstate_control == "MESlike",MES_change := "From_MESlike"]
+matching_anno[cellstate_radiated == "MESlike",MES_change := "To_MESlike"]
+matching_anno[state_change == "MESlike_MESlike",MES_change := "MESlike_MESlike"] 
+
+
+table(matching_anno$MES_change)
+
+matching_anno[MES_change == "To_MESlike",to_MES_or_not := TRUE]
+matching_anno[!MES_change == "To_MESlike",to_MES_or_not := FALSE]
+```
+
+```{r}
+color <- c("From_MESlike" = "red","To_MESlike" = "green","Others" = "grey","MESlike_MESlike" = "grey")
+matching_anno %>% ggplot(aes(x=MES_change,fill = MES_change)) + geom_bar(position = "dodge") + facet_grid(vars(donor_id),vars(tool)) + theme(axis.text.x = element_text(angle = 90)) + scale_fill_manual(values = color)
+
+
+
+ggsave("figure/all_tools_MES_change_perdonor.png",width = 10,height = 20)
+```
+
+

@@ -23,6 +23,9 @@ library(scales)
 source("script/parameter.R")
 ```
 
+```{r}
+
+```
 
 #Import into Seurat  
 ```{r}
@@ -41,8 +44,8 @@ for (n in 1:length(runs)) {
     data.dir <- paste0("data/scRNA_", run, "/")
 
     mtx <- Read10X(data.dir = paste0(data.dir, "matrix_", donor.group, "_", run))
-    gbm <- CreateSeuratObject(mtx, project = "glioblastoma", min.cells = 5, min.features = 200)
-
+    #gbm <- CreateSeuratObject(mtx, project = "glioblastoma", min.cells = 5, min.features = 200)
+    gbm <- CreateSeuratObject(mtx, project = "glioblastoma", min.cells = 0, min.features = 0)
 
 
     # So there is no metadata of patient cell line yet >> add one from file name radiated_donor_ide.tsv (or control_donor_ide.tsv)
@@ -89,6 +92,9 @@ for (n in 1:length(runs)) {
 }
 names(gbm.list) <- batch
 ```
+```{r}
+gbm
+```
 
 
 ```{r}
@@ -97,9 +103,7 @@ gbm <- Merge_Seurat_List(gbm.list)
 rownames(gbm@meta.data) <- gsub("_ru","ru",rownames(gbm@meta.data))
 ```
 
-```{r}
-gbm@meta.data
-```
+
 
 
 

@@ -219,3 +219,25 @@ combinations[split %in% c(2) | cell_state %in% c(1,2,4,5) | adjust_unknown == 0,
 combinations[is.na(done), done:=0]
 ```
 
+# 5 Mar 2024
+```{r}
+gbm <- readRDS("output/seurat_gbm_qc")
+gbm <- PercentageFeatureSet(gbm, pattern = "^MT-", col.name = "percent.mt")
+gbm <-  SCTransform(gbm, vars.to.regress = "percent.mt", verbose = TRUE)
+```
+```{r}
+# These are now standard steps in the Seurat workflow for visualization and clustering
+gbm <- RunPCA(gbm, verbose = FALSE)
+set.seed(7)
+gbm <- RunUMAP(gbm, dims = 1:30, verbose = FALSE)
+set.seed(7)
+gbm <- RunTSNE(gbm, dims = 1:30, verbose = FALSE)
+gbm <- FindNeighbors(gbm, dims = 1:30, verbose = FALSE)
+gbm <- FindClusters(gbm, verbose = FALSE)
+```
+
+
+```{r}
+DimPlot(gbm, label = TRUE)
+```
+

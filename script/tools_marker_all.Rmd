@@ -36,7 +36,7 @@ source("script/function.R")
 # Parameter
 # Select the signature to be used
 # if it is new one, can add into the list but keep in mind to run the preprocessing of the signatures in the next chunk because it need to be preprocessed into xlsx file first
-sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes","4pathways")
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
 #signatures.gen <- c("signature_new","signature_bulk")
@@ -44,9 +44,10 @@ runs <- c("each","whole")
 ```
 
 
-```{r}
-sig <- sigs[4]
 
+```{r}
+sig <- sigs[7]
+sig
 
 # cell input to be analyse
 
@@ -85,14 +86,12 @@ rm(gbm)
 ```
 
 
+
 #signature preprocessing
 ```{r}
 
 # automatic convert gene list
-#signatures <- read.csv(paste0("output/signature_subtype_", sig, ".csv"))
-signatures <- read.csv( file = paste0("output/signature_subtype_", sig,"_","bulk", ".csv"))
-
-signatures
+signatures <- read.csv(paste0("output/signature_subtype_", sig, ".csv"))
 
 # scsorter
 signatures.split <- list()

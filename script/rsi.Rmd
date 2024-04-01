@@ -1,0 +1,458 @@
+#rsi pre-post change
+
+```{r}
+library(data.table)
+library(tibble)
+```
+
+```{r}
+#Set working directory
+setwd(here::here())
+source("script/function.R")
+
+# Parameter
+source("script/parameter.R")
+
+```
+```{r}
+# create senescence score
+signatures <- list(senescence = scan("data/lucy_senesence_genes.txt", character(), sep = ",", strip.white = TRUE))
+```
+```{r}
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
+
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+
+#choose what to analyse
+
+pick <- 4
+
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+```
+
+
+
+```{r}
+matching <- read.csv(file = "output/matched_cell_data_yossawat.csv")
+sen_rsi_all <- read.csv(file = "data/all_cells_RSI_for_Yossawat.csv")
+```
+```{r}
+table(grepl("-1-1",sen_rsi_all$X))  #check the duplicated cell_id that is added the -1
+table(grepl("-1-2",sen_rsi_all$X))
+
+sen_rsi_all$donor_cell <- paste(sen_rsi_all$donor_id,sen_rsi_all$X,sep = "_")
+sen_rsi_all$donor_cell_deleted_1 <- gsub("-1-1","-1",x = sen_rsi_all$donor_cell)
+
+table(table(sen_rsi_all$donor_cell_deleted_1)) #seem like the donor_cell still have duplicate > meaning that need donor_run_cell_id but unfortunately we cannot do it that we as the run
+
+#try the donor_radiation_cell
+sen_rsi_all$donor_radiation_cell <- paste(sen_rsi_all$donor_id,sen_rsi_all$cell_state,sen_rsi_all$X,sep = "_")
+sen_rsi_all$donor_radiation_cell_deleted_1 <- gsub("-1-1","-1",x = sen_rsi_all$donor_radiation_cell)
+
+table(table(sen_rsi_all$donor_radiation_cell_deleted_1)) #seem like the donor_radiation_cell work
+
+
+unique(sen_rsi_all$cell_state)
+sen_rsi_all$radiation <- ifelse(sen_rsi_all$cell_state == "Control","control","radiated")
+
+sen_rsi_all$donor_radiation_cell <- paste(sen_rsi_all$donor_id,sen_rsi_all$radiation,sen_rsi_all$X,sep = "_")
+sen_rsi_all$merge <- gsub("-1-1","-1",x = sen_rsi_all$donor_radiation_cell)
+
+```
+
+```{r}
+anno.all <- fread(file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
+gbm.meta <- fread(file = "output/gbm_meta.csv",header = TRUE)
+gbm.meta$rn <- gbm.meta$V1
+anno.meta <- merge(anno.all,gbm.meta,by = "rn",all.x = TRUE,all.y = FALSE)
+
+anno.meta$id <- gsub("run1_control_","",anno.meta$rn)
+anno.meta$id <- gsub("run2_control_","",anno.meta$id)
+anno.meta$id <- gsub("run2_radiated_","",anno.meta$id)
+anno.meta$id <- gsub("run1_radiated_","",anno.meta$id)
+
+anno.meta$merge <- paste(anno.meta$donor_id,anno.meta$radiation,anno.meta$id,sep = "_")
+```
+
+```{r}
+all <- merge(anno.meta,sen_rsi_all[,!colnames(sen_rsi_all) %in% c("donor_id","radiation")], by = "merge")
+all
+```
+```{r}
+#save out
+selected_column <- c("rn","X","donor_id","radiation","runs","consensus","sen_score","sen_score_no_STAT1","binary.senescence","RSI","Tie","MESlike" ,"AClike", "NPClike", "OPClike","confidence","unknown")
+all.save <- all [,..selected_column]
+
+setnames(all.save,"X","cell_id_Lucy")
+setnames(all.save,"rn","cell_id_Yossawat")
+
+all.save
+
+#fwrite(all.save,file = "output/annotation/sen_RSI_cellstate.csv")
+```
+
+
+#start work
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(rstatix)
+```
+
+#dont use -->
+<!-- ```{r} -->
+<!-- plot_cellstate_prepost_per_donor <- function(anno, confidence_threshold = 0,ref.group = NULL) { -->
+<!--   # Perform Wilcoxon test -->
+<!--   stat.test <- anno %>% -->
+<!--     filter(confidence >= confidence_threshold) %>% -->
+<!--     group_by(donor_radiation, donor_id, radiation) %>% -->
+<!--     wilcox_test(RSI ~ consensus, paired = FALSE,ref.group = ref.group)  %>% -->
+<!--   adjust_pvalue(method = "bonferroni") %>% -->
+<!--   add_significance() -->
+
+<!--   # Add XY position for dodge -->
+<!--   stat.test <- stat.test %>% -->
+<!--     add_xy_position(x = "radiation", dodge = 0.8) -->
+
+
+<!--   # Create violin plots -->
+<!--   bxp <- ggviolin(anno %>% filter(confidence >= confidence_threshold),  -->
+<!--                    x = "radiation", y = "RSI",fill = "consensus", facet.by = "donor_id") -->
+
+
+<!--   # Add p-values -->
+<!--   plot <- bxp +  -->
+<!--     stat_pvalue_manual( -->
+<!--       stat.test, label = "p.adj.signif",  -->
+<!--       hide.ns = TRUE -->
+<!--     ) + labs(title = "RSI difference among cellstates pre-post radiation",subtitle = "per each donor", caption = "pairwise mann whitney u test with bonferroni adjustment (alpha error = 0.05) \n Not significant pairs are hidden.") + -->
+<!--     scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere -->
+
+<!--   return(plot) -->
+<!-- } -->
+<!-- ``` -->
+
+
+
+
+
+<!-- ```{r} -->
+
+<!-- # Example usage -->
+<!-- p0_0 <- plot_cellstate_prepost_per_donor(anno = all, confidence_threshold = 0) -->
+<!-- p0_0 -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- ggsave(plot = p0_0, filename = "prepost_cellstate_rsi_perdonor.png",path = "figure/",width = 20,height = 20) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- # # Example usage -->
+<!-- p0_0.5 <- plot_cellstate_prepost_per_donor(all, confidence_threshold = 0.5) -->
+<!-- p0_0.5 -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # p0.all <- plot_cellstate_prepost_per_donor(anno.senesence, confidence_threshold = 0,ref.group = "all") -->
+<!-- # p0.all -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- plot_cellstate_prepost<- function(anno.senesence, confidence_threshold = 0,ref.group = NULL) { -->
+<!--   # Perform Wilcoxon test -->
+<!--   stat.test <- anno.senesence %>% -->
+<!--     filter(confidence >= confidence_threshold) %>% -->
+<!--     group_by(radiation) %>% -->
+<!--     wilcox_test(RSI ~ consensus, paired = FALSE,ref.group = ref.group) %>% -->
+<!--   adjust_pvalue(method = "bonferroni") %>% -->
+<!--   add_significance() -->
+
+<!--   # Add XY position for dodge -->
+<!--   stat.test <- stat.test %>% -->
+<!--     add_xy_position(x = "radiation", dodge = 0.8) -->
+
+<!--   # Create box plots -->
+<!--   bxp <- ggviolin(anno.senesence %>% filter(confidence >= confidence_threshold),  -->
+<!--                    x = "radiation", y = "RSI", fill = "consensus",notch = FALSE,add = "median_q1q3",error.plot = "crossbar") -->
+
+<!--   # Add p-values -->
+<!--   plot <- bxp +  -->
+<!--     stat_pvalue_manual( -->
+<!--       stat.test, label = "p.adj.signif", tip.length = 0.01, -->
+<!--       hide.ns = TRUE -->
+<!--     ) + labs(title = "RSI difference among cellstates pre-post radiation", caption = "pairwise mann whitney u test with bonferroni adjustment (alpha error = 0.05) \n Not significant pairs are hidden.") + -->
+<!--     scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere -->
+<!--   return(plot) -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- p4_0 <- plot_cellstate_prepost(all, confidence_threshold = 0) -->
+<!-- p4_0 -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- ggsave(plot = p4_0, filename = "prepost_cellstate_rsi.png",path = "figure/",width = 20,height = 20) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- p4_0.5 <- plot_cellstate_prepost(all, confidence_threshold = 0.5) -->
+<!-- p4_0.5 -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #Find the median  -->
+<!-- sen_score_average <- anno.senesence %>% group_by(consensus,donor_id,radiation) %>% summarise(median = median(sen_score), -->
+<!--                                                                                              mean = mean(sen_score)) %>% ungroup() -->
+<!-- ```  -->
+
+<!-- ```{r} -->
+<!-- sen_score_average %>% filter(radiation == "control") %>% -->
+<!--   ggplot(data = ., aes(x=donor_id,y= median,fill = consensus,color = consensus,group = consensus)) + -->
+<!--   geom_point() + geom_line() + theme_classic() -->
+<!-- ``` -->
+
+
+
+
+
+
+
+#use
+
+
+```{r}
+anno.senesence.dt <- as.data.table(all,keep.rownames = TRUE)
+anno.senesence.dt[,consensus_donor := paste(consensus,donor_id,sep = "_")] 
+```
+
+
+
+```{r}
+library(data.table)
+library(rstatix)
+library(ggplot2)
+library(ggpubr)
+
+stat_test_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
+  # Convert anno.senesence to data.table
+  setDT(anno.senesence.dt)
+  anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold]
+  # Perform Wilcoxon test
+  anno.senesence.wide <- dcast(anno.senesence.filtered, consensus_donor
+ ~ radiation, value.var = "RSI")
+  
+  missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+  anno.senesence.filtered <- anno.senesence.filtered[!consensus_donor %in% missing,]
+  
+  stat.test <- anno.senesence.filtered %>%
+  group_by(consensus, donor_id) %>%
+  wilcox_test(RSI ~ radiation, paired = FALSE,ref.group = ref.group)
+
+  # Add XY position for dodge
+  stat.test <- stat.test %>%
+    add_xy_position(x = "consensus") %>%
+    add_significance()  
+  # Create box plots
+  
+  return(stat.test)
+}
+
+anno_filter_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
+  # Convert anno.senesence to data.table
+  setDT(anno.senesence.dt)
+  anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold]
+  # Perform Wilcoxon test
+  anno.senesence.wide <- dcast(anno.senesence.filtered, consensus_donor
+ ~ radiation, value.var = "RSI")
+  
+  missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+  anno.senesence.filtered <- anno.senesence.filtered[!consensus_donor %in% missing,]
+
+  
+  return(anno.senesence.filtered)
+}
+
+```
+```{r}
+nrow(anno.senesence.filtered)
+```
+
+```{r}
+
+stat.test <- stat_test_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
+level <- unique(stat.test$consensus)
+anno.senesence.filtered <- anno_filter_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
+anno.senesence.filtered$consensus <- factor(anno.senesence.filtered$consensus,levels = level)
+
+
+bxp <- ggviolin(anno.senesence.filtered , 
+                 x = "consensus", y = "RSI", fill = "radiation", facet.by = "donor_id") 
+
+# Add p-values
+p1_0 <- bxp + 
+  stat_pvalue_manual(
+    stat.test, label = "p.signif", tip.length = 0.01, xmin = "xmin",xmax = "xmax",
+    hide.ns = TRUE
+  ) 
+
+#add labels
+p1_0 <- p1_0 +  labs(title = "RSI difference between pre-post radiation for each cellstate",subtitle = "per donor", caption = "Mann whitney u test (alpha error = 0.05) \n Not significant pairs are hidden.")
+
+p1_0 <- p1_0 + xlab("cellstate") 
+p1_0 <- p1_0 + theme(text = element_text(family = "Helvetica"))
+```
+
+```{r}
+p1_0
+```
+
+
+```{r}
+ggsave(plot = p1_0, filename = "prepost_rsi_cellstate_perdonor.png",path = "figure/",width = 15,height = 15)
+```
+
+```{r}
+anno.senesence.wide <- dcast(anno.senesence.dt, consensus_donor
+ ~ radiation, value.var = "RSI")
+  
+missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+anno.senesence.filtered <- anno.senesence.dt[!consensus_donor %in% missing,]
+
+stat.test <- anno.senesence.filtered %>%
+group_by(consensus, donor_id) %>%
+wilcox_test(RSI ~ radiation, paired = FALSE,ref.group = NULL)
+
+
+anno.senesence.median <- dcast(anno.senesence.filtered, consensus + donor_id
+~ radiation, value.var = "RSI",fun.aggregate = median)
+
+anno.senesence.median$diff_median <- anno.senesence.median$radiated - anno.senesence.median$control
+
+
+stat.test_median <- merge(stat.test,anno.senesence.median,by = c("consensus","donor_id"))
+```
+
+
+```{r}
+sig.inc <- stat.test_median  %>% group_by(consensus) %>%
+  summarise(aggregate_p = (p <= 0.05 & diff_median > 0 )) %>% summarise(increase = sum(aggregate_p), n = n())
+
+sig.inc
+```
+
+
+```{r}
+sig.dec <- stat.test_median  %>% group_by(consensus) %>%
+  summarise(aggregate_p = (p <= 0.05 & diff_median < 0 )) %>% summarise(decrease = sum(aggregate_p), n = n())
+```
+```{r}
+sig.change <- merge(sig.inc,sig.dec,by = c("consensus","n"))
+
+colnames(sig.change)[1] <- "cellstate"
+
+sig.change <- sig.change %>% mutate(inc_per = increase*100/n) 
+sig.change$inc_per <- round(sig.change$inc_per,1)
+
+```
+
+
+```{r}
+library(gridExtra)
+library(gtable)
+```
+
+```{r}
+gp.prop <- ggplotGrob(p1_0)
+```
+
+```{r}
+tbl.gnob <- tableGrob(sig.change,rows = NULL,theme=ttheme_default(base_size = 20,padding = unit(c(1, 1), "mm")) )
+
+
+
+gp.prop.table <- gtable_add_grob(x = gp.prop,
+                       grobs = tbl.gnob,
+                       t = 25, 
+                       l = 15 )
+
+#plot(gp.prop.table)
+```
+
+```{r}
+ggsave(plot = gp.prop.table, filename = "prepost_rsi_cellstate_perdonor_withtable.png",path = "figure/",width =15,height = 15)
+```
+
+
+#dont use -->
+<!-- ```{r} -->
+<!-- p1_0.5 <- plot_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0.5) -->
+<!-- p1_0.5 -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- plot_prepost_cellstate <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) { -->
+<!--   # Convert anno.senesence to data.table -->
+<!--   setDT(anno.senesence.dt) -->
+<!--   anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold] -->
+<!--   # Perform Wilcoxon test -->
+<!--   anno.senesence.wide <- dcast(anno.senesence.filtered, consensus -->
+<!--  ~ radiation, value.var = "RSI") -->
+
+<!--   missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus] -->
+
+<!--   anno.senesence.filtered <- anno.senesence.filtered[!consensus %in% missing,] -->
+
+<!--   stat.test <- anno.senesence.filtered %>% -->
+<!--   group_by(consensus) %>% -->
+<!--   wilcox_test(RSI ~ radiation, paired = FALSE,ref.group = ref.group) -->
+
+<!--   # Add XY position for dodge -->
+<!--   stat.test <- stat.test %>% -->
+<!--     add_xy_position(x = "consensus", dodge = 0.8) %>% -->
+<!--     add_significance()   -->
+<!--   # Create box plots -->
+<!--   bxp <- ggviolin(anno.senesence.filtered ,  -->
+<!--                    x = "consensus", y = "RSI", fill = "radiation",add = "median_q1q3",error.plot = "crossbar")  -->
+
+<!--   # Add p-values -->
+<!--   plot <- bxp +  -->
+<!--     stat_pvalue_manual( -->
+<!--       stat.test, label = "p.signif", tip.length = 0.01, -->
+<!--       hide.ns = TRUE -->
+<!--     )  -->
+<!--    #add labels -->
+<!--   plot <- plot +  labs(title = "RSI difference between pre-post radiation for each cellstate",caption = "Mann whitney u test (alpha error = 0.05) \n Not significant pairs are hidden.") -->
+<!--   return(plot) -->
+<!-- } -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- p3_0 <- plot_prepost_cellstate(anno.senesence.dt, confidence_threshold = 0) -->
+<!-- p3_0 -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- ggsave(plot = p3_0, filename = "prepost_rsi_cellstate.png",path = "figure/",width = 20,height = 20) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- p3_0.5 <- plot_prepost_cellstate(anno.senesence.dt, confidence_threshold = 0.5) -->
+<!-- p3_0.5 -->
+<!-- ``` -->
+

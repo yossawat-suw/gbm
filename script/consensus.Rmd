@@ -30,7 +30,7 @@ run_each <- run_eachs[1]
 ```{r}
 #choose what to analyse
 
-pick <- 4
+pick <- 7
 sig <- sigs[pick]
 merge <- merges[pick]
 
@@ -64,7 +64,7 @@ sc.type <- sc.type[,paste0("scType",unknown) ,drop = FALSE]
 scina <- read.csv(paste0("output/tools/SCINA_", object, "_", sig,"_",run, ".csv"), row.names = 1)
 scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
 
-scina
+
 # add full option
 sc.sorter <- read.csv(paste0("output/tools/scsorter_", object, "_", sig, "_",run,".csv"), row.names = "cell_id")
 sc.sorter$scSorter_no_unknown <- sc.sorter$scSorter
@@ -125,7 +125,8 @@ sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cl
 
 ```{r}
 #choose the tool to be used
-anno <- bind_cols(sc.type, scina, clustify.r,scid,sc.sorter) #first version
+#anno <- bind_cols(sc.type, scina, clustify.r,scid,sc.sorter) #first version
+anno <- bind_cols(sc.type, scina ,sc.sorter) #marker based
 #anno <- bind_cols(sc.type, clustify.r,scid) # version Feb 1st 24
 ```
 
@@ -144,6 +145,10 @@ anno[] <- lapply(anno, function(x) gsub("unassigned", "unknown", x))
 ```{r}
 anno
 ```
+```{r}
+fwrite(anno,file = paste("output/annotation/annotation",ncol(anno),"tools",merge,run,unknown,".csv",sep = "_"),row.names = TRUE)
+```
+
 ```{r}
 tool_names <- colnames(anno)
 ```
@@ -848,9 +853,8 @@ anno_score <- dcast(anno_score_long,formula = rn ~cellstates ,value.var = "binar
 
 #calculate proportion of unknown
 anno_score[,unknown := unknown/ncol(anno)]
-
 #calculate confidence score
-anno_score[, confidence := apply(.SD, 1, max)/ncol(anno), .SDcols = 2:4]
+anno_score[, confidence := apply(.SD, 1, max)/ncol(anno), .SDcols = 2:5]
 
 #split unknown and confidence temporaly 
 anno_score_unknown <- anno_score[,.(rn,unknown,confidence)]
@@ -871,14 +875,23 @@ anno_score[, Tie := rowSums(.SD == 1) > 1, .SDcols = rank_columns]
 
 #stochastic consensus base on the number of call on that cell
 pick_cellstate_stocastic <- function(row) {
-  probs <- row / sum(row)  # Calculate probabilities based on count
+  set.seed(7)
+  if (sum(row) == 0) {
+    probs <- rep(1/length(row),times = length(row))
+  } else {
+   probs <- row / sum(row)  
+  }
   selected_cellstate <- sample(names(row), size = 1, prob = probs)
   return(selected_cellstate)
 }
+set.seed(7)
+
+
 anno_score[, stochastic_consensus := apply(.SD, 1, pick_cellstate_stocastic), .SDcols = possible_cellstate]
 anno_score$stochastic_consensus <- as.factor(anno_score$stochastic_consensus)
 
 consensus_with_stochastic_of_tie_fn <- function(row) {
+  set.seed(7)
   max_confidence <- max(row)
   max_diseases <- names(row[row == max_confidence])
   
@@ -892,13 +905,13 @@ consensus_with_stochastic_of_tie_fn <- function(row) {
   
   return(selected_disease)
 }
+set.seed(7)
 anno_score[, consensus_with_stochastic_of_tie := apply(.SD, 1, consensus_with_stochastic_of_tie_fn), .SDcols = possible_cellstate]
 anno_score$consensus_with_stochastic_of_tie <- as.factor(anno_score$consensus_with_stochastic_of_tie)
 
 anno_score$known <- 1 - anno_score$unknown
 ```
 ```{r}
-
 thresholds <- 0.5
 
 
@@ -928,7 +941,7 @@ table(anno_score$consensus)
 
 # Import metadata
 anno.agreement.chosen <- rownames_to_column(anno.agreement,var = "rn")
-anno.agreement.chosen <- anno.agreement.chosen %>% select(rn,agreement)
+anno.agreement.chosen <- anno.agreement.chosen %>% dplyr::select(rn,agreement)
 anno.all <- merge(anno_score,anno.agreement.chosen,
                   by = "rn")
 
@@ -954,6 +967,8 @@ chosen_info <- c("rn","consensus","confidence","agreement","known")
 anno.all.short <- anno.all[,chosen_info,with = FALSE]
 anno.all.short
 fwrite(anno.all.short, file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
+
+
 ```
 
 ```{r}

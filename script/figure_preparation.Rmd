@@ -1,0 +1,398 @@
+```{r}
+library(Seurat)
+library(ggplot2)
+```
+
+# gbm
+```{r}
+gbm <- readRDS("output/seurat_gbm_qc")
+```
+
+
+```{r}
+gbm <- PercentageFeatureSet(gbm, pattern = "^MT-", col.name = "percent.mt")
+gbm <-  SCTransform(gbm, vars.to.regress = "percent.mt", verbose = TRUE)
+```
+```{r}
+# These are now standard steps in the Seurat workflow for visualization and clustering
+gbm <- RunPCA(gbm, verbose = FALSE)
+set.seed(7)
+gbm <- RunUMAP(gbm, dims = 1:30, verbose = FALSE)
+set.seed(7)
+gbm <- RunTSNE(gbm, dims = 1:30, verbose = FALSE)
+gbm <- FindNeighbors(gbm, dims = 1:30, verbose = FALSE)
+gbm <- FindClusters(gbm, verbose = FALSE)
+```
+```{r}
+gc()
+```
+
+
+```{r}
+DimPlot(gbm,group.by = "donor_radiation", reduction = "tsne", label = FALSE) + theme(axis.text = element_blank(),axis.ticks = element_blank(),legend.text = element_text(size = 8),text = element_text(family = "Helvetica"),legend.key.size = unit(0.7, 'lines')) + labs(title = NULL) + guides(color = guide_legend(nrow = 26,override.aes = list(size=1)))
+```
+
+```{r}
+Idents(gbm)
+gbm@meta.data
+DimPlot(gbm,group.by = "orig.ident", reduction = "tsne", label = FALSE,cols = "grey") + theme(axis.text = element_blank(),axis.ticks = element_blank(),legend.text = element_text(size = 8),text = element_text(family = "Helvetica")) + labs(title = NULL)  
+```
+
+```{r}
+ggsave(path = "figure/",filename = "gbm_tsne_nogroup_grey.png",width = 8,height = 4)
+```
+```{r}
+library(data.table)
+#load cellstate annotation
+annotation <- read.csv("output/annotation/annotation_4_merge_metamodules_each__.csv",header = TRUE)
+rownames(annotation) <- annotation$rn
+```
+```{r}
+gbm <- AddMetaData(gbm,annotation)
+```
+
+```{r}
+table(gbm$consensus)
+table(gbm$confidence)
+confidence_tie <- data.frame(table(gbm$confidence,gbm$Tie))
+
+confidence_tie$prop <- confidence_tie$Freq/sum(confidence_tie$Freq)
+confidence_tie$per <- 100*(confidence_tie$Freq/sum(confidence_tie$Freq))
+
+remotes::install_github("ianmoran11/mmtable2")
+library(mmtable2)
+library(purrr)
+confidence_tie <- confidence_tie %>% mutate(per = round(per,2))
+```
+
+
+```{r}
+confidence_tie %>% mmtable(table_name = "Percentage of tie condition and confidence score",cells = per) + header_top(Var1) + header_left_top(Var2)
+
+```
+```{r}
+ggplot(gbm@meta.data[,"confidence",drop = FALSE],aes(x = confidence)) + geom_histogram(binwidth = 0.2)
+```
+
+```{r}
+cellstate_colors3 <- c("red","blue","yellow","purple4","purple1","purple3","green4","green1","green3","grey","grey")
+names(cellstate_colors3) <- c("AClike","OPClike","Hybrid","MESlike1","MESlike2","MESlike","NPClike1","NPClike2","NPClike","Unknown","unknown")
+tsne_gbm_cellstate <- DimPlot(gbm,group.by = "consensus", reduction = "tsne",cols = cellstate_colors3, label = FALSE)  + labs(title = NULL)+
+  theme(axis.text = element_blank(),axis.ticks = element_blank(),legend.position = "bottom",legend.text = element_text(size = 20),text = element_text(family = "Helvetica")) + guides(color = guide_legend(nrow = 1,override.aes = list(size=10))) 
+
+ggsave(plot = tsne_gbm_cellstate,path = "figure/",filename = "tsne_gbm_cellstate.png",width = 10,height = 7)
+```
+
+# pie chart
+```{r}
+library(ggplot2)
+library(data.table)
+library(tibble)
+```
+
+```{r}
+source("script/parameter.R")
+#set unknown 
+#choose 1 if with unknown, 2 if w/o unknown
+unknown <- unknowns[1]
+
+#choose 1 if each, 2 if whole
+#set whole vs each
+run_each <- run_eachs[1]
+
+#choose what to analyse
+
+pick <- 4
+sig <- sigs[pick]
+merge <- merges[pick]
+
+#run_each <- run_eachs[2]
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+```
+
+```{r}
+#load data
+anno_score <- fread(file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
+anno_score_short <- fread(file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
+gbm.meta <- read.csv("output/gbm_meta.csv", row.names = 1)
+
+anno_score[,consensus_threshold := consensus]
+
+anno_score[confidence < 0 ,consensus_threshold := "unknown" ]
+#anno_score[confidence == 0 ,consensus_threshold := "unknown" ]
+
+anno_score$consensus_threshold <- as.character(anno_score$consensus_threshold)
+possible_cellstate <- unique(unname(unlist(anno_score[,c("stochastic_consensus","consensus_with_stochastic_of_tie","consensus_threshold")])))
+
+possible_cellstate_with_unknown <- c(setdiff(possible_cellstate,"unknown"),"unknown")
+possible_cellstate_with_unassign <- c(setdiff(possible_cellstate,"unassign"),"unassign")
+possible_cellstate_with_unassign_tie <- c(setdiff(possible_cellstate,c("unassign","tie")),"unassign","tie")
+possible_cellstate_with_tie <- c(setdiff(possible_cellstate,"tie"),"tie")
+
+anno_score$consensus_threshold <- factor(anno_score$consensus_threshold ,level = possible_cellstate_with_unknown)
+
+anno_score_meta <- merge(anno_score,rownames_to_column(gbm.meta,var = "rn"),by = "rn")
+
+consensus_unique <- possible_cellstate_with_unknown
+
+anno_score_mean <- anno_score_meta[, .(confidence_mean = mean(confidence),
+                                            agreement_mean = mean(agreement),
+                                            known_mean = mean(known)),
+                                    by = c("radiation", "donor_id")]
+
+anno_consensus_count <- dcast(anno_score_meta, formula = donor_id + radiation ~ consensus_threshold,drop = FALSE)
+possible_cellstate_with_unknown
+
+anno_consensus_count[, n_cell:= rowSums(.SD),.SDcols = consensus_unique]
+anno_consensus_count <- merge(anno_consensus_count,anno_score_mean,by = c("donor_id","radiation"))
+
+anno_consensus_count_long <- melt(anno_consensus_count,id.vars = c("radiation","donor_id","n_cell","confidence_mean","agreement_mean","known_mean"), measure.vars = consensus_unique,variable.name = "consensus_threshold",value.name = "count")
+
+
+#common
+anno_consensus_count_long[,per := count/sum(count),by = c("radiation","donor_id")]
+anno_consensus_count_long[, rad_con := paste0(radiation,"(",n_cell,")","\n","[",round(confidence_mean,digits = 2),"/",
+                                              round(agreement_mean,digits = 2),"/",
+                                              round(known_mean,digits = 2),
+                                              "]")]
+#anno_consensus_count_long[, don_con := paste0(donor_id," (",round(confidence_mean,digits = 2),")")]
+
+
+
+
+library(grid)
+library(randomcoloR)
+anno_consensus_count_long$consensus_threshold <- factor(anno_consensus_count_long$consensus_threshold ,
+                                                       levels = 
+                                                         sort(union(levels(anno_consensus_count_long$consensus_threshold),consensus_unique)))
+
+
+dummy_data <- data.frame(consensus_threshold = levels(anno_consensus_count_long$consensus_threshold))
+
+
+set.seed(167)
+n <-  length(levels(anno_consensus_count_long$consensus_threshold))
+palette <- distinctColorPalette(n)
+
+
+cellstate_colors <- c(
+  "OPClike" = "#1f77b4",  # Replace 'cellstate1' with actual cellstate names
+  "unknown" = "grey",
+  "NPClike" = "#2ca02c",
+  "AClike" = "#d62728",
+  "MESlike" = "#9467bd"
+  # Add more colors as needed for each cellstate
+)
+anno_consensus_count_long$consensus_threshold <-factor(anno_consensus_count_long$consensus_threshold, levels = c("MESlike" ,"OPClike","AClike" , "NPClike", "unknown" ))
+
+```
+
+```{r}
+ggplot() +
+    geom_blank(data = dummy_data, aes(fill = consensus_threshold)) +
+    geom_col(data = anno_consensus_count_long, aes(x = log(n_cell)/2, y = per, fill = consensus_threshold, width = log(n_cell))) +
+  facet_nested_wrap(~ donor_id + radiation,strip = strip_nested(size = "variable"), ncol = 8) +
+  ggtitle("") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  labs(fill = "Cell state") + 
+  theme(strip.text = element_text(size = 6)) +
+  scale_fill_manual(values = cellstate_colors) 
+```
+```{r}
+ggsave(filename = "figure/pie_chart_cellstate.png",width = 10,height = 10)
+```
+
+```{r}
+anno_consensus_count_long
+```
+
+#cellstate change
+```{r}
+ggplot(anno_consensus_count_long[!anno_consensus_count_long$consensus_threshold == "unknown",],aes(x = radiation,y = per,col = donor_id)) + geom_point()  + geom_line(aes(group = donor_id)) + facet_wrap(~consensus_threshold) + theme_bw()
+```
+
+
+
+#Hypothesis testing -->
+<!-- ```{r} -->
+<!-- install.packages("Compositional") -->
+<!-- library("Compositional") -->
+<!-- ina <- rep(1:2, each = 50) -->
+<!-- x <- as.matrix(iris[1:100, 1:4]) -->
+<!-- x <- x/ rowSums(x) -->
+<!-- ina -->
+<!-- comp.test( x, ina, test = "james" ) -->
+<!-- comp.test( x, ina, test = "hotel" ) -->
+<!-- comp.test( x, ina, test = "el" ) -->
+<!-- comp.test( x, ina, test = "eel" ) -->
+
+
+<!-- x <- anno_consensus_count_long[!anno_consensus_count_long$consensus_threshold == "unknown",] -->
+
+<!-- x <- x[,.(radiation,donor_id,per,consensus_threshold)] -->
+<!-- x <- dcast(x,radiation + donor_id ~ consensus_threshold,value.var = "per") -->
+<!-- x <- as.matrix(x[,3:6]) -->
+
+<!-- ina <- x$radiation -->
+<!-- ina <- gsub("control","1",ina) -->
+<!-- ina <- gsub("radiated","2",ina) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- comp.test(x , ina, test = "james" ) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- comp.test( x, ina, test = "hotel" ) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- comp.test( x, ina, test = "el" ) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- comp.test( x, ina, test = "eel" ) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- BiocManager::install("DECIPHER") -->
+<!-- remotes::install_github("lakerwsl/RDB") -->
+
+<!-- library(RDB) -->
+
+<!-- m=50 -->
+<!-- d=100  -->
+<!-- P=matrix(runif(m*d),nrow=m,ncol=d) -->
+<!-- Z=rep(0,m) -->
+<!-- Z[1:(m/2)]=1 -->
+<!-- rdb(P,Z) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- log_geo_mean <- function(dat) { -->
+<!--   log_data <- log(dat) -->
+<!--   log_gm <- mean(log_data[is.finite(log_data)]) -->
+<!--   return(log_gm) -->
+<!-- } -->
+
+<!-- #' getCLR -->
+<!-- #' Obtain the centered log ratio transformation of compositional data.  -->
+<!-- #' -->
+<!-- #' @param dat n x p matrix of numerical variables. For microbiome data, n: sample size, p: number of taxa  -->
+<!-- #' @return n x p matrix of the log-ratio transformed data. -->
+<!-- #' @details A pseudocount is added to all taxa if zero values exist. A pseudocount of 0.01 is added if "dat" is read counts (rarefied or not),  -->
+<!-- #' and a pseudocount that is 0.01 times the smallest nonzero relative abundances is added if "dat" is already proportions.  -->
+<!-- #' @examples n = 10; p = 100 -->
+<!-- #' set.seed(1) -->
+<!-- #' dat = matrix(rbinom(n*p, size = 1000,  0.005),n,p) -->
+<!-- #' X = getCLR(dat) -->
+<!-- #' @export -->
+<!-- getCLR = function(dat){ -->
+<!--   # dat: n X p matrix of relative abundances, n: sample size, p: number of taxa -->
+<!--   # data should be rarefied or proportional  -->
+<!--   n = nrow(dat); p = ncol(dat) -->
+
+<!--   if (any(dat == 0)){ -->
+<!--     if (all(rowSums(dat) > 1)){  -->
+<!--       # read counts. Assuming the total read count for all samples are large.  -->
+<!--       delta = 0.01 -->
+<!--       dat = dat + delta -->
+<!--       # t(apply(dat, 1, imputeZero, delta = delta)) -->
+<!--       print("A pseudocount of 0.01 added to all reads")    -->
+<!--     }else if(all(rowSums(dat) == 1)){  # already proportions -->
+<!--       delta = min(dat[dat > 0])*0.01 -->
+<!--       dat = dat  + delta -->
+<!--       #  t(apply(dat, 1, imputeZero, delta = delta)) -->
+<!--       print(sprintf("A pseudocount of %s, which is -->
+<!--                     0.01 times the smallest nonzero values, added to all reads", delta)) -->
+<!--     } -->
+<!--     } -->
+
+
+<!--   # print("data is converted to percentages.") -->
+<!--   dat = dat/rowSums(dat) -->
+<!--   log_geoMean = apply(dat, 1, log_geo_mean) -->
+<!--   logclr = log(dat) - log_geoMean -->
+<!--   # logclr = logclr[,-NCOL(logclr)] -->
+<!--   return(logclr)   -->
+<!--   } -->
+
+<!-- #' Generalized Hoteling's test  -->
+<!-- #' The fuction testing whether the mean of X is differnt from u, a hypothesized population average.  -->
+<!-- #' GHT replaces the sample covariance matrix in classical Hoteling's test with a shrinkage based (positve definite) covariance matrix. -->
+<!-- #' Significance is evaluated via permuation.  -->
+<!-- #' The method is designed for paired microbiome studies, in which X is the paired differences after log-ratio transformation.  -->
+<!-- #' However, the method is equally applicable to other high dimensional settings.   -->
+<!-- #'  -->
+<!-- #' @param X n x p matrix of numerical variables -->
+<!-- #' @param u a vector of numerical variables indicating the true value of the mean -->
+<!-- #' @param nsim number of permutations. "equal": diagonal matrix with equal diagonal element;"unequal", diagonal matrix with unequal diagonal element;"identity": identity matrix -->
+<!-- #' @param target target matrix for covariance estimate.  -->
+<!-- #' @return p value -->
+<!-- #' @examples set.seed(1) -->
+<!-- #' n=10; p=100 -->
+<!-- #' dat = matrix(rnorm(n*p),n,p) -->
+<!-- #' test1 = GHT(dat) -->
+<!-- #' # A test similar to paired microbiome data -->
+<!-- #' set.seed(1) -->
+<!-- #' dat1 = matrix(rbinom(n*p, size = 1000,  0.005),n,p) -->
+<!-- #' dat2 = matrix(rbinom(n*p, size = 1000,  0.005),n,p) -->
+<!-- #' X1 = CLR(dat1); X2 = CLR(dat2) -->
+<!-- #' X = X1 - X2 -->
+<!-- #' test2 = GHT(X) -->
+<!-- #' @export -->
+<!-- GHT = function(X, u = 0, nsim = 1000, target = "equal", centered = F){   -->
+<!--   B = target -->
+<!--   getS = function(X, B, centered){    -->
+<!--     # Touloumis 2015 approach for covariance estimate  -->
+<!--     # centered: whether the data centered to have mean zero. Becase we aim to test the means, centered = F -->
+<!--     # B: target matrix -->
+<!--     if (B == "equal"){ -->
+<!--       S = ShrinkCovMat::shrinkcovmat.equal(X, centered = centered) -->
+<!--     }  -->
+<!--     if (B == "identity"){ -->
+<!--       S = ShrinkCovMat::shrinkcovmat.identity(X, centered = centered) -->
+<!--     }  -->
+<!--     if (B == "unequal"){ -->
+<!--       S = ShrinkCovMat::shrinkcovmat.unequal(X, centered = centered) -->
+<!--     }  -->
+<!--     return(S) -->
+<!--   } -->
+<!--   tX = t(X) -->
+<!--   S = getS(tX, B = B, centered = centered)   -->
+
+<!--   Sigmahat = S$Sigmahat -->
+<!--   lambda = S$lambda -->
+<!--   Sigmasample = S$Sigmasample -->
+<!--   Target = S$Target -->
+
+
+<!--   p=ncol(X)  -->
+<!--   N=nrow(X) -->
+<!--   n=N-1 -->
+<!--   means =colMeans(X, na.rm=TRUE) -->
+<!--   xx = (means-u)%*% t(means-u) -->
+<!--   T1 = sum(N*xx*solve(Sigmahat)) -->
+<!--   stat0 = rep(NA, nsim) -->
+<!--   for (j in 1:nsim){ -->
+<!--     permute = sample(c(-1,1), size = N, replace = T, prob = c(0.5, 0.5))  -->
+<!--     X0 = X * permute -->
+<!--     tX0 = t(X0) -->
+<!--     S2 = getS(tX0, B = B, centered = centered) -->
+<!--     means =colMeans(X0, na.rm=TRUE)     -->
+<!--     stat0[j]=as.numeric(N*t(means-u)%*%solve(S2$Sigmahat)%*%(means-u))     -->
+<!--   } -->
+<!--   pval <- (sum(stat0>=T1)+ 1)/nsim  -->
+<!--   pval <- ifelse(pval > 1, 1, pval)   -->
+<!--   return(pval) -->
+<!-- }  -->
+<!-- ``` -->
+
+
+
+
+
+

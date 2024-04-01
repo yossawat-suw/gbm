@@ -17,6 +17,10 @@ library(UCell)
 # #remove.packages("SeuratObject")
 # install.packages("SeuratObject")
 ```
+```{r}
+# Parameter
+source("script/parameter.R")
+```
 
 ```{r}
 # import smartseq
@@ -80,7 +84,8 @@ smrt[["RNA"]]$data <- smrt[["RNA"]]$counts
 
 #reverse the log2+1  and put to assay "norm"
 
-#code still bug
+# #code still bug
+smrt[["norm"]] <- smrt[["RNA"]]
 smrt[["norm"]]$data <- as((2^(smrt@assays$RNA$data)) - 1, "CsparseMatrix")
 ```
 
@@ -178,8 +183,8 @@ for (i in 1:nrow(score)) {
   if ((second > 1) &
     (second > q10[names(second)]) &
     ((second - third) >= 0.3)) {
-    # celltype <- paste0("hybrid_",names(first),"_",names(second))
-    celltype <- "hybrid"
+    # celltype <- paste0("Hybrid_",names(first),"_",names(second))
+    celltype <- "Hybrid"
   } else {
     celltype <- names(score_cell[1])
   }
@@ -192,7 +197,7 @@ smrt.mal$celltype <- celltype.all
 ```
 
 ```{r}
-table(smrt.mal$celltype == "hybrid")
+table(smrt.mal$celltype == "Hybrid")
 ```
 
 
@@ -211,11 +216,7 @@ smrt.mal$celltype_merge <- smrt.mal.meta$celltype
 
 
 
-```{r}
-# remove hybrid
-Idents(smrt.mal) <- "celltype"
-smrt.mal <- subset(smrt.mal, idents = "hybrid", invert = TRUE)
-```
+
 
 
 ```{r}
@@ -248,15 +249,46 @@ DimPlot(smrt.mal, reduction = "tsne", group.by = "Sample")
 
 
 ```{r}
-
+DimPlot(smrt.mal, reduction = "umap", group.by = "celltype", label = FALSE)
 DimPlot(smrt.mal, reduction = "umap", group.by = "celltype_merge", label = FALSE)
-DimPlot(smrt.mal, reduction = "tsne", group.by = "celltype_merge", label = FALSE)
+```
+```{r}
+gc()
+```
 
+```{r}
+cellstate_colors2 <- c("red","blue","yellow","purple4","purple1","purple3","green4","green1","green3")
+names(cellstate_colors2) <- c("AClike","OPClike","Hybrid","MESlike1","MESlike2","MESlike","NPClike1","NPClike2","NPClike")
+```
+
+
+```{r}
+tsne.celltype <- DimPlot(smrt.mal, reduction = "tsne", group.by = "celltype", label = FALSE,cols = cellstate_colors2) + labs(title = NULL) + theme(axis.text = element_blank(),axis.ticks = element_blank(),legend.position = "bottom",legend.text = element_text(size = 10),text = element_text(family = "Helvetica")) + guides(color = guide_legend(nrow = 1,override.aes = list(size=5)))
+
+tsne.celltype
+ggsave(plot = tsne.celltype,path = "figure/",filename = "cellstate.png",width = 8,height = 5)
+```
+
+
+```{r}
+Idents(smrt.mal) <- "celltype"
+smrt.mal.hybrid_rm <- subset(smrt.mal, idents = "Hybrid", invert = TRUE)
+tsne.celltype_merge.noHybrid.merge <- DimPlot(smrt.mal.hybrid_rm, reduction = "tsne", group.by = "celltype_merge",cols = cellstate_colors2, label = FALSE)  + labs(title = NULL)+
+  theme(axis.text = element_blank(),axis.ticks = element_blank(),legend.position = "right",legend.text = element_text(size = 10),text = element_text(family = "Helvetica"))
+
+tsne.celltype_merge.noHybrid.merge
+ggsave(plot = tsne.celltype_merge.noHybrid.merge,path = "figure/",filename = "cellstate_filter_merge.png",width = 8,height = 5)
 ```
 ```{r}
 DimPlot(smrt.mal, reduction = "umap", group.by = "celltype_merge", label = FALSE, ncol = 7,split.by = "Sample",)
 ```
 
+
+```{r}
+# remove Hybrid
+Idents(smrt.mal) <- "celltype"
+smrt.mal <- subset(smrt.mal, idents = "Hybrid", invert = TRUE)
+```
 
 ```{r}
 smrt.mal$OPClike <- as.numeric(smrt.mal$OPClike)
@@ -509,7 +541,7 @@ library(patchwork)
 ```
 
 ```{r}
-saveRDS(bulk.deg.list.filter.genes, file = "output/signature_subtype_bulk")
+#saveRDS(bulk.deg.list.filter.genes, file = "output/signature_subtype_bulk")
 ```
 
 ```{r}
@@ -522,7 +554,7 @@ colnames(signatures.bulk.df) <- names(bulk.deg.list.filter.genes)
 signatures.bulk.df
 ```
 ```{r}
-write.csv(signatures.bulk.df, file = paste0("output/signature_subtype_", sig,"_","bulk", ".csv"), col.names = TRUE, row.names = FALSE)
+#write.csv(signatures.bulk.df, file = paste0("output/signature_subtype_", sig,"_","bulk", ".csv"), col.names = TRUE, row.names = FALSE)
 ```
 
 ```{r}
@@ -835,7 +867,7 @@ signatures.new
 ```
 
 ```{r}
-saveRDS(signatures.new, file = "output/signature_subtype_new")
+#saveRDS(signatures.new, file = "output/signature_subtype_new")
 ```
 
 ```{r}
@@ -848,7 +880,7 @@ colnames(signatures.new.df) <- names(signatures.new)
 signatures.new.df
 ```
 ```{r}
-write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
+#write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
 ```
 
 
@@ -957,7 +989,7 @@ signatures.new
 ```
 
 ```{r}
-saveRDS(signatures.new, file = "output/signature_subtype_npc_opc")
+#saveRDS(signatures.new, file = "output/signature_subtype_npc_opc")
 ```
 
 ```{r}
@@ -973,7 +1005,7 @@ signatures.new.df
 sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50")
 sig <- sigs[2]
 
-write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
+#write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
 
 #read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
 ```
@@ -1011,7 +1043,7 @@ colnames(signatures.new.df_5)[3] <- "MES"
 signatures.new.df_5
 
 sig <- sigs[5]
-write.csv(signatures.new.df_5, file = paste0("output/signature_subtype_", sig, ".csv"), row.names = FALSE)
+#write.csv(signatures.new.df_5, file = paste0("output/signature_subtype_", sig, ".csv"), row.names = FALSE)
 ```
 #merge NPC/OPC vs AC/MES
 
@@ -1029,7 +1061,7 @@ Idents(smrt.mal) <- "npcopc_acmes"
 ```
 
 ```{r}
-#saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
+##saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
 ```
 
 
@@ -1114,7 +1146,7 @@ signatures.new
 ```
 
 ```{r}
-#saveRDS(signatures.new, file = "output/signature_cellstate_npcopc_acmes")
+##saveRDS(signatures.new, file = "output/signature_cellstate_npcopc_acmes")
 ```
 
 ```{r}
@@ -1132,7 +1164,7 @@ signatures.new.df
 sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes")
 sig <- sigs[6]
 
-write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
+#write.csv(signatures.new.df, file = paste0("output/signature_subtype_", sig, ".csv"), col.names = TRUE, row.names = FALSE)
 
 #read.csv(file = paste0("output/signature_subtype_", sig, ".csv"))
 ```
@@ -1180,7 +1212,7 @@ library(nebula)
 
 
 ```{r}
-#saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
+##saveRDS(smrt.mal, "output/smrt_mal", compress = TRUE)
 ```
 
 

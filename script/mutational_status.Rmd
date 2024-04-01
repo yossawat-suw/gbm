@@ -1,0 +1,49 @@
+---
+title: "mutational_status"
+output: html_document
+date: "2024-03-04"
+---
+
+```{r}
+library("data.table")
+```
+
+```{r}
+mutation <- data.frame(readxl::read_xlsx("data/mutation_status.xlsx"),row.names = 1)
+```
+
+```{r}
+mutation
+stats::heatmap(as.matrix(mutation), scale = "none",)
+```
+
+```{r}
+distance_matrix <- dist(t(mutation))
+
+# Perform hierarchical clustering
+hclust_result <- hclust(distance_matrix)
+
+# Plot the dendrogram
+plot(hclust_result, main = "Dendrogram of Subjects")
+```
+
+```{r}
+mutation
+```
+
+```{r}
+# Perform K-means clustering
+num_clusters <- 2  # Change the number of clusters as needed
+kmeans_result <- kmeans(mutation, centers = num_clusters)
+
+# Get the cluster assignments
+cluster_assignments <- kmeans_result$cluster
+
+# Print the cluster assignments
+print("Cluster Assignments:")
+print(cluster_assignments)
+
+hclust(mutation)
+mutation
+```
+

@@ -11,7 +11,8 @@ sigs <- c( "4metamodules_new_50_mes",
            "3metamodules_new_50", 
            "4metamodules_new_50",
            "npcopc_ac_mes",
-           "npcopc_acmes")
+           "npcopc_acmes",
+           "4pathways")
 
 
 # For reference based
@@ -20,7 +21,8 @@ merges <- c("4_merge_metamodules_mes",
             "4_merge_metamodules_3celltypes",
             "4_merge_metamodules",
             "npcopc_ac_mes",
-            "npcopc_acmes")
+            "npcopc_acmes",
+            "4pathways")
 
 
 all_cellstates <- c("MESlike",
@@ -28,9 +30,10 @@ all_cellstates <- c("MESlike",
                    "NPClike", 
                    "OPClike",
                    "NPC_OPClike",
-                   "AC_MESlike")
+                   "AC_MESlike",
+                   "GPM","MTC","NEU","PPR")
 
-chosing <- list(c(1),c(2,5),c(2,3,4),c(1,2,3,4),c(1,2,5),c(5,6))
+chosing <- list(c(1),c(2,5),c(2,3,4),c(1,2,3,4),c(1,2,5),c(5,6),c(7,8,9,10))
 
 
 

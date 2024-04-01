@@ -57,7 +57,7 @@ anno_score_short
 ```{r}
 anno_score[,consensus_threshold := consensus]
 
-anno_score[confidence < 0.5 ,consensus_threshold := "unknown" ]
+anno_score[confidence < 0 ,consensus_threshold := "unknown" ]
 #anno_score[confidence == 0 ,consensus_threshold := "unknown" ]
 ```
 
@@ -229,6 +229,7 @@ anno_consensus_count_long[,]
 ```
 
 
+
 ```{r}
 p <- ggplot() +
     geom_blank(data = dummy_data, aes(fill = consensus_threshold)) +
@@ -256,6 +257,7 @@ caption <-
                     hjust = 4, vjust = -5, 
                     gp = gpar(fontface = "italic", col = "black", fontsize = 5)) # Adjust fontsize here
 ```
+
 
 
 ```{r}
