@@ -114,6 +114,13 @@ classification <- data.frame(t(classification))
 
 classification <- classification[,1:6]
 classification
+
+cell_line <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 2)
+cell_line <- tibble::column_to_rownames(cell_line,var = "donor_id")
+
+classification <- cbind(classification,cell_line)
+
+classification$tumour_formation <- as.factor(classification$tumour_formation) 
 ```
 
 
@@ -144,7 +151,7 @@ hm_rsi <- Heatmap(rsi,name = "RSI",
                         cluster_columns = FALSE)
 
 hm_p11 <- Heatmap(p11,name = "P12",
-                        col = colorRamp2(c(0,min(p11), max(p11)), c("black", "grey","white")),
+                        col = colorRamp2(c(0,min(p11), max(p11)), c("blue", "white","green")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
                           grid.text(sprintf("%.1f", p11[i, j]), x, y, gp = gpar(fontsize = 5))},
                         cluster_columns = FALSE)
@@ -152,30 +159,37 @@ hm_p11 <- Heatmap(p11,name = "P12",
 hm_classification_list <- NULL
 set.seed(7)
 for (n in 1:(ncol(classification))) {
-  hm_classification <- Heatmap(classification[,n,drop = FALSE],name = colnames(classification)[n])
+  hm_classification <- Heatmap(as.matrix(classification[,n,drop = FALSE]),name = colnames(classification)[n],na_col = "black")
   hm_classification_list <- hm_classification_list + hm_classification
 }
+```
+```{r}
+(as.matrix(classification[,12,drop = FALSE]))
+hm_classification_list
 ```
 
 ```{r}
 hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
-```
-```{r}
-hm_classification_list
-```
 
-
-
-
-
-
-```{r}
 hm <- hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11 + hm_classification_list
+```
 
+
+
+
+
+
+
+
+
+
+
+```{r}
+png( "figure/hm_all.png",width=30,height=30,units="cm",res=300)
 draw(hm, merge_legend = TRUE, heatmap_legend_side = "bottom", 
     annotation_legend_side = "bottom")
+dev.off()
 ```
-
 
 ```{r}
 p11_orig[,c("cell_id_Yossawat","P12")]
@@ -449,19 +463,46 @@ hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
 ```{r}
 library(readxl)
 library(ggplot2)
-gbm_line <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 2)
+gbm_line_13 <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 2)
+gbm_line_13
 ```
 
 ```{r}
-gbm_line
+
 ```
 ```{r}
-ggplot(gbm_line,aes(x= doubling_time_hr,y=tumour_formation_month,shape = primary_recurrent,col = MGMT_promoter_methylation
+ggplot(gbm_line_13,aes(x= doubling_time_hour,y=tumour_formation_month,shape = primary_recurrent,col = MGMT_promoter_methylation
 )) + geom_point()
 ```
 
 ```{r}
-ggplot(gbm_line,aes(x= primary_recurrent,y=doubling_time_hr,col = MGMT_promoter_methylation)
+ggplot(gbm_line_13,aes(x= primary_recurrent,y=doubling_time_hour,col = MGMT_promoter_methylation)
 ) + geom_point()
+```
+```{r}
+#all donor
+gbm_line_all <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 3)
+
+gbm_line_all$tumour_formation <- as.logical(gbm_line_all$tumour_formation)
+
+gbm_line_all$in_project <- as.logical(gbm_line_all$in_project)
+gbm_line_all$cancer_type_IDH_mutation <- paste(gbm_line_all$cancer_type,gbm_line_all$IDH,sep = "_")
+```
+
+```{r}
+ggplot(gbm_line_all,aes(x= doubling_time_hour,y=tumour_formation_month,shape = primary_recurrent,col = MGMT_promoter_methylation
+)) + geom_point()
+
+ggplot(gbm_line_all,aes(x= primary_recurrent,y=doubling_time_hour,col = MGMT_promoter_methylation)
+) + geom_point()
+```
+```{r}
+ggplot(gbm_line_all,aes(x= primary_recurrent,y=doubling_time_hour,col = MGMT_promoter_methylation,shape = cancer_type_IDH_mutation)
+) + geom_jitter(width = 0.25)
+```
+
+```{r}
+ggplot(gbm_line_all,aes(x= primary_recurrent,y=doubling_time_hour,col = MGMT_promoter_methylation,shape = cancer_type_IDH_mutation)
+) + geom_jitter(width = 0.25) + facet_wrap(~in_project,ncol = 1) 
 ```
 

@@ -1,0 +1,312 @@
+```{r}
+library(pacman)
+p_load(R.matlab,
+       Seurat,
+       scCustomize,
+       qs)
+```
+
+```{r}
+setwd(here::here())
+```
+
+#Load seurat
+```{r}
+root_dir <- "data/sequencing_data/neurodevelopemental/GBM_cellranger_matrix/filtered"
+dirs <- list.dirs(root_dir,full.names = FALSE,recursive = FALSE)
+
+obj_list <- list()
+n_sample <- length(dirs)
+i <- 1
+
+for (dir in dirs) {
+  #options(Seurat.object.assay.version = "v3")
+  exp <- Read10X(data.dir = paste(root_dir,dir,sep = "/"))
+  obj = suppressWarnings(
+    CreateSeuratObject(counts = exp,min.features = 1000,min.cells = 0,assay = "RNA",project = "neurodevelopmental")
+  )
+
+  sample_name <- gsub(pattern = ".filtered_gene_matrices",replacement = "",x = dir)
+  obj$sample_name <- sample_name
+  obj$cell_id <- paste(obj$sample_name,colnames(obj),sep = "_")
+  obj$cell_id_each_donor <- colnames(obj)
+  #rownames(obj@meta.data) <- obj$cell_id
+  #Idents(obj) <- "cell_id"
+  
+  obj_list[[sample_name]] <-  obj
+  
+  print(paste("finish",i,"out of",n_sample,"samples"))
+  i <- i +1 
+}
+```
+
+
+```{r}
+seurat_obj <- merge(x = obj_list[[1]], y = obj_list[2:length(obj_list)],add.cell.ids = names(obj_list), project = "neuodev")
+```
+
+```{r}
+#seurat_obj <- Merge_Seurat_List(obj_list,add.cell.ids = names(obj_list))
+seurat_obj <- JoinLayers(seurat_obj)
+```
+
+
+```{r}
+qsave(seurat_obj, "output/seurat_objects/neurodevelopmental.qs")
+```
+
+
+
+
+#match annotation
+```{r}
+cell_annot <- readMat("data/sequencing_data/neurodevelopemental/annotated_cancer_data.mat",verbose = FALSE)
+```
+
+
+```{r}
+# length(unlist(cell_annot$cancer.barcodes))
+# table(cell_annot$cancer.sample)
+# 
+# (cell_annot$clogm)[1:10,1:10]
+# colnames(cell_annot$clogm)
+# 
+# cell_annot$phi.cancer
+```
+
+```{r}
+cell_id_list <- list()
+for (obj_name in names(obj_list)) {
+  cell_id <- obj_list[[obj_name]]@meta.data$cell_id_each_donor
+  cell_id_list[[obj_name]] <- cell_id
+}
+
+```
+
+```{r}
+
+cell_unknown_list <- list()
+for (i in seq_along(cell_annot$cancer.barcodes)) {
+  cell_unknown_list[[as.character(i)]] <- unlist(cell_annot$cancer.barcodes[[i]])
+}
+
+sample_len_vec <- unlist(lapply(cell_id_list,length))
+unknown_len_vec <- unlist(lapply(cell_unknown_list,length))
+
+rowname <- paste(names(cell_id_list),sample_len_vec,sep = "_")
+colname <- paste(names(cell_unknown_list),unknown_len_vec,sep = "_")
+
+result_matrix <- matrix(0, nrow = length(cell_id_list),ncol = length(cell_unknown_list),
+                       dimnames = list(rowname,
+                                       colname)
+                       )
+
+
+
+
+for (i in seq_along(cell_id_list)) {
+  for (j in seq_along(cell_unknown_list)) {
+    result_matrix[i,j] <- length(intersect(cell_id_list[[i]],
+                                           cell_unknown_list[[j]]))
+  }
+}
+
+write.csv(result_matrix,"output/result_matrix.csv")
+``` 
+
+```{r}
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+```
+
+
+```{r}
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+```{r}
+plot1 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(plot1, plot2))
+```
+```{r}
+seurat_obj <- subset(seurat_obj, subset = nFeature_RNA >= 1000 & nCount_RNA >= 1800 & percent.mt <= 12)
+```
+```{r}
+plot1 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(seurat_obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+CombinePlots(plots = list(plot1, plot2))
+```
+
+```{r}
+cell_id_list <- split(as.character(seurat_obj@meta.data$cell_id_each_donor), seurat_obj@meta.data$sample_name)
+
+
+sample_len_vec <- unlist(lapply(cell_id_list,length))
+
+
+rowname <- paste(names(cell_id_list),sample_len_vec,sep = "_")
+colname <- paste(names(cell_unknown_list),unknown_len_vec,sep = "_")
+
+result_matrix <- matrix(0, nrow = length(cell_id_list),ncol = length(cell_unknown_list),
+                       dimnames = list(rowname,
+                                       colname)
+                       )
+
+for (i in seq_along(cell_id_list)) {
+  for (j in seq_along(cell_unknown_list)) {
+    result_matrix[i,j] <- length(intersect(cell_id_list[[i]],
+                                           cell_unknown_list[[j]]))
+  }
+}
+
+write.csv(result_matrix,"output/result_matrix_2.csv")
+``` 
+
+
+#after filter
+```{r}
+selected_sample <- c("BT333"
+                      ,"BT338_1of2"
+                      ,"BT346"
+                      ,"BT363_1of2"
+                      ,"BT368"
+                      ,"BT389"
+                      ,"BT390"
+                      ,"BT397_1of2"
+                      ,"BT400"
+                      ,"BT402"
+                      ,"BT409"
+                      )
+
+# selected_code <- c("1",
+#                       "2",
+#                       "3",
+#                       "4",
+#                       "6",
+#                       "7",
+#                       "8",
+#                       "9",
+#                       "10",
+#                       "11",
+#                       "12")
+selected_code <- c("2",
+                      "3",
+                      "4",
+                      "5",
+                      "7",
+                      "8",
+                      "9",
+                      "10",
+                      "11",
+                      "12",
+                      "13")
+
+
+decode <- data.frame(sample_code = selected_code,
+           sample_name = selected_sample)
+
+cell_annotation_df <- data.frame(cell_id_each_donor = unlist(cell_annot$cancer.barcodes),
+           sample_code = unlist(cell_annot$cancer.sample),
+           cell_type_code = unlist(cell_annot$cancer.class)
+)
+
+cell_annotation_df <- merge(cell_annotation_df,decode,by = "sample_code",all.x = TRUE)
+
+
+celltype_decode <- data.frame(cell_type = c("Unassigned","Mesenchymal","Neuronal","Astro","Progenitor","Oligo",
+                                            "no_data"),
+                              cell_type_code = c(0,1,2,3,4,5,-1))
+
+cell_annotation_df <- merge(cell_annotation_df,celltype_decode,by = "cell_type_code",all.x = TRUE, all.y = FALSE)
+
+
+rownames(cell_annotation_df) <- paste(cell_annotation_df$sample_name,cell_annotation_df$cell_id_each_donor,sep = "_")
+```
+
+
+
+
+
+```{r}
+qsave(seurat_obj,file = "output/seurat_objects/neurodevelopmental.rds")
+```
+
+
+```{r}
+# seurat_obj <- qread("output/seurat_objects/neurodevelopmental.qs")
+# seurat_obj
+```
+
+
+
+
+
+
+```{r}
+seurat_obj <- AddMetaData(seurat_obj,metadata = cell_annotation_df)
+```
+
+
+
+```{r}
+seurat_obj$sample_code <- as.numeric(seurat_obj$sample_code)
+seurat_obj$sample_code[is.na(seurat_obj$sample_code)] <- -1
+#table(seurat_obj$sample_code)
+
+seurat_obj$cell_type_code[is.na(seurat_obj$cell_type_code)] <- -1
+#table(seurat_obj$cell_type_code)
+```
+
+```{r}
+qsave(seurat_obj, "output/seurat_objects/neurodevelopmental_filtered.qs")
+```
+
+
+
+
+#processing and visualization
+```{r}
+library(pacman)
+p_load(qs,Seurat)
+seurat_obj <- qread( "output/seurat_objects/neurodevelopmental_filtered.qs")
+```
+
+```{r}
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+all.genes <- rownames(seurat_obj)
+seurat_obj <- ScaleData(seurat_obj, features = all.genes)
+```
+
+```{r}
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000)
+```
+
+
+```{r}
+# # Identify the 10 most highly variable genes
+# top10 <- head(VariableFeatures(seurat_obj), 10)
+# 
+# # plot variable features with and without labels
+# plot1 <- VariableFeaturePlot(seurat_obj)
+# plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+# plot1 + plot2
+```
+
+
+```{r}
+gc()
+```
+
+```{r}
+seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
+
+```
+
+```{r}
+gc()
+```
+
+```{r}
+seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
+```
+
