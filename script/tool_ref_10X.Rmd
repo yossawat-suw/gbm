@@ -1,0 +1,1309 @@
+
+```{r}
+#Set up directory to the project directory
+library(here)
+setwd(here())
+```
+
+
+
+```{r}
+library(parallel)
+library(tidyverse)
+library(Seurat)
+library(qs)
+source("script/function.R")
+
+source("script/parameter.R")
+
+```
+
+
+
+
+
+#choose parameter
+```{r}
+celltype <- "cell_type"
+
+#mes > 1
+# merge NPC with OPC and still calculate MES seperatly
+#3 celltype > 3
+#4 celltype > 4
+
+pick <- 8
+
+# pick which celltype to be analyse
+chosen_cellstate <- all_cellstates[chosing[[pick]]]
+merge <- merges[pick]
+
+run_each <- run_eachs[1]
+
+if (run_each) {
+  run <- runs[1]
+} else {
+  run <- runs[2]
+}
+
+run_each
+merge
+chosen_cellstate
+run
+```
+#Load reference
+```{r}
+print("load reference")
+reference.original <- qread("output/seurat_objects/neurodevelopmental_annotated.qs")
+
+table(reference.original$cell_type)
+if (length(chosen_cellstate) > 1) {
+     Idents(reference.original) <- celltype; reference.original <- subset(reference.original,idents = chosen_cellstate); reference.original@meta.data[,celltype] <- as.character(reference.original@meta.data[,celltype]);
+} else {
+ reference.original@meta.data[,celltype] <- as.character(reference.original@meta.data[,celltype]); reference.original@meta.data[!(reference.original@meta.data[,celltype] %in% chosen_cellstate  ),celltype] <- "not_labeled"; reference.original@meta.data[,celltype] <- reference.original@meta.data[,celltype];
+}
+
+reference.original
+```
+
+# load gbm
+```{r}
+
+gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
+
+if (run_each) {
+  gbm.list.original <- SplitObject(gbm, split.by = "split")
+
+  gbm.list.original[["run2_radiated_E31N"]] <- merge(gbm.list.original[["run2_radiated_E31N"]], y=gbm.list.original[["run1_radiated_E31N"]])
+  gbm.list.original[["run2_control_E31N"]] <- merge(gbm.list.original[["run2_control_E31N"]], y=gbm.list.original[["run1_control_E31N"]])
+  gbm.list.original[["run2_radiated_E26N"]] <- merge(gbm.list.original[["run2_radiated_E26N"]], y=gbm.list.original[["run1_radiated_E26N"]])
+  gbm.list.original[["run2_radiated_E24N"]] <- merge(gbm.list.original[["run2_radiated_E24N"]], y=gbm.list.original[["run1_radiated_E24N"]])
+  gbm.list.original[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+} else {
+  gbm.list.original <- list(all = gbm)
+}
+
+
+```
+
+#clustifyr   -->
+```{r}
+library(clustifyr)
+gc()
+```
+
+
+
+
+```{r}
+reference <- reference.original
+
+
+reference[["RNA"]] <- as(object = reference[["RNA"]], Class = "Assay")
+
+reference <- NormalizeData(reference, normalization.method = "LogNormalize", scale.factor = 10000)
+
+
+
+
+
+new_ref_matrix <- seurat_ref(
+  seurat_object = reference,        # SeuratV3 object, it use "data", not the "scale"
+  cluster_col = celltype,    # name of column in meta.data containing cell identities
+)
+
+
+```
+
+
+```{r}
+gbm.list <- gbm.list.original
+```
+
+```{r}
+library(parallel)
+n.cores <- 3
+system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
+  x <- NormalizeData(x,verbose = FALSE)
+  allgenes <- rownames(x)
+  x <- FindVariableFeatures(x,verbose = FALSE)
+  x <- ScaleData(x, features = allgenes ,verbose = FALSE)
+  x <- RunPCA(x, verbose = FALSE)
+  x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+  x <- FindClusters(x, resolution = 1, verbose = FALSE)
+
+  res <- clustify(
+          input = x,
+          ref_mat = new_ref_matrix,
+          cluster_col = "RNA_snn_res.1",
+          obj_out = TRUE,threshold = 0,verbose = TRUE )
+  return(res@meta.data[c("type","r")])
+}))
+```
+
+```{r}
+names(gbm.list.res) <- NULL
+res.ref.df <- NULL
+res.ref.df <- do.call(rbind,gbm.list.res)
+res.ref.df <- res.ref.df[,1,drop =FALSE]
+colnames(res.ref.df) <- c("clustifyr_ref")
+res.ref.df$clustifyr_ref_no_unknown <- NA
+```
+
+```{r}
+table(res.ref.df$clustifyr_ref)
+```
+
+```{r}
+write.csv(res.ref.df,paste0("output/annotation_result_each_tool/clustifyr_",object,"_",merge,"_",run,".csv"),row.names = TRUE)
+```
+
+```{r}
+unloadNamespace("clustifyr")
+rm(new_ref_matrix,gbm.list.res,res.ref.df,reference)
+gc()
+```
+
+#scID without "unassigned" -->
+```{r}
+library(MASS)
+library(scID)
+
+require(devtools)
+if (!requireNamespace("biomod2", quietly = TRUE) || packageVersion("biomod2") != "3.5.1") {
+  if (requireNamespace("biomod2", quietly = TRUE)) {
+    remove.packages("biomod2")
+  }
+  devtools::install_version("biomod2", version = "3.5.1")
+}
+
+```
+
+```{r}
+reference <- reference.original
+reference[["RNA"]] <- as(object = reference[["RNA"]], Class = "Assay")
+
+
+
+reference_gem <- as.matrix(reference@assays$RNA@counts)
+reference_clusters <- as.factor(reference@meta.data[, celltype])
+names(reference_clusters) <- rownames(reference@meta.data)
+```
+
+
+```{r}
+print("load gbm")
+# Target
+gbm.list <- gbm.list.original
+```
+
+
+
+
+```{r}
+library(scID)
+
+markers.glob <- find_markers_edited_norm(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = TRUE)
+
+
+print("find_markers_edited")
+
+# normalize_reference is set to FALSE as the reference data is already normalized. Any library-depth normalization (e.g. TPM, CPM) is compatibe with scID, but not log-transformed data.
+# logFC is defining minimum logFold-change for a gene to be seleced as cluster-specific. Low logFC lead to identification of longer lists of cluster-specific genes that can help resolve classes in presense of very similar reference clusters but will require longer computational time.
+# estimate_weights_from_target is set to TRUE in order to estimated gene weights from the target by selecting training target cells as described in the manuscript. Alternatively, weights can be estimated from the reference data (using the known cell labels), which is recommended when library depth of the two datasets is similar or when the reference clusters are transcriptionally similar.
+# only_pos is set to FALSE to include cluster-specific downregulated genes that can help distinguish clusters from their nearest neighbours.
+
+
+# I split the find_markers out from the main scid_multiclass so that it does not need to be run(which take lot of time) for each loop
+
+# the edite code just make the code accept the already normalized reference
+#markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
+
+# # Store the data frame to disk
+# fst::write.fst(markers.glob, paste0("output/annotation_tools/markers_glob_scID_",merge,".fst"))
+#
+# #markers.glob <- fst::read.fst(paste0("output/annotation_tools/markers_glob_scID_",merge,".fst"))
+# test <- fst::read.fst(paste0("output/annotation_tools/markers_glob_scID_",merge,".fst"))
+```
+```{r}
+# Store the data frame to disk
+#install.packages("fst")
+#fst::write.fst(markers.glob, paste0("output/annotation_tools/markers_glob_scID_",merge,".fst"))
+
+markers.glob <- fst::read.fst(paste0("output/intermediate_process_tool/markers_glob_scID_",merge,".fst"))
+ 
+
+```
+
+
+```{r}
+gc()
+n.cores <- 2
+#n.cores <- parallel::detectCores()
+# n.cores <- parallel::detectCores() - 3
+all.tasks <- length(gbm.list)
+
+print("load run sc_id_edited")
+gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
+#gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x) {
+  x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE,scale.factor = 1e6)
+  x <- as.matrix(x@assays$RNA@data)
+  # If want to set estimate_weights_from_target = TRUE, need older version of biomod2 (3.5.1)
+
+  
+  #the edited does nothing more except that i reassign the unknown cell into the known one, but the result is not useful for now because i didnt correctly export the right score but i dont have time to recheck it yet 
+    scID_output <- scid_multiclass_edited(target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE,markers.glob = markers.glob)
+ # scID_output <- scid_multiclass(markers = markers.glob, target_gem = x, reference_gem = reference_gem, reference_clusters = reference_clusters, logFC = 0.6, only_pos = FALSE, estimate_weights_from_target = TRUE, normalize_reference = FALSE)
+
+  #  gc()
+  return(scID_output)
+})
+
+print("finish")
+
+
+```
+
+
+```{r}
+# x <- gbm.list[["run1_radiated_E13N"]]
+#   x <- NormalizeData(x, normalization.method = "RC", verbose = FALSE,scale.factor = 1e6)
+#   x <- as.matrix(x@assays$RNA@data)
+# 
+# target_gem = NULL; reference_gem = NULL;
+#                                    reference_clusters = NULL; markers = NULL;
+#                                    logFC = 0.5; normalize_reference = TRUE;
+#                                    estimate_weights_from_target = FALSE;
+#                                    weights = NULL; only_pos = FALSE;
+#                                    markers.glob = markers.glob
+# target_gem = x; reference_gem = reference_gem; reference_clusters = reference_clusters; logFC = 0; only_pos = FALSE; estimate_weights_from_target = TRUE; normalize_reference = FALSE;markers.glob = markers.glob;weights = NULL;
+# 
+#   # state the variable that will be use in the function
+#   markers <- markers.glob
+#   
+#   # ----------------------------------------------------------------------------------------------------
+#   # Data pre-processing
+#   # ----------------------------------------------------------------------------------------------------
+#   if (is.null(reference_gem) && is.null(reference_clusters) && is.null(markers)) {
+#     stop("Please provide either clustered reference data or list of markers for each reference cluster")
+#   }
+#   if (!is.null(reference_gem) && !is.null(reference_clusters)) {
+#     # Check all reference cells have a cluster ID
+#     common_cells <- intersect(names(reference_clusters), colnames(reference_gem))
+#     if (length(common_cells) == 0) {
+#       stop("None  of the reference cells has a cluster ID. Please check the reference_clusters list provided.")
+#     } else {
+#       reference_gem <- reference_gem[, common_cells]
+#       rownames(reference_gem) <- make.names(toupper(rownames(reference_gem)), unique = TRUE)
+#       
+#       # Remove genes that are zero across all cells
+#       reference_gem <- reference_gem[which(rowSums(reference_gem) != 0), ]
+#       reference_clusters <- reference_clusters[common_cells]
+#     }
+#   }
+#   
+#   if (!is.null(markers)) {
+#     # Check markers have gene and cluster columns
+#     if (length(intersect(c("gene", "cluster"), colnames(markers))) != 2) {
+#       stop("Please provide a data frame of markers with gene and cluster in columns")
+#     }
+#     markers$gene <- toupper(markers$gene)
+#   }
+#   
+#   
+#   # Target
+#   rownames(target_gem) <- make.names(toupper(rownames(target_gem)), unique = TRUE)
+#   # Remove genes that are zero across all cells
+#   target_gem <- target_gem[which(rowSums(target_gem) != 0), ]
+#   
+#   # ----------------------------------------------------------------------------------------------------
+#   # Stage 1: Find signature genes from reference data
+#   # ----------------------------------------------------------------------------------------------------
+#   if (is.null(markers)) {
+#     # Filter out signature genes that are not present in the target data
+#     markers <- markers[which(markers$gene %in% rownames(target_gem)), ]
+#     
+#     celltypes <- unique(markers$cluster)
+#     
+#     if (estimate_weights_from_target) {
+#       rm(reference_gem, reference_clusters)
+#     }
+#   } else {
+#     markers <- markers[which(markers$gene %in% rownames(target_gem)), ]
+#     celltypes <- unique(markers$cluster)
+#   }
+#   
+#   # Min-max normalization of target gem
+#   target_gem_norm <- t(apply(target_gem[unique(markers$gene), ], 1, function(x) normalize_gene(x)))
+#   target_gem_norm <- target_gem_norm[complete.cases(target_gem_norm), ]
+# 
+#   # ----------------------------------------------------------------------------------------------------
+#   # Stage 2: Weight signature genes
+#   # ----------------------------------------------------------------------------------------------------
+#   if (is.null(weights)) {
+#     if (estimate_weights_from_target) {
+#       weights <- list()
+#       for (i in 1:length(celltypes)) {
+#         celltype_markers <- markers[which(markers$cluster == celltypes[i]), ]
+#         positive_markers <- celltype_markers$gene[which(celltype_markers$avg_log2FC > 0)]
+#         negative_markers <- celltype_markers$gene[which(celltype_markers$avg_log2FC < 0)]
+#         training_groups <- choose_training_set(target_gem, positive_markers, negative_markers)
+#         signature_genes <- c(positive_markers, negative_markers)
+#         gene.weights <- scID_weight(target_gem_norm[signature_genes, , drop = FALSE], training_groups$in_pop, training_groups$out_pop)
+#         # If only positive markers are selected, truncate all negative weights to 0
+#         if (only_pos) {
+#           gene.weights[which(gene.weights < 0)] <- 0
+#         }
+#         # Make Inf weights 0
+#         gene.weights[is.infinite(gene.weights)] <- 0
+#         weights[[as.character(celltypes[i])]] <- gene.weights
+#       }
+#       names(weights) <- celltypes
+#     } else {
+#       if (!is.null(reference_gem) && !is.null(reference_clusters)) {
+#         weights <- list()
+#         # Normalize reference gem
+#         ref_gem_norm <- t(apply(reference_gem[unique(markers$gene), ], 1, function(x) normalize_gene(x)))
+#         ref_gem_norm <- ref_gem_norm[complete.cases(ref_gem_norm), ]
+#         for (i in 1:length(celltypes)) {
+#           signature_genes <- markers$gene[which(markers$cluster == celltypes[i])]
+#           true_cells <- names(reference_clusters)[which(reference_clusters == as.character(celltypes[i]))]
+#           false_cells <- setdiff(names(reference_clusters), true_cells)
+#           gene.weights <- scID_weight(gem = ref_gem_norm[signature_genes, , drop = FALSE], true_cells, false_cells)
+#           
+#           weights[[as.character(celltypes[i])]] <- gene.weights
+#           # If only positive markers are selected, truncate all negative weights to 0
+#           if (only_pos) {
+#             gene.weights[which(gene.weights < 0)] <- 0
+#           }
+#         }
+#         # Won't need reference data any more, remove for efficiency
+#         rm(reference_gem, reference_clusters, ref_gem_norm)
+#       } else {
+#         stop("Please provide reference data in order to calculate weights, choose to estimate weights from target data, or provide precompted gene weights.")
+#       }
+#     }
+#   }
+#   
+#   #----------------------------------------------------------------------------------------------------
+#   # Stage 3: Find scores and putative matches
+#   # ----------------------------------------------------------------------------------------------------
+#   
+#   scores <- data.frame(matrix(NA, length(celltypes), ncol(target_gem)), row.names = celltypes)
+#   colnames(scores) <- colnames(target_gem)
+#   
+#   full_scores <- data.frame(matrix(NA, length(celltypes), ncol(target_gem)), row.names = celltypes)
+#   colnames(full_scores) <- colnames(target_gem)
+#   
+#   for (i in 1:length(celltypes)) {
+#     #i <- 1
+#     celltype <- as.character(celltypes[i])
+#     signature <- intersect(names(weights[[celltype]]), rownames(target_gem_norm))
+#     weighted_gem <- weights[[celltype]][signature] * target_gem_norm[signature, , drop = FALSE]
+#     weighted_gem
+# 
+#     # Check if whole weighted gem is 0 (when all gene weighst are zero)
+#     if (all(weighted_gem == 0)) {
+#       full_scores[as.character(celltype), ] <- rep(0, ncol(full_scores))
+#       print(paste("oh no", i))
+#     } else {
+#       score <- colSums(weighted_gem) / sqrt(sum(weights[[celltype]]^2))
+#       
+#       matches <- final_populations_edited(score)
+#       
+#       scores[as.character(celltype), matches] <- scale(score[matches])
+#       full_scores[as.character(celltype), ] <- score
+#     }
+#   }
+# 
+# # Resolve multi-class assignments
+#   
+#   labels <- apply(scores, 2, function(x) {
+#     ifelse(all(is.na(x)), "unassigned", rownames(scores)[which(x == max(x, na.rm = T))])
+#   })
+#   
+#   # Add convert unassigned to random assigned one
+#   # Check first whether we have unassigned or not
+#   unassigned_index <- which(labels == "unassigned")
+#   
+#   labels_edited <- labels
+#   full_scores_unassigned <- NA
+#   
+#   if (length(unassigned_index) > 0) {
+#     full_scores_unassigned <- full_scores[, unassigned_index, drop = FALSE]
+#     
+#     labels_unassigned <- apply(full_scores_unassigned, 2, function(x) {
+#       rownames(full_scores_unassigned)[which(x == max(x, na.rm = T))]
+#     })
+#     # check whether the labels_unassigned and the same name/order of labels_edited[unassigned_index]
+#     if (sum(names(labels_edited[unassigned_index]) == names(labels_unassigned)) == length(labels_unassigned)) {
+#       labels_edited[unassigned_index] <- unname(labels_unassigned)
+#     } else {
+#       message("not equal ")
+#     }
+#   } else {
+#     message("no unassigned")
+#   }
+# 
+
+```
+
+
+
+
+
+```{r}
+gc()
+```
+
+```{r}
+saveRDS(gbm.list.res, file = paste0("output/intermediate_process_tool/scID_", object, "_", merge, "_","_allassigned_",run,"rds"))
+```
+
+```{r}
+res.df <- data.frame()
+
+concatenated <- c()
+for (i in 1:length(gbm.list.res)) {
+  concatenated.each <- sapply(gbm.list.res[[i]]$labels_edited, function(strings) paste(strings, collapse = " "))
+  concatenated <- c(concatenated,concatenated.each)
+}
+
+for (i in gbm.list.res) {
+  res.each.df <- as.data.frame(i$labels, stringsAsFactors = TRUE)
+  res.df <- rbind(res.df, res.each.df)
+}
+res.df$labels_edited <- concatenated
+
+#then continue
+colnames(res.df) <- c("scID","scID_no_unknown")
+
+```
+
+```{r}
+print("save result")
+write.csv(res.df, paste0("output/annotation_result_each_tool/scID_", object, "_", merge, "_allassigned","_",run,".csv"), row.names = TRUE)
+```
+
+```{r}
+
+unloadNamespace("scID")
+unloadNamespace("biomod2")
+rm(reference_gem,reference_clusters,res.df,concatenated,gbm.list.res,all.tasks,markers.glob)
+gc()
+```
+
+
+
+
+
+
+
+
+#singleR -->
+<!-- ```{r} -->
+<!-- library(SingleR) -->
+<!-- library(scran) -->
+<!-- library(SingleCellExperiment) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # reference <- readRDS("output/seurat_objects/smrt_mal"); reference <- subset(reference,idents = chosen_cellstate); -->
+<!-- reference <- reference.original -->
+<!-- reference <- DietSeurat(reference, assays = "RNA") -->
+<!-- reference.sce <- as.SingleCellExperiment(DietSeurat(reference,data = TRUE, counts = FALSE,scale.data = FALSE)) -->
+<!-- rm(reference) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm.list <- gbm.list.original -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- n.cores <- 2 -->
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose = FALSE) -->
+<!--   x <- DietSeurat(x,data = TRUE, counts = FALSE,scale.data = FALSE) -->
+<!--   x <- as.SingleCellExperiment(x) -->
+<!--   pred.grun <- SingleR(test=x, ref=reference.sce, labels=reference.sce@colData[,celltype], de.method="wilcox") -->
+<!--   return(pred.grun) -->
+<!-- })) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- res.df <- DataFrame() -->
+<!-- res.df <- do.call(rbind,gbm.list.res) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- saveRDS(res.df,file = paste0("output/annotation_result_each_tool/singleR_",object,"_",merge,"_",run)) -->
+
+<!-- #res.df <- readRDS(paste0("output/annotation_result_each_tool/singleR_",object,"_",merge)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(dplyr) -->
+<!-- res.df <- data.frame(res.df) -->
+<!-- res.df <- res.df %>% relocate(c("labels","pruned.labels"),.before = 1) -->
+<!-- colnames(res.df)[1] <- "singleR" -->
+<!-- #res.df -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- write.csv(res.df,paste0("output/annotation_result_each_tool/singleR_",object,"_",merge,"_",run,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- unloadNamespace("SingleR") -->
+<!-- unloadNamespace("scran") -->
+<!-- #unloadNamespace("SingleCellExperiment") -->
+<!-- rm(res.df,gbm.list.res,reference.sce) -->
+<!-- gc() -->
+<!-- ``` -->
+
+#CHETAH -->
+<!-- ```{r} -->
+<!-- # Load the package -->
+<!-- library(CHETAH) -->
+<!-- library(SingleCellExperiment) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #from tutorial it use log-normalization so use the default from seurat -->
+<!-- reference <- reference.original -->
+<!-- reference <- DietSeurat(reference, assays = "RNA") -->
+<!-- reference <- DietSeurat(reference,data = TRUE, counts = FALSE,scale.data = FALSE) -->
+
+<!-- reference.sce <- as.SingleCellExperiment(reference) -->
+<!-- rm(reference) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- reference.sce@colData <- reference.sce@colData[celltype] -->
+
+<!-- #Change name because input need this -->
+<!-- colnames(reference.sce@colData) <- 'celltypes' -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- #QC -->
+<!-- ribo <- read.table("data/ribosomal.txt", header = FALSE, sep = '\t') -->
+<!-- reference.sce <- reference.sce[!rownames(reference.sce) %in% ribo[,1], ] -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- #CorrelateReference(ref_cells = reference.sce) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #ClassifyReference(ref_cells = reference.sce,ref_c = "logcounts") -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gbm.list <- gbm.list.original -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- #n.cores <- parallel::detectCores() - 1 -->
+<!-- n.cores <- 2 -->
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!-- #system.time(gbm.list.res <- lapply(X = gbm.list[4:5],  FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose= FALSE) -->
+<!--   x <- FindVariableFeatures(x, verbose= FALSE) -->
+<!--   x <- ScaleData(x,verbose = FALSE) -->
+<!--   x <- RunPCA(x, verbose = FALSE) -->
+<!--   x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE) -->
+<!--   x <- FindClusters(x, resolution = 1, verbose = FALSE) -->
+<!--   x <- RunUMAP(x, dims = 1:20, verbose =FALSE) -->
+
+<!--   x <- DietSeurat(x,counts = FALSE,data = TRUE,scale.data = FALSE, dimreducs = "umap") -->
+<!--   x <- as.SingleCellExperiment(x) -->
+<!--   #x@colData <- x@colData[c("orig.ident")] -->
+
+<!--   x <- CHETAHclassifier(input = x, -->
+<!--                               ref_cells = reference.sce,print_steps = FALSE) -->
+<!--   x <- Classify(x, 0) -->
+<!--   return(x@colData["celltype_CHETAH"]) -->
+
+<!-- })) -->
+
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- res.df <- do.call(rbind,gbm.list.res) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- table(res.df$celltype_CHETAH) -->
+<!-- colnames(res.df)[1] <- "CHETAH" -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- write.csv(res.df,paste0("output/annotation_result_each_tool/CHETAH_",object,"_",merge,"_",run,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- unloadNamespace("CHETAH") -->
+<!-- #unloadNamespace("SingleCellExperiment") -->
+<!-- rm(res.df,gbm.list.res,reference.sce) -->
+<!-- gc() -->
+<!-- ``` -->
+
+
+
+#scmap -->
+<!-- ```{r} -->
+<!-- library(scmap) -->
+<!-- library(SingleCellExperiment) -->
+<!-- reference <- reference.original -->
+<!-- # reference <- readRDS("output/seurat_objects/smrt_mal"); reference <- subset(reference,idents = chosen_cellstate); -->
+<!-- reference.norm <-  as.matrix(reference@assays$norm@data) -->
+<!-- celltype.df <- reference@meta.data[celltype] -->
+
+<!-- reference.sce <- SingleCellExperiment(assays = list(normcounts = reference.norm), colData =  celltype.df) -->
+<!-- logcounts(reference.sce) <- log2(normcounts(reference.sce) + 1) -->
+
+<!-- rowData(reference.sce)$feature_symbol <- rownames(reference.sce) -->
+
+<!-- reference.sce <- reference.sce[!duplicated(rownames(reference.sce)), ] -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- reference.sce <- selectFeatures(reference.sce, n_features = 500,suppress_plot = FALSE) -->
+
+<!-- #table(rowData(reference.sce)$scmap_features) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- reference.sce <- indexCluster(reference.sce, cluster_col = celltype) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #heatmap(as.matrix(metadata(reference.sce)$scmap_cluster_index)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #head(metadata(reference.sce)$scmap_cluster_index) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm.list <- gbm.list.original -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- #n.cores <- parallel::detectCores() - 1 -->
+<!-- n.cores <- 2 -->
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!-- #system.time(gbm.list.res <- lapply(X = gbm.list[10],  FUN = function(x)  { -->
+<!--   name <- rownames(x@meta.data) -->
+<!--   x <- NormalizeData(x,verbose= FALSE,normalization.method = "RC") -->
+<!--   x <- x@assays$RNA@data -->
+<!--   x <- SingleCellExperiment(assays = list(normcounts = as.matrix(x))) -->
+<!--   logcounts(x) <- log2(normcounts(x) + 1) -->
+<!--   # use gene names as feature symbols -->
+<!--   rowData(x)$feature_symbol <- rownames(x) -->
+<!--   # remove features with duplicated names -->
+<!--   x <- x[!duplicated(rownames(x)), ] -->
+
+<!--   x.default <- scmapCluster(threshold = 0.7, -->
+<!--     projection = x, -->
+<!--     index_list = list( -->
+<!--       reference.norm = metadata(reference.sce)$scmap_cluster_index -->
+<!--     ) -->
+<!--   ) -->
+<!--   x.adjust <- scmapCluster(threshold = 0, -->
+<!--     projection = x, -->
+<!--     index_list = list( -->
+<!--       reference.norm = metadata(reference.sce)$scmap_cluster_index -->
+<!--     ) -->
+<!--   ) -->
+<!--   return(list(name,x.default$scmap_cluster_labs,x.adjust$scmap_cluster_labs)) -->
+
+
+<!-- })) -->
+
+<!-- cell.id <- lapply(gbm.list.res, "[[", 1) -->
+<!-- gbm.list.res.default <- lapply(gbm.list.res, "[[", 2) -->
+<!-- gbm.list.res.adjust <- lapply(gbm.list.res, "[[", 3) -->
+
+<!-- cell.id <- as.character(unlist(cell.id)) -->
+<!-- gbm.list.res.default <- as.character(unlist(gbm.list.res.default)) -->
+<!-- gbm.list.res.adjust <- as.character(unlist(gbm.list.res.adjust)) -->
+<!-- prediction <- data.frame(cell_id = cell.id,scmap_cluster = gbm.list.res.default,scmap_cluster_adjust = gbm.list.res.adjust) -->
+
+<!-- #convert cell id to rowname -->
+<!-- rownames(prediction) <- prediction$cell_id -->
+<!-- prediction <- prediction[,-1]  -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- write.csv(prediction,paste0("output/annotation_result_each_tool/scmap_cluster_",object,"_",merge,"_",run,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- #scmap cell -->
+
+<!-- set.seed(1) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- reference.sce <- indexCell(reference.sce) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- #n.cores <- parallel::detectCores() - 1 -->
+<!-- n.cores <- 1 -->
+
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!-- #system.time(gbm.list.res <- lapply(X = gbm.list,  FUN = function(x)  { -->
+<!--   name <- rownames(x@meta.data) -->
+<!--   x <- NormalizeData(x,verbose= FALSE,normalization.method = "RC") -->
+<!--   x <- x@assays$RNA@data -->
+<!--   x <- SingleCellExperiment(assays = list(normcounts = as.matrix(x))) -->
+<!--   logcounts(x) <- log2(normcounts(x) + 1) -->
+<!--   # use gene names as feature symbols -->
+<!--   rowData(x)$feature_symbol <- rownames(x) -->
+<!--   # remove features with duplicated names -->
+<!--   x <- x[!duplicated(rownames(x)), ] -->
+
+
+<!--   x <- scmapCell( -->
+<!--     projection = x, -->
+<!--     index_list = list( -->
+<!--       reference.norm = metadata(reference.sce)$scmap_cell_index -->
+<!--     ) -->
+<!--   ) -->
+<!--   x.default <- scmapCell2Cluster(x, list(as.character(reference.sce@colData[,celltype])),w = 3,threshold = 0.5) #default -->
+<!--    x.adjust <- scmapCell2Cluster(x, list(as.character(reference.sce@colData[,celltype])),w = 1,threshold = 0) #adjust to extract most -->
+
+<!--   return(list(name,x.default$combined_labs,x.adjust$combined_labs)) -->
+
+<!-- })) -->
+
+<!-- cell.id <- lapply(gbm.list.res, "[[", 1) -->
+<!-- gbm.list.res.default <- lapply(gbm.list.res, "[[", 2) -->
+<!-- gbm.list.res.adjust <- lapply(gbm.list.res, "[[", 3) -->
+
+<!-- cell.id <- as.character(unlist(cell.id)) -->
+<!-- gbm.list.res.default <- as.character(unlist(gbm.list.res.default)) -->
+<!-- gbm.list.res.adjust <- as.character(unlist(gbm.list.res.adjust)) -->
+<!-- prediction <- data.frame(cell_id = cell.id,scmap_cell = gbm.list.res.default,scmap_cell_adjust = gbm.list.res.adjust) -->
+
+<!-- #convert cell id to rowname -->
+<!-- rownames(prediction) <- prediction$cell_id -->
+<!-- prediction <- prediction[,-1]  -->
+<!-- ``` -->
+
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- write.csv(prediction,paste0("output/annotation_result_each_tool/scmap_cell_",object,"_",merge,"_",run,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- unloadNamespace("scmap") -->
+<!-- #unloadNamespace("SingleCellExperiment") -->
+<!-- rm(prediction,reference.sce,reference.norm,celltype.df,cell.id,gbm.list.res) -->
+<!-- gc() -->
+<!-- ``` -->
+
+#scibet -->
+<!-- ```{r} -->
+<!-- library(scibet) -->
+<!-- library(SeuratDisk) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #reference <- readRDS("output/seurat_objects/smrt_mal") -->
+
+<!-- reference <- reference.original -->
+<!-- reference.exp <- reference@assays$norm@data -->
+<!-- reference.exp <- t(as.matrix(reference.exp)) -->
+<!-- reference.exp <- as.data.frame(reference.exp) -->
+
+
+<!-- #Check whether after transpose the cell is in the same position -->
+<!-- table(rownames(reference@meta.data) == rownames(reference.exp)) -->
+
+<!-- #Add label to last column (as instructed by scibet http://scibet.cancer-pku.cn/document.html) -->
+<!-- reference.exp$label <-  reference@meta.data[,celltype] -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm.list <- gbm.list.original -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- library(parallel) -->
+<!-- #n.cores <- parallel::detectCores() - 1 -->
+<!-- n.cores <- 2 -->
+<!-- i <- 0 -->
+<!-- #system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!-- system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  { -->
+<!--   print(i) -->
+<!--   i <- i+1 -->
+<!--   x <- NormalizeData(x,verbose= FALSE,normalization.method = "RC") -->
+<!--   x <- x@assays$RNA@data -->
+<!--   x <- t(as.matrix(x)) -->
+<!--   x <- as.data.frame(x) -->
+
+<!--   pred <- SciBet(reference.exp,x) -->
+<!--   return(list(rownames(x),pred)) -->
+
+<!-- })) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- cell.id <- lapply(gbm.list.res, "[[", 1) -->
+<!-- gbm.list.res <- lapply(gbm.list.res, "[[", 2) -->
+
+<!-- cell.id <- as.character(unlist(cell.id)) -->
+
+
+<!-- gbm.list.res<- as.character(unlist(gbm.list.res)) -->
+<!-- prediction <- data.frame(cell_id = cell.id,scibet = gbm.list.res) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- rownames(prediction) <- prediction$cell_id -->
+<!-- prediction <- prediction["scibet"] -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- write.csv(prediction,paste0("output/annotation_result_each_tool/scibet_",object,"_",merge,"_",run,".csv"),row.names = TRUE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- unloadNamespace("scibet") -->
+<!-- rm(reference,reference.exp,gbm.list.res,cell.id,prediction) -->
+<!-- gc() -->
+<!-- ``` -->
+
+#scPred -->
+<!-- ```{r} -->
+<!-- library(scPred) -->
+<!-- #reference <- readRDS("output/seurat_objects/smrt_mal") -->
+<!-- reference <- reference.original -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- reference <- FindVariableFeatures(reference,verbose = FALSE) -->
+<!-- reference <- ScaleData(reference,verbose = FALSE) -->
+<!-- reference <- RunPCA(reference, verbose = FALSE) -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- reference <- getFeatureSpace(reference, celltype,correction = "fdr", sig = 1, reduction = "pca") -->
+<!-- #reference <- trainModel(reference) -->
+<!-- #reference <- trainModel(reference, model = "mda") -->
+
+<!-- reference <- trainModel(reference, model = "glm") -->
+
+<!-- #get_probabilities(reference) %>% head() -->
+<!-- #get_scpred(reference) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm.list <- gbm.list.original -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(parallel) -->
+
+<!-- n.cores <- parallel::detectCores() - 1 -->
+<!-- n.cores <- 2 -->
+<!-- system.time(gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   x <- NormalizeData(x,verbose= FALSE) -->
+<!--   x <- FindVariableFeatures(x, verbose= FALSE) -->
+<!--   x <- ScaleData(x,verbose = FALSE) -->
+<!--   x <- RunPCA(x, verbose = FALSE) -->
+<!--   x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE) -->
+<!--   x <- FindClusters(x, resolution = 1, verbose = FALSE) -->
+<!-- })) -->
+
+<!-- system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  { -->
+<!--   #x <- scPredict(x, DietSeurat(reference,assays = "RNA")) -->
+<!--   x <- scPredict_edited(x, DietSeurat(reference,assays = "RNA")) -->
+<!-- })) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- .make_names <- function(x){ -->
+<!--   x <- gsub("\\+", "_plus", x) -->
+<!--   x <- gsub("\\-", "_minus", x) -->
+<!--   x <- make.names(x) -->
+<!-- } -->
+<!-- scPredict_edited <- function (new, reference, threshold = 0.55, max.iter.harmony = 20,  -->
+<!--     recompute_alignment = TRUE, seed = 66)  -->
+<!-- { -->
+<!--     if (!(is(reference, "Seurat") | is(reference, "scPred")))  -->
+<!--         stop("'object' must be of class 'scPred' or 'Seurat'") -->
+<!--     if (is(reference, "Seurat")) { -->
+<!--         spmodel <- reference@misc$scPred -->
+<!--     } -->
+<!--     else { -->
+<!--         spmodel <- reference -->
+<!--     } -->
+<!--     if (is.null(spmodel))  -->
+<!--         stop("No feature space has been determined!") -->
+<!--     if (!length(spmodel@train))  -->
+<!--         stop("No models have been trained!") -->
+<!--     if (!is(new, "Seurat"))  -->
+<!--         stop("New data must be a Seurat object") -->
+<!--     new <- project_query_edited(new, reference = spmodel, max.iter.harmony = max.iter.harmony,  -->
+<!--         recompute_alignment = recompute_alignment, seed = seed) -->
+<!--     new_embeddings_aligned <- Embeddings(new[["scpred"]]) -->
+<!--     colnames(new_embeddings_aligned) <- colnames(spmodel@cell_embeddings) -->
+<!--     cellTypeModelNames <- names(spmodel@features) -->
+<!--     .predictCellClass <- function(cellType, spmodel, testEmbeddings) { -->
+<!--         features <- as.character(spmodel@features[[cellType]]$feature) -->
+<!--         model <- spmodel@train[[cellType]] -->
+<!--         prediction <- predict(model, newdata = scPred:::subsetMatrix(testEmbeddings,  -->
+<!--             features), type = "prob") -->
+<!--         rownames(prediction) <- rownames(testEmbeddings) -->
+<!--         prediction[, 1, drop = FALSE] -->
+<!--     } -->
+<!--     cat(crayon::green(cli::symbol$record, " Classifying cells...\n")) -->
+<!--     res <- sapply(cellTypeModelNames, .predictCellClass, spmodel,  -->
+<!--         new_embeddings_aligned) -->
+<!--     res <- as.data.frame(res) -->
+<!--     colnames(res) <- cellTypeModelNames -->
+<!--     rownames(res) <- colnames(new) -->
+<!--     classes <- cellTypeModelNames -->
+<!--     if (length(cellTypeModelNames) == 1) { -->
+<!--         metadata <- get_metadata(spmodel) -->
+<!--         cellClasses <- levels(metadata$pvar) -->
+<!--         res_comp <- 1 - res[, 1] -->
+<!--         negClass <- cellClasses[cellClasses != names(res)] -->
+<!--         res[[negClass]] <- res_comp -->
+<!--     } -->
+<!--     max_props <- as.data.frame(t(apply(res, 1, function(x) c(index = which.max(x),  -->
+<!--         max = x[which.max(x)])))) -->
+<!--     names(max_props) <- c("index", "max") -->
+<!--     max_props$generic_class <- names(res)[max_props$index] -->
+<!--     res <- cbind(res, max_props) -->
+<!--     pred <- ifelse(res$max > threshold, res$generic_class, "unassigned") -->
+<!--     names(pred) <- colnames(new) -->
+<!--     res$prediction <- pred -->
+<!--     res$index <- NULL -->
+<!--     res$no_rejection <- res$generic_class -->
+<!--     res$generic_class <- NULL -->
+<!--     names(res) <- .make_names(paste0("scpred_", names(res))) -->
+<!--     new <- AddMetaData(new, res) -->
+<!--     cat(crayon::green("DONE!\n")) -->
+<!--     new -->
+<!-- } -->
+<!-- project_query_edited <- function (new, reference, max.iter.harmony = 20, recompute_alignment = TRUE,  -->
+<!--     seed = 66, ...)  -->
+<!-- { -->
+<!--     if (!(is(reference, "Seurat") | is(reference, "scPred")))  -->
+<!--         stop("'object' must be of class 'scPred' or 'Seurat'") -->
+<!--     if (is(reference, "Seurat")) { -->
+<!--         spmodel <- reference@misc$scPred -->
+<!--     } -->
+<!--     else { -->
+<!--         spmodel <- reference -->
+<!--     } -->
+<!--     if (is.null(spmodel))  -->
+<!--         stop("No feature space has been determined!") -->
+<!--     if (!is(new, "Seurat"))  -->
+<!--         stop("New data must be a Seurat object") -->
+<!--     if ("scpred" %in% names(new@reductions)) { -->
+<!--         if (recompute_alignment) { -->
+<!--             alignment <- TRUE -->
+<!--             cat(crayon::yellow(cli::symbol$figure_dash, "Data has already been aligned to a reference.\n"),  -->
+<!--                 sep = "") -->
+<!--             cat(crayon::yellow(cli::symbol$sup_plus, "Skip data alignment using `recompute.alignment = FALSE`.\n"),  -->
+<!--                 sep = "") -->
+<!--         } -->
+<!--         else { -->
+<!--             alignment <- FALSE -->
+<!--         } -->
+<!--     } -->
+<!--     else { -->
+<!--         alignment <- TRUE -->
+<!--     } -->
+<!--     if (alignment) { -->
+<!--         cat(crayon::green(cli::symbol$record, " Matching reference with new dataset...\n")) -->
+<!--         ref_loadings <- spmodel@feature_loadings -->
+<!--         ref_embeddings <- spmodel@cell_embeddings -->
+<!--         new_features <- rownames(new) -->
+<!--         reference_features <- rownames(ref_loadings) -->
+<!--         shared_features <- intersect(reference_features, new_features) -->
+<!--         cat(crayon::cyan("\t", cli::symbol$line, paste(length(reference_features),  -->
+<!--             "features present in reference loadings\n"))) -->
+<!--         cat(crayon::cyan("\t", cli::symbol$line, paste(length(shared_features),  -->
+<!--             "features shared between reference and new dataset\n"))) -->
+<!--         cat(crayon::cyan("\t", cli::symbol$line, paste0(round(length(shared_features)/length(reference_features) *  -->
+<!--             100, 2), "% of features in the reference are present in new dataset\n"))) -->
+<!--         ref_loadings <- ref_loadings[shared_features, ] -->
+<!--         new_data <- GetAssayData(new, layer = "data")[shared_features,  -->
+<!--             ] -->
+<!--         means <- spmodel@scaling$means -->
+<!--         stdevs <- spmodel@scaling$stdevs -->
+<!--         new_data <- Matrix::t(new_data) -->
+<!--         names(means) <- names(stdevs) <- rownames(spmodel@scaling) -->
+<!--         means <- means[shared_features] -->
+<!--         stdevs <- stdevs[shared_features] -->
+<!--         i <- stdevs == 0 -->
+<!--         if (any(i)) { -->
+<!--             warning(paste0(sum(i), " features have zero variance but are present in the feature loadings. \nDid you subset or integrated this data before?")) -->
+<!--             cat(crayon::yellow("Removing zero-variance genes from projection\n")) -->
+<!--             new_data <- new_data[, !i] -->
+<!--             ref_loadings <- ref_loadings[!i, ] -->
+<!--             means <- means[!i] -->
+<!--             stdevs <- stdevs[!i] -->
+<!--         } -->
+<!--         scaled_data <- scale(new_data, means, stdevs) -->
+<!--         new_embeddings <- scaled_data %*% ref_loadings -->
+<!--         dataset <- factor(c(rep("reference", nrow(ref_embeddings)),  -->
+<!--             rep("new", nrow(new_embeddings))), levels = c("reference",  -->
+<!--             "new")) -->
+<!--         rownames(ref_embeddings) <- paste0("ref_", rownames(ref_embeddings)) -->
+<!--         rownames(new_embeddings) <- paste0("new_", rownames(new_embeddings)) -->
+<!--         eigenspace <- as.data.frame(rbind(ref_embeddings, new_embeddings)) -->
+<!--         meta_data <- data.frame(rownames(eigenspace), dataset = dataset) -->
+<!--         cat(crayon::green(cli::symbol$record, " Aligning new data to reference...\n")) -->
+<!--         set.seed(seed) -->
+<!--         harmony_embeddings <- harmony::HarmonyMatrix(eigenspace, meta_data,  -->
+<!--             "dataset", do_pca = FALSE, reference_values = "reference",  -->
+<!--             max.iter.harmony = max.iter.harmony, ...) -->
+<!--         new_embeddings_aligned <- harmony_embeddings[dataset ==  -->
+<!--             "new", , drop = FALSE] -->
+<!--     } -->
+<!--     else { -->
+<!--         new_embeddings_aligned <- Embeddings(new, reduction = "scpred") -->
+<!--         colnames(new_embeddings_aligned) <- gsub("scpred_", spmodel@reduction_key,  -->
+<!--             colnames(new_embeddings_aligned)) -->
+<!--     } -->
+<!--     rownames(new_embeddings_aligned) <- gsub("^new_", "", rownames(new_embeddings_aligned)) -->
+<!--     new@reductions[["scpred"]] <- CreateDimReducObject(embeddings = new_embeddings_aligned,  -->
+<!--         key = "scpred_", assay = DefaultAssay(object = new)) -->
+<!--     if (recompute_alignment) { -->
+<!--         rownames(new_embeddings) <- gsub("^new_", "", rownames(new_embeddings)) -->
+<!--         new@reductions[["scpred_projection"]] <- CreateDimReducObject(embeddings = new_embeddings,  -->
+<!--             key = "Projection_", assay = DefaultAssay(object = new)) -->
+<!--     } -->
+<!--     new -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- each.meta.all <- data.frame() -->
+<!-- for (i in 1:length(gbm.list.res)) { -->
+<!--   each.meta <- gbm.list.res[[i]]@meta.data -->
+<!--   each.meta <- each.meta[tail(names(each.meta),9)] -->
+<!--   each.meta <- each.meta %>% relocate(c("scpred_no_rejection","scpred_prediction","scpred_max"),.before = 1) -->
+<!--   each.meta.all <- rbind(each.meta.all,each.meta) -->
+<!-- } -->
+<!-- each.meta.all <- rownames_to_column(each.meta.all) -->
+<!-- colnames(each.meta.all)[1] <- "cell_id" -->
+
+<!-- #each.meta.all -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- write.csv(each.meta.all,paste0("output/scpred_",object,"_",merge,"_",run,".csv"),row.names = FALSE) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- unloadNamespace("scPred") -->
+<!-- rm(reference,gbm.list.res,each.meta.all) -->
+<!-- gc() -->
+<!-- ``` -->
+
+
+<!-- <!-- #SingleCellNet --> -->
+<!-- <!-- ```{r} --> -->
+<!-- <!-- library(singleCellNet) --> -->
+
+<!-- <!-- #reference.scn <- readRDS("output/seurat_objects/smrt_mal") --> -->
+<!-- <!-- reference.scn <-  reference.original --> -->
+
+<!-- <!-- reference.scn <- extractSeurat(reference.scn, exp_slot_name = "data") --> -->
+<!-- <!-- stTM = reference.scn$sampTab --> -->
+<!-- <!-- expTMraw = reference.scn$expDat --> -->
+
+<!-- <!-- stTM<-droplevels(stTM) --> -->
+
+<!-- <!-- gbm.scn <- readRDS("output/seurat_gbm_qc") --> -->
+<!-- <!-- gbm.scn <- extractSeurat(gbm.scn, exp_slot_name = "data") --> -->
+<!-- <!-- stQuery = gbm.scn$sampTab --> -->
+<!-- <!-- expQuery = gbm.scn$expDat --> -->
+
+<!-- <!-- rm(reference.scn,gbm.scn) --> -->
+<!-- <!-- gc() --> -->
+
+<!-- <!-- commonGenes<-intersect(rownames(expTMraw), rownames(expQuery)) --> -->
+<!-- <!-- expTMraw <- expTMraw[commonGenes, ] --> -->
+<!-- <!-- expQuery <- expQuery[commonGenes, ] --> -->
+<!-- <!-- ``` --> -->
+
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- # So compare accuracy between celltype and celltype_merge it seem that celltype_merge perform better so we will use that instead --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- #Train --> -->
+<!-- <!-- set.seed(100) --> -->
+<!-- <!-- stList <-splitCommon(sampTab = stTM, ncells = as.integer(0.8*(min(table(stTM$celltype)))), dLevel = celltype) --> -->
+
+<!-- <!-- stTrain<-stList[[1]] --> -->
+<!-- <!-- expTrain <- expTMraw[,rownames(stTrain)] --> -->
+
+<!-- <!-- system.time(class_info <- scn_train(stTrain = stTrain, expTrain = expTrain, nTopGenes = 10, nRand = 70, nTrees = 1000, nTopGenePairs = 25, dLevel = celltype, colName_samp = "NAME")) --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- #Test/validate  --> -->
+<!-- <!-- set.seed(2) --> -->
+<!-- <!-- stTestList = splitCommon(sampTab=stList[[2]], as.integer(0.2*(min(table(stTM$celltype_merge)))), dLevel="celltype_merge") --> -->
+<!-- <!-- stTest = stTestList[[1]] --> -->
+<!-- <!-- expTest = expTMraw[commonGenes,rownames(stTest)] --> -->
+
+<!-- <!-- classRes_val_all = scn_predict(cnProc=class_info[['cnProc']], expDat=expTest, nrand = 50) --> -->
+
+<!-- <!-- tm_heldoutassessment = assess_comm(ct_scores = classRes_val_all, stTrain = stTrain, stQuery = stTest, dLevelSID = "NAME", classTrain = "celltype_merge", classQuery = "celltype_merge", nRand = 50) --> -->
+
+<!-- <!-- #plot_PRs(tm_heldoutassessment) --> -->
+
+<!-- <!-- #plot_metrics(tm_heldoutassessment) --> -->
+
+<!-- <!-- nrand = 50 --> -->
+<!-- <!-- sla = as.vector(stTest$celltype_merge) --> -->
+<!-- <!-- names(sla) = as.vector(stTest$NAME) --> -->
+<!-- <!-- slaRand = rep("rand", nrand) --> -->
+<!-- <!-- names(slaRand) = paste("rand_", 1:nrand, sep='') --> -->
+<!-- <!-- sla = append(sla, slaRand) #include in the random cells profile created --> -->
+<!-- <!-- sc_hmClass(classMat = classRes_val_all,grps = sla, max=300, isBig=TRUE) --> -->
+
+<!-- <!-- #plot_attr(classRes=classRes_val_all, sampTab=stTest, nrand=nrand, dLevel="celltype_merge", sid="NAME") --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- #Predict on our gbm dataset --> -->
+<!-- <!-- stQuery.list <- split(stQuery, f = stQuery$split) --> -->
+
+<!-- <!-- stQuery.all <- data.frame() --> -->
+
+<!-- <!-- for (i in 1:length(stQuery.list)) { --> -->
+<!-- <!-- stQuery.each <- stQuery.list[[i]] --> -->
+<!-- <!-- expQuery.each <- expQuery[, colnames(expQuery) %in% rownames(stQuery.each)] --> -->
+
+<!-- <!-- gbm.pre <- scn_predict(class_info[['cnProc']], expQuery.each, nrand = 0) --> -->
+<!-- <!-- stQuery.each <- assign_cate(classRes = gbm.pre, sampTab = stQuery.each, cThresh = 0.5) --> -->
+
+<!-- <!-- stQuery.all <- rbind(stQuery.all,stQuery.each) --> -->
+<!-- <!-- } --> -->
+<!-- <!-- ``` --> -->
+
+
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- colnames(stQuery.all)[which(colnames(stQuery.all) == "category")] <-  "SingleCellNet" --> -->
+<!-- <!-- annotation <- stQuery.all["SingleCellNet"] --> -->
+
+<!-- <!-- ``` --> -->
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- #save result --> -->
+<!-- <!-- write.csv(annotation,paste0("output/singleCellNet_",object,"_",merge,"_",run,".csv"),row.names = TRUE) --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- ```{r} --> -->
+<!-- <!-- unloadNamespace("singleCellNet") --> -->
+<!-- <!-- rm(stTM,expTMraw,stQuery,expQuery,commonGenes,expTMraw,expQuery,stList,stTrain,stTestList,stTest,expTest,classRes_val_all,tm_heldoutassessment,stQuery.list,stQuery.all,annotation) --> -->
+<!-- <!-- gc() --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- <!-- #scClasify --> --> -->
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- library("scClassify") --> --> -->
+<!-- <!-- <!-- ``` --> --> -->
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- #reference <- readRDS("output/seurat_objects/smrt_mal"); reference <- subset(reference,idents = chosen_cellstate); --> --> -->
+<!-- <!-- <!-- reference <- reference.original --> --> -->
+
+<!-- <!-- <!-- exprsMat_reference <- reference@assays$RNA@data --> --> -->
+
+<!-- <!-- <!-- reference_celltype_merge <- reference$celltype_merge --> --> -->
+<!-- <!-- <!-- rm(reference) --> --> -->
+<!-- <!-- <!-- ``` --> --> -->
+<!-- <!-- <!-- ```{r} --> --> -->
+
+<!-- <!-- <!-- gbm.list <- gbm.list.original --> --> -->
+<!-- <!-- <!-- gbm.list <- lapply(X = gbm.list, FUN = function(x)  { --> --> -->
+<!-- <!-- <!--   x <- NormalizeData(x,verbose = FALSE) --> --> -->
+<!-- <!-- <!-- }) --> --> -->
+
+<!-- <!-- <!-- ``` --> --> -->
+
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- res.df <- data.frame() --> --> -->
+<!-- <!-- <!-- for (i in 1:length(gbm.list)) { --> --> -->
+
+<!-- <!-- <!-- #for (i in 10) { --> --> -->
+<!-- <!-- <!--   gbm.each <- gbm.list[[i]] --> --> -->
+<!-- <!-- <!--   exprsMat_gbm <- gbm.each@assays$RNA@data --> --> -->
+<!-- <!-- <!--   scClassify_res <- scClassify(exprsMat_train = exprsMat_reference, --> --> -->
+<!-- <!-- <!--                              cellTypes_train = reference_celltype_merge, --> --> -->
+<!-- <!-- <!--                              exprsMat_test = list(gbm = exprsMat_gbm), --> --> -->
+<!-- <!-- <!--                              tree = "HOPACH", --> --> -->
+<!-- <!-- <!--                              algorithm = "WKNN", --> --> -->
+<!-- <!-- <!--                              selectFeatures = c("limma"), --> --> -->
+<!-- <!-- <!--                              similarity = c("pearson"), --> --> -->
+<!-- <!-- <!--                              returnList = FALSE, --> --> -->
+<!-- <!-- <!--                              verbose = TRUE) --> --> -->
+<!-- <!-- <!--   # res.df.test <- append(res.df.test,list(pred.grun)) --> --> -->
+<!-- <!-- <!--   res.df <- rbind(res.df,as.data.frame(scClassify_res$testRes$gbm$pearson_WKNN_limma$predRes)) --> --> -->
+<!-- <!-- <!-- } --> --> -->
+<!-- <!-- <!-- ``` --> --> -->
+
+
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- colnames(res.df) <- paste0("scClasify_","pearson_WKNN_limma") --> --> -->
+<!-- <!-- <!-- res.df <- rownames_to_column(res.df) --> --> -->
+<!-- <!-- <!-- colnames(res.df)[1] <- "cell_id" --> --> -->
+<!-- <!-- <!-- #head(res.df) --> --> -->
+<!-- <!-- <!-- ``` --> --> -->
+
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- write.csv(res.df,paste0("output/scClassify_",object,"_",merge,run,"_",run,".csv"),row.names = FALSE) --> --> -->
+<!-- <!-- <!-- ``` --> --> -->
+
+
+
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- plotCellTypeTree(cellTypeTree(scClassify_res$trainRes)) --> --> -->
+<!-- <!-- <!-- ``` --> --> -->
+
+<!-- <!-- <!-- ```{r} --> --> -->
+<!-- <!-- <!-- unloadNamespace("scClassify") --> --> -->
+<!-- <!-- <!-- rm(res.df,reference_celltype_merge,exprsMat_reference,reference) --> --> -->
+<!-- <!-- <!-- gc() --> --> -->
+<!-- <!-- <!-- ``` --> --> -->

@@ -429,9 +429,7 @@ smrt@assays$RNA$data[1:10,1:10]
 smrt.mal$celltype_merge <- as.factor(smrt.mal$celltype_merge)
 ```
 
-```{r}
-smrt.mal@meta.data
-```
+
 
 ```{r}
 smrt.mal[["RNA"]]$counts <- smrt.mal[["RNA"]]$data

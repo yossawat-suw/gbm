@@ -26,7 +26,6 @@ print("set parameter")
 # input cell
 object <- "all"
 
-celltypes <- c("celltype", "celltype_merge","celltype_npc_opc","npcopc_acmes")
 
 
 # For reference based
@@ -72,12 +71,12 @@ run
 #Load neftel
 ```{r}
 print("load neftel")
-neftel.smt.original <- readRDS("output/smrt_mal")
+reference.original <- readRDS("output/seurat_objects/smrt_mal.rds")
 
 if (length(chosen_celltypes) > 1) {
-     Idents(neftel.smt.original) <- celltype; neftel.smt.original <- subset(neftel.smt.original,idents = chosen_celltypes); neftel.smt.original@meta.data[,celltype] <- as.character(neftel.smt.original@meta.data[,celltype]);
+     Idents(reference.original) <- celltype; reference.original <- subset(reference.original,idents = chosen_celltypes); reference.original@meta.data[,celltype] <- as.character(reference.original@meta.data[,celltype]);
 } else {
- neftel.smt.original@meta.data[,celltype] <- as.character(neftel.smt.original@meta.data[,celltype]); neftel.smt.original@meta.data[!(neftel.smt.original@meta.data[,celltype] %in% chosen_celltypes  ),celltype] <- "not_labeled"; neftel.smt.original@meta.data[,celltype] <- neftel.smt.original@meta.data[,celltype];
+ reference.original@meta.data[,celltype] <- as.character(reference.original@meta.data[,celltype]); reference.original@meta.data[!(reference.original@meta.data[,celltype] %in% chosen_celltypes  ),celltype] <- "not_labeled"; reference.original@meta.data[,celltype] <- reference.original@meta.data[,celltype];
 }
 
 ```
@@ -109,9 +108,9 @@ if (run_each) {
 
 
 <!-- ```{r} -->
-<!-- neftel.smt <- neftel.smt.original -->
+<!-- reference <- reference.original -->
 <!-- new_ref_matrix <- seurat_ref( -->
-<!--   seurat_object = neftel.smt,        # SeuratV3 object -->
+<!--   seurat_object = reference,        # SeuratV3 object -->
 <!--   cluster_col = celltype,    # name of column in meta.data containing cell identities -->
 <!-- ) -->
 <!-- ``` -->
@@ -156,7 +155,7 @@ if (run_each) {
 
 <!-- ```{r} -->
 <!-- unloadNamespace("clustifyr") -->
-<!-- rm(new_ref_matrix,gbm.list.res,res.ref.df,neftel.smt) -->
+<!-- rm(new_ref_matrix,gbm.list.res,res.ref.df,reference) -->
 <!-- gc() -->
 <!-- ``` -->
 
@@ -176,10 +175,10 @@ if (!requireNamespace("biomod2", quietly = TRUE) || packageVersion("biomod2") !=
 ```
 
 ```{r}
-neftel.smt <- neftel.smt.original
-reference_gem <- as.matrix(neftel.smt@assays$norm@data)
-reference_clusters <- as.factor(neftel.smt@meta.data[, celltype])
-names(reference_clusters) <- rownames(neftel.smt@meta.data)
+reference <- reference.original
+reference_gem <- as.matrix(reference@assays$norm@data)
+reference_clusters <- as.factor(reference@meta.data[, celltype])
+names(reference_clusters) <- rownames(reference@meta.data)
 ```
 
 
@@ -192,14 +191,12 @@ gbm.list <- gbm.list.original
 
 
 
-```{r}
-
-```
 
 
 ```{r}
 library(scID)
-# markers.glob <- find_markers(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
+
+# markers.glob <- find_markers_edited(reference_gem, reference_clusters, logFC = 0.5, only.pos = FALSE, normalize_reference = FALSE)
 
 print("find_markers_edited")
 
@@ -492,11 +489,11 @@ library(SingleCellExperiment)
 ```
 
 ```{r}
-# neftel.smt <- readRDS("output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes);
-neftel.smt <- neftel.smt.original
-neftel.smt <- DietSeurat(neftel.smt, assays = "RNA")
-neftel.smt.sce <- as.SingleCellExperiment(DietSeurat(neftel.smt,data = TRUE, counts = FALSE,scale.data = FALSE))
-rm(neftel.smt)
+# reference <- readRDS("output/seurat_objects/smrt_mal.rds"); reference <- subset(reference,idents = chosen_celltypes);
+reference <- reference.original
+reference <- DietSeurat(reference, assays = "RNA")
+reference.sce <- as.SingleCellExperiment(DietSeurat(reference,data = TRUE, counts = FALSE,scale.data = FALSE))
+rm(reference)
 ```
 
 ```{r}
@@ -509,7 +506,7 @@ system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = fun
   x <- NormalizeData(x,verbose = FALSE)
   x <- DietSeurat(x,data = TRUE, counts = FALSE,scale.data = FALSE)
   x <- as.SingleCellExperiment(x)
-  pred.grun <- SingleR(test=x, ref=neftel.smt.sce, labels=neftel.smt.sce@colData[,celltype], de.method="wilcox")
+  pred.grun <- SingleR(test=x, ref=reference.sce, labels=reference.sce@colData[,celltype], de.method="wilcox")
   return(pred.grun)
 }))
 ```
@@ -540,7 +537,7 @@ write.csv(res.df,paste0("output/singleR_",object,"_",merge,"_",run,".csv"),row.n
 unloadNamespace("SingleR")
 unloadNamespace("scran")
 #unloadNamespace("SingleCellExperiment")
-rm(res.df,gbm.list.res,neftel.smt.sce)
+rm(res.df,gbm.list.res,reference.sce)
 gc()
 ```
 
@@ -553,31 +550,31 @@ library(SingleCellExperiment)
 
 ```{r}
 #from tutorial it use log-normalization so use the default from seurat
-neftel.smt <- neftel.smt.original
-neftel.smt <- DietSeurat(neftel.smt, assays = "RNA")
-neftel.smt <- DietSeurat(neftel.smt,data = TRUE, counts = FALSE,scale.data = FALSE)
+reference <- reference.original
+reference <- DietSeurat(reference, assays = "RNA")
+reference <- DietSeurat(reference,data = TRUE, counts = FALSE,scale.data = FALSE)
 
-neftel.smt.sce <- as.SingleCellExperiment(neftel.smt)
-rm(neftel.smt)
+reference.sce <- as.SingleCellExperiment(reference)
+rm(reference)
 ```
 
 ```{r}
-neftel.smt.sce@colData <- neftel.smt.sce@colData[celltype]
+reference.sce@colData <- reference.sce@colData[celltype]
 
 #Change name because input need this
-colnames(neftel.smt.sce@colData) <- 'celltypes'
+colnames(reference.sce@colData) <- 'celltypes'
 ```
 ```{r}
 #QC
 ribo <- read.table("data/ribosomal.txt", header = FALSE, sep = '\t')
-neftel.smt.sce <- neftel.smt.sce[!rownames(neftel.smt.sce) %in% ribo[,1], ]
+reference.sce <- reference.sce[!rownames(reference.sce) %in% ribo[,1], ]
 ```
 ```{r}
-#CorrelateReference(ref_cells = neftel.smt.sce)
+#CorrelateReference(ref_cells = reference.sce)
 ```
 
 ```{r}
-#ClassifyReference(ref_cells = neftel.smt.sce,ref_c = "logcounts")
+#ClassifyReference(ref_cells = reference.sce,ref_c = "logcounts")
 ```
 
 
@@ -604,7 +601,7 @@ system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = fun
   #x@colData <- x@colData[c("orig.ident")]
 
   x <- CHETAHclassifier(input = x,
-                              ref_cells = neftel.smt.sce,print_steps = FALSE)
+                              ref_cells = reference.sce,print_steps = FALSE)
   x <- Classify(x, 0)
   return(x@colData["celltype_CHETAH"])
 
@@ -628,7 +625,7 @@ write.csv(res.df,paste0("output/CHETAH_",object,"_",merge,"_",run,".csv"),row.na
 ```{r}
 unloadNamespace("CHETAH")
 #unloadNamespace("SingleCellExperiment")
-rm(res.df,gbm.list.res,neftel.smt.sce)
+rm(res.df,gbm.list.res,reference.sce)
 gc()
 ```
 
@@ -638,35 +635,35 @@ gc()
 ```{r}
 library(scmap)
 library(SingleCellExperiment)
-neftel.smt <- neftel.smt.original
-# neftel.smt <- readRDS("output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes);
-neftel.smt.norm <-  as.matrix(neftel.smt@assays$norm@data)
-celltype.df <- neftel.smt@meta.data[celltype]
+reference <- reference.original
+# reference <- readRDS("output/seurat_objects/smrt_mal.rds"); reference <- subset(reference,idents = chosen_celltypes);
+reference.norm <-  as.matrix(reference@assays$norm@data)
+celltype.df <- reference@meta.data[celltype]
 
-neftel.smt.sce <- SingleCellExperiment(assays = list(normcounts = neftel.smt.norm), colData =  celltype.df)
-logcounts(neftel.smt.sce) <- log2(normcounts(neftel.smt.sce) + 1)
+reference.sce <- SingleCellExperiment(assays = list(normcounts = reference.norm), colData =  celltype.df)
+logcounts(reference.sce) <- log2(normcounts(reference.sce) + 1)
 
-rowData(neftel.smt.sce)$feature_symbol <- rownames(neftel.smt.sce)
+rowData(reference.sce)$feature_symbol <- rownames(reference.sce)
 
-neftel.smt.sce <- neftel.smt.sce[!duplicated(rownames(neftel.smt.sce)), ]
+reference.sce <- reference.sce[!duplicated(rownames(reference.sce)), ]
 ```
 
 
 ```{r}
-neftel.smt.sce <- selectFeatures(neftel.smt.sce, n_features = 500,suppress_plot = FALSE)
+reference.sce <- selectFeatures(reference.sce, n_features = 500,suppress_plot = FALSE)
 
-#table(rowData(neftel.smt.sce)$scmap_features)
+#table(rowData(reference.sce)$scmap_features)
 ```
 ```{r}
-neftel.smt.sce <- indexCluster(neftel.smt.sce, cluster_col = celltype)
-```
-
-```{r}
-#heatmap(as.matrix(metadata(neftel.smt.sce)$scmap_cluster_index))
+reference.sce <- indexCluster(reference.sce, cluster_col = celltype)
 ```
 
 ```{r}
-#head(metadata(neftel.smt.sce)$scmap_cluster_index)
+#heatmap(as.matrix(metadata(reference.sce)$scmap_cluster_index))
+```
+
+```{r}
+#head(metadata(reference.sce)$scmap_cluster_index)
 ```
 
 ```{r}
@@ -694,13 +691,13 @@ system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = fun
   x.default <- scmapCluster(threshold = 0.7,
     projection = x,
     index_list = list(
-      neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cluster_index
+      reference.norm = metadata(reference.sce)$scmap_cluster_index
     )
   )
   x.adjust <- scmapCluster(threshold = 0,
     projection = x,
     index_list = list(
-      neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cluster_index
+      reference.norm = metadata(reference.sce)$scmap_cluster_index
     )
   )
   return(list(name,x.default$scmap_cluster_labs,x.adjust$scmap_cluster_labs))
@@ -735,7 +732,7 @@ set.seed(1)
 ```
 
 ```{r}
-neftel.smt.sce <- indexCell(neftel.smt.sce)
+reference.sce <- indexCell(reference.sce)
 ```
 
 ```{r}
@@ -759,11 +756,11 @@ system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = fun
   x <- scmapCell(
     projection = x,
     index_list = list(
-      neftel.smt.norm = metadata(neftel.smt.sce)$scmap_cell_index
+      reference.norm = metadata(reference.sce)$scmap_cell_index
     )
   )
-  x.default <- scmapCell2Cluster(x, list(as.character(neftel.smt.sce@colData[,celltype])),w = 3,threshold = 0.5) #default
-   x.adjust <- scmapCell2Cluster(x, list(as.character(neftel.smt.sce@colData[,celltype])),w = 1,threshold = 0) #adjust to extract most
+  x.default <- scmapCell2Cluster(x, list(as.character(reference.sce@colData[,celltype])),w = 3,threshold = 0.5) #default
+   x.adjust <- scmapCell2Cluster(x, list(as.character(reference.sce@colData[,celltype])),w = 1,threshold = 0) #adjust to extract most
    
   return(list(name,x.default$combined_labs,x.adjust$combined_labs))
 
@@ -796,7 +793,7 @@ write.csv(prediction,paste0("output/scmap_cell_",object,"_",merge,"_",run,".csv"
 ```{r}
 unloadNamespace("scmap")
 #unloadNamespace("SingleCellExperiment")
-rm(prediction,neftel.smt.sce,neftel.smt.norm,celltype.df,cell.id,gbm.list.res)
+rm(prediction,reference.sce,reference.norm,celltype.df,cell.id,gbm.list.res)
 gc()
 ```
 
@@ -807,9 +804,9 @@ library(SeuratDisk)
 ```
 
 ```{r}
-#reference <- readRDS("output/smrt_mal")
+#reference <- readRDS("output/seurat_objects/smrt_mal.rds")
 
-reference <- neftel.smt.original
+reference <- reference.original
 reference.exp <- reference@assays$norm@data
 reference.exp <- t(as.matrix(reference.exp))
 reference.exp <- as.data.frame(reference.exp)
@@ -877,8 +874,8 @@ gc()
 #scPred
 ```{r}
 library(scPred)
-#reference <- readRDS("output/smrt_mal")
-reference <- neftel.smt.original
+#reference <- readRDS("output/seurat_objects/smrt_mal.rds")
+reference <- reference.original
 ```
 
 ```{r}
@@ -1126,12 +1123,12 @@ gc()
 <!-- ```{r} -->
 <!-- library(singleCellNet) -->
 
-<!-- #neftel.smt.scn <- readRDS("output/smrt_mal") -->
-<!-- neftel.smt.scn <-  neftel.smt.original -->
+<!-- #reference.scn <- readRDS("output/seurat_objects/smrt_mal.rds") -->
+<!-- reference.scn <-  reference.original -->
 
-<!-- neftel.smt.scn <- extractSeurat(neftel.smt.scn, exp_slot_name = "data") -->
-<!-- stTM = neftel.smt.scn$sampTab -->
-<!-- expTMraw = neftel.smt.scn$expDat -->
+<!-- reference.scn <- extractSeurat(reference.scn, exp_slot_name = "data") -->
+<!-- stTM = reference.scn$sampTab -->
+<!-- expTMraw = reference.scn$expDat -->
 
 <!-- stTM<-droplevels(stTM) -->
 
@@ -1140,7 +1137,7 @@ gc()
 <!-- stQuery = gbm.scn$sampTab -->
 <!-- expQuery = gbm.scn$expDat -->
 
-<!-- rm(neftel.smt.scn,gbm.scn) -->
+<!-- rm(reference.scn,gbm.scn) -->
 <!-- gc() -->
 
 <!-- commonGenes<-intersect(rownames(expTMraw), rownames(expQuery)) -->
@@ -1231,13 +1228,13 @@ gc()
 <!-- <!-- library("scClassify") --> -->
 <!-- <!-- ``` --> -->
 <!-- <!-- ```{r} --> -->
-<!-- <!-- #neftel.smt <- readRDS("output/smrt_mal"); neftel.smt <- subset(neftel.smt,idents = chosen_celltypes); --> -->
-<!-- <!-- neftel.smt <- neftel.smt.original --> -->
+<!-- <!-- #reference <- readRDS("output/seurat_objects/smrt_mal.rds"); reference <- subset(reference,idents = chosen_celltypes); --> -->
+<!-- <!-- reference <- reference.original --> -->
 
-<!-- <!-- exprsMat_neftel <- neftel.smt@assays$RNA@data --> -->
+<!-- <!-- exprsMat_neftel <- reference@assays$RNA@data --> -->
 
-<!-- <!-- neftel_celltype_merge <- neftel.smt$celltype_merge --> -->
-<!-- <!-- rm(neftel.smt) --> -->
+<!-- <!-- neftel_celltype_merge <- reference$celltype_merge --> -->
+<!-- <!-- rm(reference) --> -->
 <!-- <!-- ``` --> -->
 <!-- <!-- ```{r} --> -->
 
@@ -1289,6 +1286,6 @@ gc()
 
 <!-- <!-- ```{r} --> -->
 <!-- <!-- unloadNamespace("scClassify") --> -->
-<!-- <!-- rm(res.df,neftel_celltype_merge,exprsMat_neftel,neftel.smt) --> -->
+<!-- <!-- rm(res.df,neftel_celltype_merge,exprsMat_neftel,reference) --> -->
 <!-- <!-- gc() --> -->
 <!-- <!-- ``` --> -->

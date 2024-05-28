@@ -280,12 +280,13 @@ final_populations_edited <- function(score) {
   matches
 }
 
+#the edited 
 find_markers_edited <- function(
     reference_gem, reference_clusters, logFC, only.pos,
     normalize_reference) {
   library(Seurat)
-  so_ref <- CreateSeuratObject(reference_gem)
-  so_ref@assays$RNA$data <- so_ref@assays$RNA$counts
+  so_ref <- CreateSeuratObject(reference_gem) 
+  so_ref@assays$RNA$data <- so_ref@assays$RNA$counts ## <- edit here as the count is already norm data
   so_ref <- DietSeurat(so_ref,layers = c("data"))
   if (normalize_reference) {
     so_ref <- suppressMessages(NormalizeData(so_ref, verbose = FALSE))
@@ -299,8 +300,37 @@ find_markers_edited <- function(
   markers
 }
 
-
-
+find_markers_edited_norm <- function(
+    reference_gem, reference_clusters, logFC, only.pos,
+    normalize_reference) {
+  library(Seurat)
+  so_ref <- CreateSeuratObject(reference_gem) 
+  if (normalize_reference) {
+    so_ref <- suppressMessages(NormalizeData(so_ref, normalization.method = "RC", verbose = FALSE,scale.factor = 1e6))
+  } 
+  #so_ref <- suppressMessages(ScaleData(so_ref, verbose = FALSE))
+  Idents(so_ref) <- as.factor(reference_clusters)
+  markers <- suppressMessages(FindAllMarkers(so_ref,
+                                             test.use = "MAST",
+                                             only.pos = only.pos, logfc.threshold = logFC, verbose = FALSE
+  ))
+  markers
+}
+##original find_marker 
+# function (reference_gem, reference_clusters, logFC, only.pos, 
+#           normalize_reference) 
+# {
+#   library(Seurat)
+#   so_ref <- CreateSeuratObject(reference_gem)
+#   if (normalize_reference) {
+#     so_ref <- suppressMessages(NormalizeData(so_ref))
+#   }
+#   so_ref <- suppressMessages(ScaleData(so_ref))
+#   Idents(so_ref) <- as.factor(reference_clusters)
+#   markers <- suppressMessages(FindAllMarkers(so_ref, test.use = "MAST", 
+#                                              only.pos = only.pos, logfc.threshold = logFC))
+#   markers
+# }
 
 #For Scsorter
 

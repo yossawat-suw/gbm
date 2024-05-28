@@ -1,0 +1,249 @@
+```{r}
+
+
+library(Seurat)
+library(parallel)
+library(future)
+library(future.apply)
+```
+
+```{r}
+system.time(
+  gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
+)
+all_genes <- rownames(gbm)
+gbm.list <- SplitObject(gbm, split.by = "donor_id")
+```
+```{r}
+rm(gbm)
+gc()
+```
+
+```{r}
+
+# Set up parallel backend
+n.cores <- detectCores() - 3
+plan(multicore, workers = n.cores)
+
+# Perform parallel computation using future_lapply
+system.time({
+  gbm.list <- future_lapply(gbm.list, function(x) {
+    x <- NormalizeData(x, verbose = FALSE)
+    allgenes <- rownames(x)
+    x <- FindVariableFeatures(x, verbose = FALSE)
+    x <- ScaleData(x, features = allgenes, verbose = FALSE)
+    x <- RunPCA(x, verbose = FALSE)
+    # x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+    # x <- FindClusters(x, resolution = 1, verbose = FALSE)
+    return(x)
+  }, 
+  future.seed=TRUE)
+})
+```
+```{r}
+gc()
+```
+
+```{r}
+system.time({
+  radiated.marker.list <- future_lapply(gbm.list, function(x) {
+    Idents(x) <- "radiation"
+    radiated.marker <- FindMarkers(x,
+                                ident.1  = "radiated",ident.2 = "control")
+    return(radiated.marker)
+  }, 
+  future.seed=TRUE)
+})
+```
+```{r}
+rm(gbm.list)
+gc()
+```
+
+
+```{r}
+saveRDS(radiated.marker.list,"output/deg_each.rds")
+```
+
+```{r}
+radiated.marker.list <- readRDS("output/deg_each.rds")
+```
+
+
+```{r}
+library(dplyr)
+library(future)
+library(future.apply)
+```
+
+```{r}
+radiated.adjust.list <- list()
+for (i in names(radiated.marker.list)) {
+  x <- radiated.marker.list[[i]]
+  x <- tibble::rownames_to_column(x,var = "gene")
+  x$donor_id <- i
+  radiated.adjust.list[[i]] <- x
+}
+radiated.adjust.list
+radiated.marker.combined <- Reduce(rbind,radiated.adjust.list)
+
+radiated.marker.combined
+```
+
+```{r}
+#filter 
+radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val_adj < 0.05,abs(avg_log2FC) >= 0.5)
+
+#radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val < 0.01)
+
+#radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val_adj < 0.05)
+```
+
+```{r}
+library(dplyr)
+gene_summarise <- radiated.marker.combined.filtered %>% 
+  group_by(gene) %>% summarise(pos_ratio = sum(avg_log2FC > 0)/n(),
+                               neg_ratio = 1 - pos_ratio,
+                               max = max(pos_ratio,neg_ratio))
+
+sort(table(gene_summarise$max))
+```
+
+```{r}
+gene_same_direction <- gene_summarise %>% filter(max == 1) %>% pull(gene)
+```
+
+```{r}
+radiated.marker.combined.filtered <- radiated.marker.combined.filtered[radiated.marker.combined.filtered$gene %in% gene_same_direction,]
+
+#test <- radiated.marker.combined.filtered %>% group_by(donor_id) %>% arrange(p_val_adj,desc(abs(avg_log2FC))) %>% slice_head(n = 1000)
+```
+
+```{r}
+plot(table(table(radiated.marker.combined.filtered$gene)))
+```
+
+
+```{r}
+#radiated.marker.combined.filtered[radiated.marker.combined.filtered$count >= consistent_threshold,]
+
+radiated.marker.combined.filtered <- radiated.marker.combined.filtered  %>% group_by(gene) %>% mutate(count = n()) %>% ungroup()
+
+radiated.marker.combined.filtered.distinct <- radiated.marker.combined.filtered %>% arrange(desc(count),p_val) %>% distinct(gene, .keep_all = TRUE)
+
+table(radiated.marker.combined.filtered.distinct$count)
+```
+```{r}
+radiated.marker.filtered.list <- split(radiated.marker.combined.filtered,radiated.marker.combined.filtered$donor_id)
+
+radiated.marker.filtered.gene.list <- future_lapply(radiated.marker.filtered.list, function(x) {
+    gene <- x$gene
+    return(gene)
+  })
+```
+
+
+
+```{r}
+library(tidyr)
+test <- radiated.marker.combined.filtered[,c("gene","donor_id")]
+
+test$sig <- 1
+test <- test %>% complete(gene,donor_id)
+
+test$sig[is.na(test$sig)] <- 0
+
+test_wide <- test %>% spread(donor_id,sig)
+
+test_wide <- tibble::column_to_rownames(test_wide,var = "gene")
+
+test_wide
+```
+
+```{r}
+library(UpSetR)
+png( "figure/upset_plot_deg.png",width=100,height=20,units="cm",res=300)
+upset(test_wide,
+      nintersects = 300,  
+      order.by = c("freq","degree"), 
+      decreasing = c(T,T),
+      nsets = 13)
+dev.off()
+```
+
+
+```{r}
+consistent_threshold <- 0.5*length(radiated.marker.list)
+
+radiated.marker.combined.filtered.distinct[radiated.marker.combined.filtered.distinct$count >= consistent_threshold,]                              
+```
+```{r}
+library(RobustRankAggreg)
+
+rank_agg_3 <- aggregateRanks(glist = radiated.marker.filtered.gene.list,
+                             full = FALSE,
+                             N = length(all_genes)
+                             )
+
+data.table::setnames(rank_agg_3,"Name","gene")
+```
+```{r}
+rank_agg_count <- merge(rank_agg_3,distinct(radiated.marker.combined.filtered[,c("gene","count")]),by = "gene",all.x = TRUE,all.y = FALSE) %>% arrange(desc(count),Score)
+```
+
+```{r}
+rank_agg_count
+```
+
+```{r}
+plot(rank_agg_count$Score,rank_agg_count$count)
+```
+<!-- #GSEA -->
+<!-- ```{r} -->
+<!-- #devtools::install_github("ncborcherding/escape") -->
+<!-- library(escape) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #BiocManager::install("scRepertoire") -->
+<!-- library(scRepertoire) -->
+<!-- scRep_example <- scRepertoire::screp_example -->
+<!-- table(scRep_example@meta.data$Patient) -->
+<!-- scRep_example <- subset(scRep_example, Patient %in% c("PX", "PY")) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- GS.hallmark <- getGeneSets(library = "H") -->
+
+<!-- data("escape.gene.sets", package="escape") -->
+<!-- gene.sets <- escape.gene.sets -->
+
+
+
+<!-- sen_lucy <- read.csv("data/lucy_senesence_genes.csv") -->
+<!-- sen_lucy <- colnames(sen_lucy) -->
+
+<!-- sen_mayo <- readxl::read_xlsx("data/gene_set/senmayo.xlsx") -->
+<!-- sen_mayo <- sen_mayo$`Gene(human)` -->
+
+
+<!-- gen.sets_manual <- list(sen_lucy = sen_lucy, -->
+<!--                         sen_mayo = sen_mayo) -->
+
+<!-- length(GS.hallmark) -->
+<!-- length(gene.sets) -->
+<!-- length(gen.sets_manual) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- names(GS.hallmark) -->
+<!-- names(gene.sets) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- install.packages("pathfindR") -->
+<!-- library(pathfindR) -->
+<!-- knitr::kable(head(example_pathfindR_input)) -->
+
+<!-- BiocManager::install(version = "3.18") -->
+<!-- sessionInfo() -->
+<!-- ``` -->
+

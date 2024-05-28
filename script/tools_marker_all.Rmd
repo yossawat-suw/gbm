@@ -36,7 +36,7 @@ source("script/function.R")
 # Parameter
 # Select the signature to be used
 # if it is new one, can add into the list but keep in mind to run the preprocessing of the signatures in the next chunk because it need to be preprocessed into xlsx file first
-sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes","4pathways")
+sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes","4pathways","neurodev_bulk")
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
 #signatures.gen <- c("signature_new","signature_bulk")
@@ -46,7 +46,7 @@ runs <- c("each","whole")
 
 
 ```{r}
-sig <- sigs[7]
+sig <- sigs[8]
 sig
 
 # cell input to be analyse
@@ -67,7 +67,7 @@ if (run_each) {
 # load gbm
 ```{r}
 
-gbm <- readRDS("output/seurat_gbm_qc")
+gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
 
 if (run_each) {
   gbm.list.original <- SplitObject(gbm, split.by = "split")
@@ -87,11 +87,12 @@ rm(gbm)
 
 
 
+
 #signature preprocessing
 ```{r}
 
 # automatic convert gene list
-signatures <- read.csv(paste0("output/signature_subtype_", sig, ".csv"))
+signatures <- read.csv(paste0("output/signature/signature_subtype_", sig, ".csv"))
 
 # scsorter
 signatures.split <- list()
@@ -269,7 +270,7 @@ for (i in gbm.list.res) {
 
 
 ```{r}
-write.csv(each.meta.all, paste0("output/tools/scType_", object, "_", sig,"_",run, ".csv"), row.names = TRUE)
+write.csv(each.meta.all, paste0("output/annotation_result_each_tool/scType_", object, "_", sig,"_",run, ".csv"), row.names = TRUE)
 ```
 
 ```{r}
@@ -334,7 +335,7 @@ for (i in gbm.list.res) {
 
 
 ```{r}
-write.csv(res.df,paste0("output/tools/SCINA_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
+write.csv(res.df,paste0("output/annotation_result_each_tool/SCINA_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
 ```
 
 ```{r}
@@ -396,7 +397,7 @@ system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
   return(list(rts=rts,each.meta=each.meta))
 }))
 ```
-<!-- #scsort:experiment -->
+#scsort:experiment -->
 <!-- ```{r} -->
 <!-- #Preprocess Data -->
 <!-- ## add drop = FALSE to correct matrix automatic to vector problem -->
@@ -559,7 +560,7 @@ rts.list <- lapply(gbm.list.res, "[[", 1)
 
 
 #Keep rts results of all
-saveRDS(rts.list,paste0("output/tools/scsorter_rts_",object,"_",sig), compress = TRUE)
+saveRDS(rts.list,paste0("output/intermediate_process_tool/scsorter_rts_",object,"_",sig), compress = TRUE)
 ```
 
 
@@ -581,7 +582,7 @@ colnames(each.meta.df)[1] <- "cell_id"
 
 
 ```{r}
-write.csv(each.meta.df,paste0("output/tools/scsorter_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
+write.csv(each.meta.df,paste0("output/annotation_result_each_toolys/scsorter_",object,"_",sig,"_",run,".csv"),row.names = TRUE)
 ```
 
 ```{r}

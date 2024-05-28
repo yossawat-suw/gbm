@@ -14,15 +14,20 @@ setwd(here())
 ```
 
 ```{r}
-annotation <- fread("output/annotation/sen_RSI_cellstate.csv")
+annotation <- fread("output/score/sen_RSI_cellstate.csv")
 annotation
 
-pathways <- fread("output/annotation/annotation_short_4pathways_each__.csv")
+pathways <- fread("output/consensus/annotation_short_4pathways_each__.csv")
+
+neurodev <- fread("output/consensus/annotation_short_neurodev_each__.csv")
 
 setnames(pathways,c("rn","consensus"),c("cell_id_Yossawat","pathway"))
+setnames(neurodev,c("rn","consensus"),c("cell_id_Yossawat","neurodevelopmental"))
 
 annotation <- merge(annotation,pathways[,.(cell_id_Yossawat,pathway)],by = "cell_id_Yossawat")
 
+
+annotation <-  merge(annotation,neurodev[,.(cell_id_Yossawat,neurodevelopmental)],by = "cell_id_Yossawat")
 
 annotation
 ```
@@ -58,6 +63,20 @@ pathway_radiated <- pathway[radiation == "radiated", -"radiation"] %>% tibble::c
 pathway_control
 ```
 ```{r}
+neurodevelopmental <- dcast(annotation,formula = donor_id + radiation ~ neurodevelopmental)
+
+
+
+neurodevelopmental <- cbind(neurodevelopmental[,1:2],t(apply(neurodevelopmental[,3:7],1,FUN = function(x) x / sum(x))))
+
+neurodevelopmental_control <- neurodevelopmental[radiation == "control", -"radiation"] %>% tibble::column_to_rownames(var = "donor_id")
+
+neurodevelopmental_radiated <- neurodevelopmental[radiation == "radiated", -"radiation"] %>% tibble::column_to_rownames(var = "donor_id")
+
+neurodevelopmental_control
+```
+
+```{r}
 sen_score_control <- annotation %>% group_by(donor_id,radiation) %>% filter(radiation == "control") %>%
   summarise(
   Control = mean(sen_score),
@@ -89,7 +108,7 @@ rsi
 ```
 
 ```{r}
-p11_orig <- fread("output/annotation/p11_score.csv")
+p11_orig <- fread("output/score/p11_score.csv")
 setnames(p11_orig,c("cell_id","p11_lognorm_score"),c("cell_id_Yossawat","P12"))
 p11 <- merge(p11_orig,annotation[,c("cell_id_Yossawat","radiation","donor_id")],by = "cell_id_Yossawat")
 
@@ -113,7 +132,7 @@ classification <- classification[,-1]
 classification <- data.frame(t(classification))
 
 classification <- classification[,1:6]
-classification
+
 
 cell_line <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 2)
 cell_line <- tibble::column_to_rownames(cell_line,var = "donor_id")
@@ -121,57 +140,85 @@ cell_line <- tibble::column_to_rownames(cell_line,var = "donor_id")
 classification <- cbind(classification,cell_line)
 
 classification$tumour_formation <- as.factor(classification$tumour_formation) 
+
+classification
 ```
 
 
-```{r}
-col_fun = colorRamp2(c(0, 1), c("white", "green"))
-```
+
 
 ```{r}
 hm_cellstate_control <- Heatmap(cellstate_control,name = "Cellstate",col = colorRamp2(c(0, 1), c("white", "green")), 
                                 cell_fun = function(j, i, x, y, width, height, fill) {
-        grid.text(sprintf("%.1f", cellstate_control[i, j]), x, y, gp = gpar(fontsize = 5))
+        grid.text(sprintf("%.2f", cellstate_control[i, j]), x, y, gp = gpar(fontsize = 5))
 })
 
 hm_pathway_control <- Heatmap(pathway_control,name = "Pathway",col = colorRamp2(c(0, 1), c("white", "red")),
                               cell_fun = function(j, i, x, y, width, height, fill) {
-        grid.text(sprintf("%.1f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5))
+        grid.text(sprintf("%.2f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5))
 })
+
+hm_neurodevelopmental_control <- Heatmap(neurodevelopmental_control,name = "neurodevelopmental",col = colorRamp2(c(0, 1), c("white", "blue")),
+                              cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.2f", neurodevelopmental_control[i, j]), x, y, gp = gpar(fontsize = 5))
+})
+
 hm_sen_score <- Heatmap(sen_score,name = "Senescence",
                         col = colorRamp2(c(0, max(sen_score)), c("white", "purple")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
-                          grid.text(sprintf("%.1f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))},
+                          grid.text(sprintf("%.2f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))},
                         cluster_columns = FALSE)
 
 hm_rsi <- Heatmap(rsi,name = "RSI",
                         col = colorRamp2(c(0, min(rsi), max(rsi)), c("white", "grey", "black")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
-                          grid.text(sprintf("%.1f", rsi[i, j]), x, y, gp = gpar(fontsize = 5))},
+                          grid.text(sprintf("%.2f", rsi[i, j]), x, y, gp = gpar(fontsize = 5))},
                         cluster_columns = FALSE)
 
 hm_p11 <- Heatmap(p11,name = "P12",
-                        col = colorRamp2(c(0,min(p11), max(p11)), c("blue", "white","green")),
+                        col = colorRamp2(c(0, max(p11)), c( "white","green")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
-                          grid.text(sprintf("%.1f", p11[i, j]), x, y, gp = gpar(fontsize = 5))},
+                          grid.text(sprintf("%.2f", p11[i, j]), x, y, gp = gpar(fontsize = 5))},
                         cluster_columns = FALSE)
 
+# Load necessary libraries
+library(circlize)
+
+# Initialize an empty heatmap list
 hm_classification_list <- NULL
 set.seed(7)
-for (n in 1:(ncol(classification))) {
-  hm_classification <- Heatmap(as.matrix(classification[,n,drop = FALSE]),name = colnames(classification)[n],na_col = "black")
-  hm_classification_list <- hm_classification_list + hm_classification
+# Create heatmaps with the custom color scale for numeric columns
+for (n in 1:ncol(classification)) {
+  if (is.numeric(classification[, n])) {
+    max_value <- max(classification[, n], na.rm = TRUE)
+    custom_color_scale <- colorRamp2(c(0, max_value), c("white", "blue"))
+    
+    hm_classification <- Heatmap(as.matrix(classification[, n, drop = FALSE]),
+                                 name = colnames(classification)[n],
+                                 na_col = "black",
+                                 col = custom_color_scale)
+  } else {
+    hm_classification <- Heatmap(as.matrix(classification[, n, drop = FALSE]),
+                                 name = colnames(classification)[n],
+                                 na_col = "black")
+  }
+  
+  if (is.null(hm_classification_list)) {
+    hm_classification_list <- hm_classification
+  } else {
+    hm_classification_list <- hm_classification_list + hm_classification
+  }
 }
-```
-```{r}
-(as.matrix(classification[,12,drop = FALSE]))
-hm_classification_list
+
 ```
 
-```{r}
-hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
 
-hm <- hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11 + hm_classification_list
+```{r}
+#hm_cellstate_control + hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
+
+hm <- hm_cellstate_control + hm_pathway_control +hm_neurodevelopmental_control + hm_sen_score + hm_rsi + hm_p11 + hm_classification_list
+
+hm
 ```
 
 
@@ -191,19 +238,105 @@ draw(hm, merge_legend = TRUE, heatmap_legend_side = "bottom",
 dev.off()
 ```
 
+
 ```{r}
-p11_orig[,c("cell_id_Yossawat","P12")]
-annotation <- merge(annotation,p11_orig[,c("cell_id_Yossawat","P12")], by = "cell_id_Yossawat")
-tibble::rownames_to_column(classification,var = "donor_id")
-annotation_classification <- merge(annotation,
-      tibble::rownames_to_column(classification,var = "donor_id"),
-      by = "donor_id",
-      all.x = TRUE)
+library(ggsankey)
+library(ggplot2)
+#sankey for classification
+all.sankey <- annotation[,c("consensus","neurodevelopmental","pathway")]
+setnames(all.sankey,"consensus","cellstate")
+
+df <- all.sankey %>%
+  make_long(colnames(all.sankey))
+
+# Chart 1
+pl <- ggplot(df, aes(
+  x = x,
+  next_x = next_x,
+  node = node,
+  next_node = next_node,
+  fill = factor(node),
+  label = node
+))
+pl <- pl + geom_sankey(
+  flow.alpha = 0.5,
+  node.color = "black",
+  show.legend = FALSE
+)
+pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+pl <- pl + theme_bw()
+pl <- pl + theme(legend.position = "none")
+pl <- pl + theme(
+  axis.title = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks = element_blank(),
+  panel.grid = element_blank()
+)
+
+# pl <- pl + scale_fill_viridis_d(option = "inferno")
+#pl <- pl + labs(title = paste(object, sig,run, unknown,sep = "; "))
+pl <- pl + labs(fill = "Nodes")
+pl
+
 ```
 ```{r}
-annotation_classification
+#sankey for classification
+all.sankey_all <- annotation[,c("donor_id","radiation","consensus","neurodevelopmental","pathway")]
+setnames(all.sankey_all,"consensus","cellstate")
+
+sankey_list <- list()
+
+for (donor_id_i in sort(unique(all.sankey_all$donor_id))) {
+  for (radiation_i in sort(unique(all.sankey_all$radiation))) {
+    all.sankey <- all.sankey_all[donor_id == donor_id_i & radiation == radiation_i,c("cellstate","neurodevelopmental","pathway")]
+    df <- all.sankey %>%
+    make_long(colnames(all.sankey))
+  
+  # Chart 1
+    pl <- ggplot(df, aes(
+      x = x,
+      next_x = next_x,
+      node = node,
+      next_node = next_node,
+      fill = factor(node),
+      label = node
+    ))
+    pl <- pl + geom_sankey(
+      flow.alpha = 0.5,
+      node.color = "black",
+      show.legend = FALSE
+    )
+    pl <- pl + geom_sankey_label(size = 2, color = "black", fill = "white")
+    pl <- pl + theme_bw()
+    pl <- pl + theme(legend.position = "none")
+    pl <- pl + theme(
+      axis.title = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      panel.grid = element_blank()
+    )
+    
+    # pl <- pl + scale_fill_viridis_d(option = "inferno")
+    pl <- pl + labs(title = paste(donor_id_i,radiation_i,sep = "; "))
+    pl <- pl + labs(fill = "Nodes")
+    sankey_list[[paste(donor_id_i,radiation_i)]]<- pl
+    }
+}
+sankey_list
 ```
-#transvere cellstate heatmap  -->
+```{r}
+library(patchwork)
+sankey_each_combined <- patchwork::wrap_plots(sankey_list) 
+plot(sankey_each_combined)
+```
+
+```{r}
+png( "figure/sankey_consensus_compare.png",width=60,height=40,units="cm",res=300)
+plot(sankey_each_combined)
+dev.off()
+```
+
+#archeived: transvere cellstate heatmap  -->
 <!-- ```{r} -->
 <!-- library(tidyr) -->
 <!-- annotation_score <- annotation_classification %>%  -->
@@ -368,7 +501,17 @@ annotation_classification
 <!-- hm_sen_score -->
 <!-- hm_pathway_control + hm_sen_score + hm_rsi + hm_p11 -->
 <!-- ``` -->
+
 #Try
+```{r}
+annotation <- merge(annotation,p11_orig[,c("cell_id_Yossawat","P12")], by = "cell_id_Yossawat")
+tibble::rownames_to_column(classification,var = "donor_id")
+annotation_classification <- merge(annotation,
+      tibble::rownames_to_column(classification,var = "donor_id"),
+      by = "donor_id",
+      all.x = TRUE)
+```
+
 ```{r}
 library(tidyr)
 sen_score_control <- annotation %>% group_by(consensus,radiation) %>% filter(radiation == "control") %>%
@@ -428,36 +571,61 @@ pathway_radiated <- pathway[radiation == "radiated", -"radiation"] %>% tibble::c
 
 pathway_control
 ```
+```{r}
+neurodevelopmental <- dcast(annotation,formula = consensus + radiation ~ neurodevelopmental)
+
+
+
+neurodevelopmental <- cbind(neurodevelopmental[,1:2],t(apply(neurodevelopmental[,3:7],1,FUN = function(x) x / sum(x))))
+
+neurodevelopmental_control <- neurodevelopmental[radiation == "control", -"radiation"] %>% tibble::column_to_rownames(var = "consensus")
+
+neurodevelopmental_radiated <- neurodevelopmental[radiation == "radiated", -"radiation"] %>% tibble::column_to_rownames(var = "consensus") 
+
+neurodevelopmental_control
+```
 
 ```{r}
 
 hm_pathway_control <- Heatmap(pathway_control,name = "Pathway\n (Control)",col = colorRamp2(c(0, 1), c("white", "red")),
                               cell_fun = function(j, i, x, y, width, height, fill) {
-        grid.text(sprintf("%.1f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5))
+        grid.text(sprintf("%.2f", pathway_control[i, j]), x, y, gp = gpar(fontsize = 5))
+})
+
+
+hm_neurodevelopmental_control <- Heatmap(neurodevelopmental_control,name = "neurodevelopmental\n (Control)",col = colorRamp2(c(0, 1), c("white", "blue")),
+                              cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.2f", neurodevelopmental_control[i, j]), x, y, gp = gpar(fontsize = 5))
 })
 
 hm_sen_score <- Heatmap(sen_score,name = "Senescence",
                         col = colorRamp2(c(0, max(sen_score)), c("white", "purple")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
-                          grid.text(sprintf("%.1f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))},
+                          grid.text(sprintf("%.2f", sen_score[i, j]), x, y, gp = gpar(fontsize = 5))},
                         cluster_columns = FALSE)
 
 hm_rsi <- Heatmap(rsi,name = "RSI",
-                        col = colorRamp2(c(0, min(rsi), max(rsi)), c("white", "grey", "black")),
+                        col = colorRamp2(c(0, min(rsi), max(rsi)), c("white", "grey50", "black")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
-                          grid.text(sprintf("%.1f", rsi[i, j]), x, y, gp = gpar(fontsize = 5))},
+                          grid.text(sprintf("%.2f", rsi[i, j]), x, y, gp = gpar(fontsize = 5,col = "white"))},
                         cluster_columns = FALSE)
 
 hm_p11 <- Heatmap(p11,name = "P12",
-                        col = colorRamp2(c(0,min(p11), max(p11)), c("blue", "white","green")),
+                        col = colorRamp2(c(0,min(p11), max(p11)), c("white","grey50","black")),
                         cell_fun = function(j, i, x, y, width, height, fill) {
-                          grid.text(sprintf("%.1f", p11[i, j]), x, y, gp = gpar(fontsize = 5))},
+                          grid.text(sprintf("%.2f", p11[i, j]), x, y, gp = gpar(fontsize = 5,col = "white"))},
                         cluster_columns = FALSE)
 ```
 ```{r}
-
-hm_pathway_control + hm_sen_score + hm_rsi + hm_p11
+hm_trans <- hm_pathway_control + hm_neurodevelopmental_control + hm_sen_score + hm_rsi + hm_p11
 ```
+```{r}
+png( "figure/hm_4cellstates_transpose.png",width=20,height=12,units="cm",res=300)
+draw(hm_trans, merge_legend = TRUE, heatmap_legend_side = "right", 
+    annotation_legend_side = "right")
+dev.off()
+```
+
 
 #Add information from Lucy
 ```{r}
@@ -467,9 +635,7 @@ gbm_line_13 <- readxl::read_xlsx("data/GSC_lines_310324.xlsx",sheet = 2)
 gbm_line_13
 ```
 
-```{r}
 
-```
 ```{r}
 ggplot(gbm_line_13,aes(x= doubling_time_hour,y=tumour_formation_month,shape = primary_recurrent,col = MGMT_promoter_methylation
 )) + geom_point()

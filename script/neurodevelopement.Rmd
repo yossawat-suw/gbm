@@ -1,4 +1,5 @@
 ```{r}
+#devtools::install_github('immunogenomics/presto')
 library(pacman)
 p_load(R.matlab,
        Seurat,
@@ -267,14 +268,32 @@ qsave(seurat_obj, "output/seurat_objects/neurodevelopmental_filtered.qs")
 #processing and visualization
 ```{r}
 library(pacman)
-p_load(qs,Seurat)
+
+p_load(qs,Seurat,ggplot2)
 seurat_obj <- qread( "output/seurat_objects/neurodevelopmental_filtered.qs")
+```
+
+#all sample
+```{r}
+#seem like the full object keep breaking, therefore we gonna use just the one with annotation so code below is unused now
+
 ```
 
 ```{r}
 seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+```
+
+```{r}
+gc()
+```
+
+```{r}
 all.genes <- rownames(seurat_obj)
 seurat_obj <- ScaleData(seurat_obj, features = all.genes)
+```
+
+```{r}
+gc()
 ```
 
 ```{r}
@@ -299,7 +318,6 @@ gc()
 
 ```{r}
 seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
-
 ```
 
 ```{r}
@@ -309,4 +327,189 @@ gc()
 ```{r}
 seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
 ```
+
+```{r}
+gc()
+```
+
+#subset sample
+```{r}
+seurat_obj@meta.data$cell_type[is.na(seurat_obj@meta.data$cell_type)] <- "no_data"
+
+table(seurat_obj@meta.data$cell_type)
+
+Idents(seurat_obj) <- "cell_type"
+seurat_obj <- subset(seurat_obj,idents = "no_data",invert = TRUE)
+
+seurat_obj$assignment <- seurat_obj$cell_type
+seurat_obj$assignment[!(seurat_obj$assignment == "Unassigned")] <- "Assigned"
+```
+
+```{r}
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+all.genes <- rownames(seurat_obj)
+```
+
+```{r}
+gc()
+```
+
+```{r}
+seurat_obj <- ScaleData(seurat_obj, features = all.genes)
+```
+
+```{r}
+gc()
+```
+
+```{r}
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000)
+```
+
+
+```{r}
+# # Identify the 10 most highly variable genes
+# top10 <- head(VariableFeatures(seurat_obj), 10)
+# 
+# # plot variable features with and without labels
+# plot1 <- VariableFeaturePlot(seurat_obj)
+# plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+# plot1 + plot2
+```
+
+
+```{r}
+seurat_obj <- RunPCA(seurat_obj, features = VariableFeatures(object = seurat_obj))
+```
+
+```{r}
+gc()
+```
+
+```{r}
+set.seed(7)
+seurat_obj <- RunUMAP(seurat_obj, dims = 1:10)
+```
+
+```{r}
+gc()
+```
+
+
+```{r}
+DimPlot(seurat_obj,group.by = "cell_type")
+ggsave("")
+```
+```{r}
+DimPlot(seurat_obj,group.by = "cell_type",split.by = "assignment")
+```
+
+#export annotated object (with count only)
+```{r}
+
+seurat_export <- DietSeurat(seurat_obj,assays = "RNA",layers = c("counts"))
+seurat_export <- CreateSeuratObject(counts = seurat_obj[["RNA"]]$counts,meta.data = seurat_obj@meta.data)
+
+qsave(seurat_export,file = "output/seurat_objects/neurodevelopmental_annotated.qs")
+```
+
+#Build new geneset
+```{r}
+library(ggvenn)
+library(Seurat)
+library(qs)
+
+#this is seurat 5 object
+
+neurodev <- qread(file = "output/seurat_objects/neurodevelopmental_annotated.qs")
+
+neurodev
+```
+
+
+
+
+
+
+
+```{r}
+
+
+neurodev.pseudo <- AggregateExpression(neurodev,return.seurat = TRUE,group.by = c("sample_name","cell_type"),assays = "RNA")
+
+Idents(neurodev.pseudo) <- "cell_type"
+
+bulk.deg.list <- list()
+cellstates <-unique(neurodev.pseudo$cell_type)
+bulk.deg.list <- list()
+for (i in cellstates) {
+  bulk.deg <- FindMarkers(object = neurodev.pseudo, 
+                         ident.1 = i,
+                       only.pos = TRUE)
+  bulk.deg$fdr <- p.adjust(bulk.deg$p_val,method = "fdr")
+  bulk.deg.list[[i]] <- bulk.deg
+} 
+
+# npc.deg <- FindMarkers(object = neurodev.pseudo, 
+#                          ident.1 = "NPClike",
+#                        only.pos = TRUE)
+# opc.deg <- FindMarkers(object = neurodev.pseudo, 
+#                          ident.1 = "OPClike",
+#                        only.pos = TRUE)
+# ac.deg <- FindMarkers(object = neurodev.pseudo, 
+#                          ident.1 = "AClike",
+#                        only.pos = TRUE)
+# mes.deg <- FindMarkers(object = neurodev.pseudo, 
+#                          ident.1 = "MESlike",
+#                        only.pos = TRUE)
+
+
+bulk.deg.list
+```
+
+
+
+```{r}
+#filter(avg_log2FC >1 & fdr < 0.05)  and slice top 50
+bulk.deg.list.filter <- lapply(bulk.deg.list,function(x){
+  x <- x %>%
+    filter(avg_log2FC >1 & fdr < 0.05) %>% 
+    arrange(fdr) %>%
+    slice(1:50)
+}) 
+bulk.deg.list.filter
+```
+
+
+```{r}
+bulk.deg.list.filter.genes <- lapply(bulk.deg.list.filter,rownames)
+```
+
+```{r}
+vein <- ggvenn(bulk.deg.list.filter.genes)
+vein <- vein + labs(title = "New")
+vein
+```
+
+```{r}
+qsave(bulk.deg.list.filter.genes, file = "output/signature/signature_neurodev_bulk.qs")
+```
+
+```{r}
+library(stringi)
+
+
+signatures.bulk.df <- data.frame(stri_list2matrix(bulk.deg.list.filter.genes))
+colnames(signatures.bulk.df) <- names(bulk.deg.list.filter.genes)
+
+
+```
+```{r}
+write.csv(signatures.bulk.df[,1:ncol(signatures.bulk.df)-1], file = paste0("output/signature/signature_subtype_", "neurodev","_","bulk", ".csv"), row.names = FALSE)
+```
+
+
+
+
+
 
