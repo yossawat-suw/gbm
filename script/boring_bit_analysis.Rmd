@@ -5,6 +5,7 @@ library(Seurat)
 library(parallel)
 library(future)
 library(future.apply)
+
 ```
 
 ```{r}
@@ -62,11 +63,11 @@ gc()
 
 
 ```{r}
-saveRDS(radiated.marker.list,"output/deg_each.rds")
+#saveRDS(radiated.marker.list,"output/deg_gsea/deg_each.rds")
 ```
 
 ```{r}
-radiated.marker.list <- readRDS("output/deg_each.rds")
+radiated.marker.list <- readRDS("output/deg_gsea/deg_each.rds")
 ```
 
 
@@ -198,52 +199,140 @@ rank_agg_count
 ```{r}
 plot(rank_agg_count$Score,rank_agg_count$count)
 ```
-<!-- #GSEA -->
-<!-- ```{r} -->
-<!-- #devtools::install_github("ncborcherding/escape") -->
-<!-- library(escape) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- #BiocManager::install("scRepertoire") -->
-<!-- library(scRepertoire) -->
-<!-- scRep_example <- scRepertoire::screp_example -->
-<!-- table(scRep_example@meta.data$Patient) -->
-<!-- scRep_example <- subset(scRep_example, Patient %in% c("PX", "PY")) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- GS.hallmark <- getGeneSets(library = "H") -->
-
-<!-- data("escape.gene.sets", package="escape") -->
-<!-- gene.sets <- escape.gene.sets -->
 
 
+#GSEA
+```{r}
+# devtools::install_github("ncborcherding/escape",force = TRUE)
+library(escape)
+```
 
-<!-- sen_lucy <- read.csv("data/lucy_senesence_genes.csv") -->
-<!-- sen_lucy <- colnames(sen_lucy) -->
+```{r}
+#BiocManager::install("scRepertoire")
+# library(scRepertoire)
+# scRep_example <- scRepertoire::screp_example
+# table(scRep_example@meta.data$Patient)
+# scRep_example <- subset(scRep_example, Patient %in% c("PX", "PY"))
+```
 
-<!-- sen_mayo <- readxl::read_xlsx("data/gene_set/senmayo.xlsx") -->
-<!-- sen_mayo <- sen_mayo$`Gene(human)` -->
+```{r}
+GS.hallmark <- getGeneSets(library = "H")
+
+data("escape.gene.sets", package="escape")
+gene.sets <- escape.gene.sets
 
 
-<!-- gen.sets_manual <- list(sen_lucy = sen_lucy, -->
-<!--                         sen_mayo = sen_mayo) -->
 
-<!-- length(GS.hallmark) -->
-<!-- length(gene.sets) -->
-<!-- length(gen.sets_manual) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- names(GS.hallmark) -->
-<!-- names(gene.sets) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- install.packages("pathfindR") -->
-<!-- library(pathfindR) -->
-<!-- knitr::kable(head(example_pathfindR_input)) -->
+sen_lucy <- read.csv("data/lucy_senesence_genes.csv")
+sen_lucy <- colnames(sen_lucy)
 
-<!-- BiocManager::install(version = "3.18") -->
-<!-- sessionInfo() -->
-<!-- ``` -->
+sen_mayo <- readxl::read_xlsx("data/gene_set/senmayo.xlsx")
+sen_mayo <- sen_mayo$`Gene(human)`
+
+
+gen.sets_manual <- list(sen_lucy = sen_lucy,
+                        sen_mayo = sen_mayo)
+
+# length(GS.hallmark)
+# length(gene.sets)
+# length(gen.sets_manual)
+
+gs_all <- c(GS.hallmark,gene.sets,gen.sets_manual)
+
+gs_all
+```
+```{r}
+names(GS.hallmark)
+names(gene.sets)
+```
+```{r}
+gc()
+```
+
+
+```{r}
+gbm.each.sce <- Seurat::as.SingleCellExperiment(gbm.list$E55N,assay = "RNA")
+enrichment.scores <- escape.matrix(gbm.each.sce, 
+                                   gene.sets = GS.hallmark, 
+                                   groups = 1000, 
+                                   min.size = 5, 
+                                   BPPARAM = SnowParam(workers = 2))
+
+```
+```{r}
+library(ggplot2)
+ggplot(data = as.data.frame(enrichment.scores), 
+      mapping = aes(enrichment.scores[,1], enrichment.scores[,2])) + 
+  geom_point() + 
+  theme_classic() + 
+  theme(axis.title = element_blank())
+```
+
+```{r}
+gbm.each.sce <- runEscape(gbm.each.sce, 
+                        method = "ssGSEA",
+                        gene.sets = gs_all, 
+                        groups = 1000, 
+                        min.size = 5,
+                        new.assay.name = "escape.ssGSEA")
+```
+
+
+```{r}
+gbm.each.sce <- performNormalization(gbm.each.sce, 
+                                   assay = "escape.ssGSEA", 
+                                   gene.sets = gs_all)
+
+```
+
+```{r}
+Idents(gbm.each.sce) <- "radiation"
+heatmapEnrichment(gbm.each.sce, 
+                  group.by = "radiation",
+                  gene.set.use = "all",
+                  assay = "escape.ssGSEA",facet.by = "split")
+```
+```{r}
+gbm.sce.list <- lapply(gbm.list, as.SingleCellExperiment,assay = "RNA")
+
+rm(gbm.list)
+gc()
+
+gbm.sce.list <- lapply(gbm.sce.list,function(x) {
+  runEscape(x, 
+      method = "ssGSEA",
+      gene.sets = gs_all, 
+      groups = 1000, 
+      min.size = 5,
+      new.assay.name = "escape.ssGSEA",
+      BPPARAM = SnowParam(workers = (parallel::detectCores() - 3))
+    )
+})
+
+gc()
+
+
+saveRDS(gbm.sce.list,file = "output/deg_gsea/gbm_sce_list.rds")
+```
+```{r}
+future::plan(multicore, workers = parallel::detectCores() - 3)
+gbm.sce.list <- future_lapply(gbm.sce.list,function(x) {
+  performNormalization(x, 
+                       assay = "escape.ssGSEA",
+                       gene.sets = gs_all)
+},future.seed = TRUE)
+
+
+```
+
+```{r}
+library(SingleCellExperiment)
+gbm.sce <- Reduce(cbind,gbm.sce.list)
+
+```
+
+```{r}
+gc()
+```
+
 
