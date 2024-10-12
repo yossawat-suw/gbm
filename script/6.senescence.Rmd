@@ -1,3 +1,7 @@
+```{r}
+install.packages("rstatix")
+install.packages("ggpubr")
+```
 
 #Calculate score and 95% for each patient (9 Oct 2023)
 ```{r}
@@ -38,7 +42,7 @@ run_each <- run_eachs[1]
 
 #choose what to analyse
 
-pick <- 4
+pick <- 9
 
 merge <- merges[pick]
 
@@ -101,12 +105,12 @@ library(data.table)
 ```
 
 ```{r}
-sen_score <- fread(file = "output/sen_score.csv",data.table = FALSE)
+sen_score <- fread(file = "output/score/sen_score.csv",data.table = FALSE)
 sen_score  <- column_to_rownames(sen_score,var = "V1")
 ```
 
 ```{r}
-anno.all.short <- fread(file = paste("output/annotation/annotation_short",merge,run,unknown,".csv",sep = "_"))
+anno.all.short <- fread(file = paste("output/consensus/annotation_short",merge,run,unknown,".csv",sep = "_"))
 anno.all.short_edited <- column_to_rownames(anno.all.short,var = "rn")
 
 
@@ -155,6 +159,9 @@ library(ggpubr)
 library(dplyr)
 ```
 
+```{r}
+confidence_threshold = 0
+```
 
 ```{r}
 plot_cellstate_prepost_per_donor <- function(anno.senesence, confidence_threshold = 0,ref.group = NULL) {
@@ -182,9 +189,11 @@ plot_cellstate_prepost_per_donor <- function(anno.senesence, confidence_threshol
   plot <- bxp + 
     stat_pvalue_manual(
       stat.test, label = "p.adj.signif", 
-      hide.ns = TRUE
-    ) + labs(title = "Senscore difference among cellstates pre-post radiation",subtitle = "per each donor", caption = "pairwise mann whitney u test with bonferroni adjustment (alpha error = 0.05) \n Not significant pairs are hidden.") +
-    scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere
+      hide.ns = TRUE,
+    ) + labs(title = "Senscore difference among cellstates pre-post radiation",subtitle = "per each donor", caption = "pairwise mann whitney u test with bonferroni adjustment (alpha error = 0.05) \n Not significant pairs are hidden.") 
+  
+  # plot <- plot  +
+  #   scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere
   
   return(plot)
 }
@@ -241,8 +250,10 @@ plot_cellstate_prepost<- function(anno.senesence, confidence_threshold = 0,ref.g
     stat_pvalue_manual(
       stat.test, label = "p.adj.signif", tip.length = 0.01,
       hide.ns = TRUE
-    ) + labs(title = "Senscore difference among cellstates pre-post radiation", caption = "pairwise mann whitney u test with bonferroni adjustment (alpha error = 0.05) \n Not significant pairs are hidden.") +
-    scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere
+    ) + labs(title = "Senscore difference among cellstates pre-post radiation", caption = "pairwise mann whitney u test with bonferroni adjustment (alpha error = 0.05) \n Not significant pairs are hidden.") 
+  
+  # plot <- plot +
+  #   scale_fill_manual(values = cellstate_colors)  # Assuming cellstate_colors is defined elsewhere
   return(plot)
 }
 ```
@@ -262,16 +273,26 @@ p4_0.5
 
 ```{r}
 #Find the median 
-sen_score_average <- anno.senesence %>% group_by(consensus,donor_id,radiation) %>% summarise(median = median(sen_score),
-                                                                                             mean = mean(sen_score)) %>% ungroup()
+sen_score_average <- anno.senesence %>% group_by(consensus,donor_id,radiation) %>% summarise(median_sen_score = median(sen_score),
+                                                                                             mean_sen_score = mean(sen_score)) %>% ungroup()
 ``` 
 
 ```{r}
 sen_score_average %>% filter(radiation == "control") %>%
-  ggplot(data = ., aes(x=donor_id,y= median,fill = consensus,color = consensus,group = consensus)) +
+  ggplot(data = ., aes(x=donor_id,y= median_sen_score,fill = consensus,color = consensus,group = consensus)) +
+  geom_point() + geom_line() + theme_classic()
+```
+```{r}
+sen_score_average %>% filter(radiation == "control") %>%
+  ggplot(data = ., aes(x=donor_id,y= mean_sen_score,fill = consensus,color = consensus,group = consensus)) +
   geom_point() + geom_line() + theme_classic()
 ```
 
+```{r}
+sen_score_average  %>%
+  ggplot(data = ., aes(x=donor_id,y= mean_sen_score,fill = consensus,color = consensus,group = consensus)) +
+  geom_point() + geom_line() + theme_classic() + facet_wrap(~radiation)
+```
 
 
 
@@ -398,6 +419,15 @@ sig.inc <- stat.test_median  %>% group_by(consensus) %>%
 
 sig.inc
 ```
+```{r}
+table(annotation$radiation,annotation$donor_id,annotation$consensus)
+```
+```{r}
+table(annotation$radiation,annotation$consensus)
+```
+```{r}
+table(annotation$radiation,annotation$consensus,annotation$donor_id)
+```
 
 
 ```{r}
@@ -439,12 +469,6 @@ gp.prop.table <- gtable_add_grob(x = gp.prop,
 ```{r}
 ggsave(plot = gp.prop.table, filename = "prepost_sen_score_cellstate_perdonor_withtable.png",path = "figure/",width =15,height = 15)
 ```
-
-
-
-
-
-
 
 
 

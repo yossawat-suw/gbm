@@ -17,6 +17,12 @@ library(here)
 setwd(here())
 ```
 
+```{r}
+# install.packages(c("SCINA","scSorter"))
+# install.packages("BiocManager")
+# BiocManager::install("preprocessCore",force = TRUE)
+install.packages("writexl")
+```
 
 ```{r}
 library(ggplot2)
@@ -27,6 +33,8 @@ library(tibble)
 library(patchwork)
 library(parallel)
 library(purrr)
+library(tibble)
+library(writexl)
 
 source("script/function.R")
 ```
@@ -36,7 +44,15 @@ source("script/function.R")
 # Parameter
 # Select the signature to be used
 # if it is new one, can add into the list but keep in mind to run the preprocessing of the signatures in the next chunk because it need to be preprocessed into xlsx file first
-sigs <- c( "4metamodules_new_50_mes","2metamodules_NPC_OPC", "3metamodules_new_50", "4metamodules_new_50","npcopc_ac_mes","npcopc_acmes","4pathways","neurodev_bulk")
+sigs <- c( "4metamodules_new_50_mes",
+           "2metamodules_NPC_OPC", 
+           "3metamodules_new_50",
+           "4metamodules_new_50",
+           "npcopc_ac_mes",
+           "npcopc_acmes",
+           "4pathways",
+           "neurodev_bulk",
+           "vc_common")
 run_eachs <- c(TRUE,FALSE)
 runs <- c("each","whole")
 #signatures.gen <- c("signature_new","signature_bulk")
@@ -46,7 +62,7 @@ runs <- c("each","whole")
 
 
 ```{r}
-sig <- sigs[8]
+sig <- sigs[7]
 sig
 
 # cell input to be analyse
@@ -62,30 +78,6 @@ if (run_each) {
   run <- runs[2]
 }
 ```
-
-
-# load gbm
-```{r}
-
-gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
-
-if (run_each) {
-  gbm.list.original <- SplitObject(gbm, split.by = "split")
-
-  gbm.list.original[["run2_radiated_E31N"]] <- merge(gbm.list.original[["run2_radiated_E31N"]], y=gbm.list.original[["run1_radiated_E31N"]])
-  gbm.list.original[["run2_control_E31N"]] <- merge(gbm.list.original[["run2_control_E31N"]], y=gbm.list.original[["run1_control_E31N"]])
-  gbm.list.original[["run2_radiated_E26N"]] <- merge(gbm.list.original[["run2_radiated_E26N"]], y=gbm.list.original[["run1_radiated_E26N"]])
-  gbm.list.original[["run2_radiated_E24N"]] <- merge(gbm.list.original[["run2_radiated_E24N"]], y=gbm.list.original[["run1_radiated_E24N"]])
-  gbm.list.original[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
-} else {
-  gbm.list.original <- list(all = gbm)
-}
-
-rm(gbm)
-
-```
-
-
 
 
 #signature preprocessing
@@ -156,25 +148,54 @@ signatures.split <- lapply(signatures.split, FUN = function(x) {
   x <- rownames_to_column(x, var = "celltype")
 })
 
-library(tibble)
 sig.markercount <- signatures.split %>% reduce(full_join, by = "celltype")
 sig.markercount <- sig.markercount %>% column_to_rownames(var = "celltype")
 
 # Save to xlsx to be used later
-writexl::write_xlsx(signatures.sctype, path = paste0("data/gbm_", sig, "_sctype.xlsx"))
-writexl::write_xlsx(signatures.scsorter, path = paste0("data/gbm_", sig, "_scsorter.xlsx"))
+write_xlsx(signatures.sctype, path = paste0("data/gbm_", sig, "_sctype.xlsx"))
+write_xlsx(signatures.scsorter, path = paste0("data/gbm_", sig, "_scsorter.xlsx"))
 
 sig.markercount <- rownames_to_column(sig.markercount, var = "celltype")
-writexl::write_xlsx(sig.markercount, path = paste0("data/gbm_", sig, "_markercount.xlsx"))
+write_xlsx(sig.markercount, path = paste0("data/gbm_", sig, "_markercount.xlsx"))
 
-writexl::write_xlsx(signatures.scid, path = paste0("data/gbm_", sig, "_scID.xlsx"))
+write_xlsx(signatures.scid, path = paste0("data/gbm_", sig, "_scID.xlsx"))
 ```
+
+
+
+# load gbm
+```{r}
+
+gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
+
+if (run_each) {
+  gbm.list.original <- SplitObject(gbm, split.by = "split")
+
+  gbm.list.original[["run2_radiated_E31N"]] <- merge(gbm.list.original[["run2_radiated_E31N"]], y=gbm.list.original[["run1_radiated_E31N"]])
+  gbm.list.original[["run2_control_E31N"]] <- merge(gbm.list.original[["run2_control_E31N"]], y=gbm.list.original[["run1_control_E31N"]])
+  gbm.list.original[["run2_radiated_E26N"]] <- merge(gbm.list.original[["run2_radiated_E26N"]], y=gbm.list.original[["run1_radiated_E26N"]])
+  gbm.list.original[["run2_radiated_E24N"]] <- merge(gbm.list.original[["run2_radiated_E24N"]], y=gbm.list.original[["run1_radiated_E24N"]])
+  gbm.list.original[c("run1_radiated_E24N","run1_radiated_E26N","run1_control_E31N","run1_radiated_E31N")] <- NULL
+} else {
+  gbm.list.original <- list(all = gbm)
+}
+
+rm(gbm)
+
+```
+
+
+
+
 
 
 
 ##tools
 #Sc-type
 ```{r}
+#install.packages("HGNChelper")
+#install.packages("openxlsx")
+
 library(HGNChelper)
 
 # Sctype
@@ -281,9 +302,12 @@ gc()
 
 
 
+
 #SCINA
 ```{r}
 library(SCINA)
+
+#BiocManager::install("preprocessCore")
 library(preprocessCore)
 
 #marker based
@@ -300,15 +324,20 @@ gbm.list <- gbm.list.original
 
 
 
+
 ```{r}
 gbm.list.res <- mclapply(gbm.list,mc.cores = 2, FUN = function(x){
-#gbm.list.res <- lapply(gbm.list,FUN = function(x){ 
-  #x <- gbm.list[[1]]
-  exp <- log(x@assays$RNA@counts + 1)
-  exp[] = normalize.quantiles(as.matrix(exp))
+# gbm.list.res <- lapply(gbm.list,FUN = function(x){ 
+# x <- gbm.list[[1]]
+  exp <- log(x@assays$RNA@counts + 1) # log norm 
+  exp[] = normalize.quantiles(as.matrix(exp)) # if it error this step, follow this https://github.com/Bioconductor/bioconductor_docker/issues/22 . Also instill it within rstudio
   results = SCINA(exp, signatures.scina, rm_overlap=FALSE, allow_unknown=TRUE)
   return(results)
 })
+```
+
+```{r}
+# 
 ```
 
 ```{r}
@@ -346,7 +375,8 @@ gc()
 
 #scSorter -->
 ```{r}
-library(scSorter)
+#library(scSorter)
+library(scSorterEdited)
 #Load annotation
 
 anno <- as.data.frame(read_xlsx(paste0("data/gbm_",sig,"_scsorter.xlsx")))
@@ -376,9 +406,9 @@ system.time(gbm.list <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = functio
 
 ```{r}
 #system.time(gbm.list.res <- mclapply(X = gbm.list, mc.cores = n.cores, FUN = function(x)  {
-system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
+system.time(gbm.list.res <- lapply(X = gbm.list[1], FUN = function(x)  {
 
-  
+  #x <- gbm.list[[1]]
   topgenes <- head(VariableFeatures(x), 2000)
   # gene expression need to be library normalized and log tranform first! #
   expr = GetAssayData(x, assay = "RNA", layer = "data")
@@ -390,6 +420,8 @@ system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
 
   rts <- scSorter(expr, anno)
   
+  #rts <- scSorter_edited(expr, anno)
+  
   x <- AddMetaData(x,rts$Pred_Type, col.name = "scSorter")
   each.meta <- x@meta.data[c("scSorter")]
   each.meta <- rownames_to_column(each.meta)
@@ -397,7 +429,291 @@ system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
   return(list(rts=rts,each.meta=each.meta))
 }))
 ```
-#scsort:experiment -->
+
+#explore scSorter function -->
+<!-- ```{r} -->
+<!-- scSorter_edited <- function(expr, anno, default_weight = 2, n_start = 10, alpha = 0, u = 0.05, max_iter = 100, setseed = 0){ -->
+<!--   #this is a wrapper function that implements the whole method based on the rest functions. -->
+<!--   #Rfast package is needed to run this method. -->
+<!--   anno_processed = design_matrix_builder_edited(anno, default_weight) -->
+<!--   dt = data_preprocess_edited(expr, anno_processed) -->
+
+<!--   dat = dt[[1]] -->
+<!--   designmat = dt[[2]] -->
+<!--   weightmat = dt[[3]] -->
+
+<!--   c_cost = NULL -->
+<!--   c_mu = list() -->
+<!--   c_clus = list() -->
+
+<!--   for(i in 1:n_start){ -->
+<!--     set.seed(i+setseed) -->
+<!--     t1 = Sys.time() -->
+<!--     pred_ot = update_func(as.matrix(dat), designmat, weightmat, unknown_threshold1 = alpha, unknown_threshold2 = u, max_iter = max_iter) -->
+<!--     t2 = Sys.time() -->
+
+<!--     c_cost = c(c_cost, pred_ot[[3]]) -->
+<!--     c_mu[[i]] = pred_ot[[1]] -->
+<!--     c_clus[[i]] = pred_ot[[2]] -->
+<!--   } -->
+
+<!--   pk = which.min(c_cost) -->
+
+<!--   pred_clus = c_clus[[pk]] -->
+<!--   pred_clus = c(colnames(designmat), rep('Unknown', ncol(designmat)))[pred_clus] -->
+<!--   pred_mu = c_mu[[pk]] -->
+
+<!--   return(list(Pred_Type = pred_clus, Pred_param = pred_mu)) -->
+<!-- } -->
+
+
+<!-- design_matrix_builder_edited <- function(anno, weight){ -->
+<!--   if(weight <= 0)stop(paste('Default weight should be positive instead of the assigned value of ', weight, '.', sep = '')) -->
+
+<!--   colnames(anno) = toupper(colnames(anno)) -->
+
+<!--   if(sum(c('TYPE', 'MARKER') %in% colnames(anno)) == 2) { -->
+<!--     ror = c(which(colnames(anno) == 'TYPE'), which(colnames(anno) == 'MARKER')) -->
+<!--     lidx = c(1:ncol(anno))[!(1:ncol(anno) %in% ror)] -->
+<!--     ror = c(ror, lidx) -->
+<!--     anno = anno[, ror] -->
+<!--   } -->
+
+<!--   celltypes = unique(anno[,1]) -->
+<!--   marker = unique(anno[,2]) -->
+
+<!--   nc = length(celltypes) -->
+<!--   nm = length(marker) -->
+
+<!--   designmat = matrix(0, nm, nc) -->
+
+<!--   nc_anno = ncol(anno) -->
+
+<!--   if (nc_anno == 3) { -->
+<!--     anno[, 3] = as.numeric(anno[, 3]) -->
+<!--     poscheck = (anno[, 3] <= 0) -->
+<!--     if(sum(poscheck) > 0) { -->
+<!--       stop(paste('Please assign positive weights for the following marker genes: \n', -->
+<!--                  paste(sapply(1:nrow(anno), function(x)paste(anno[x, 1], anno[x, 2], sep = ': '))[poscheck], collapse = ', \n'), -->
+<!--                  '.', sep = '')) -->
+<!--     } -->
+<!--     weight = min(anno[, 3]) -->
+<!--   } -->
+
+<!--   weightmat = matrix(weight, nm, nc) -->
+
+<!--   for (i in 1:nrow(anno)) { -->
+<!--     designmat[which(marker == anno[i, 2]), which(celltypes == anno[i, 1])] = 1 -->
+<!--     if (nc_anno == 3) weightmat[which(marker == anno[i, 2]), which(celltypes == anno[i, 1])] = anno[i, 3] -->
+<!--   } -->
+
+<!--   designmat = as.data.frame(designmat, stringsAsFactors = F) -->
+<!--   colnames(designmat) = celltypes -->
+<!--   rownames(designmat) = marker -->
+
+<!--   colnames(weightmat) = celltypes -->
+<!--   rownames(weightmat) = marker -->
+
+<!--   return(list(designmat, weightmat)) -->
+<!-- } -->
+
+<!-- data_preprocess_edited = function(expr, anno_processed) { -->
+<!--   designmat = anno_processed[[1]] -->
+<!--   weightmat = anno_processed[[2]] -->
+
+<!--   rownames(expr) = toupper(rownames(expr)) -->
+<!--   rownames(designmat) = toupper(rownames(designmat)) -->
+
+<!--   markers = rownames(designmat) -->
+
+<!--   markers_avail = markers %in% rownames(expr) -->
+
+<!--   if (sum(markers_avail) < length(markers)) { -->
+<!--     warning(paste('The following specified marker genes are not found from the expression data: ', -->
+<!--                   paste(markers[!markers_avail], collapse = ', '), '.', sep = '')) -->
+
+<!--     designmat = designmat[markers_avail, ,drop =FALSE] -->
+<!--     csdmat = colSums(designmat) -->
+
+<!--     if(sum(csdmat > 0) < ncol(designmat)) { -->
+<!--       stop(paste('None of the marker genes specfied for the following cell types could be found from the expression data: ', -->
+<!--                     paste(colnames(designmat)[csdmat == 0], collapse = ', '), '. \n Please maker sure the marker gene names are correctly specified.', sep = '')) -->
+<!--     } -->
+<!--   } -->
+
+<!--   dmat_gene_names = rownames(designmat) -->
+<!--   dat_gene_names = rownames(expr) -->
+
+<!--   picker = dat_gene_names %in% dmat_gene_names -->
+
+<!--   expr_mk = expr[picker, ] -->
+<!--   expr_rt = expr[!picker,] -->
+
+<!--   #reorder genes so that the order of expr mat and design mat matches -->
+<!--   ror = rep(0, nrow(designmat)) -->
+<!--   for(i in 1:nrow(designmat)){ -->
+<!--     ror[i] = which(rownames(expr_mk) == dmat_gene_names[i]) -->
+<!--   } -->
+<!--   expr_mk = expr_mk[ror,] -->
+
+<!--   expr_cb = rbind(expr_mk, expr_rt) -->
+
+<!--   return(list(dat = expr_cb, designmat = designmat, weightmat = weightmat)) -->
+<!-- } -->
+
+<!-- update_func_edited = function(dat, design_mat, weightmat, unknown_threshold1 = 0, unknown_threshold2 = 0.05, max_iter = 100){ -->
+<!--   cluster = sample(1:ncol(design_mat), ncol(dat), replace = T) -->
+
+<!--   rgwmat = range(weightmat) -->
+<!--   if (rgwmat[1] == rgwmat[2]) { -->
+
+<!--     ldt = nrow(dat) -->
+<!--     lmk = nrow(design_mat) -->
+<!--     marker_w = rep(weightmat[1, 1], lmk) -->
+<!--     rest_w = rep(min(lmk/(ldt-lmk),1), ldt-lmk) -->
+<!--     w = c(marker_w, rest_w) -->
+<!--     dat = dat*sqrt(w) -->
+
+<!--     for(i in 1:max_iter){ -->
+<!--       mu = update_mu(dat, design_mat, cluster) -->
+<!--       cluster_old = cluster -->
+<!--       cluster_ot = update_C(dat, mu, design_mat) -->
+<!--       cluster = cluster_ot[[1]] -->
+<!--       if(sum(cluster != cluster_old)==0){ -->
+<!--         break -->
+<!--       } -->
+<!--     } -->
+<!--   } else { -->
+<!--     ldt = nrow(dat) -->
+<!--     lmk = nrow(design_mat) -->
+<!--     rest_w = rep(min(lmk/(ldt-lmk),1), ldt-lmk) -->
+
+<!--     dat_mk = dat[1:lmk, ] -->
+<!--     dat_rt = dat[(lmk+1):ldt, ] -->
+
+<!--     dat_rt = dat_rt * sqrt(rest_w) -->
+
+<!--     weight_decorator = function(dat_mk, weightmat, clus) { -->
+<!--       uniclus = unique(clus) -->
+<!--       dat_mk2 = dat_mk -->
+
+<!--       for (i in uniclus) { -->
+<!--         marker_w = weightmat[, i] -->
+<!--         dat_mk2[, clus == i] = dat_mk[, clus == i]*sqrt(marker_w) -->
+<!--       } -->
+<!--       return(dat_mk2) -->
+<!--     } -->
+
+<!--     for(i in 1:max_iter){ -->
+<!--       dat2 = rbind(weight_decorator(dat_mk, weightmat, cluster), dat_rt) -->
+<!--       mu = update_mu(dat2, design_mat, cluster) -->
+<!--       cluster_old = cluster -->
+<!--       cluster_ot = update_C(dat2, mu, design_mat) -->
+<!--       cluster = cluster_ot[[1]] -->
+<!--       if(sum(cluster != cluster_old)==0){ -->
+<!--         break -->
+<!--       } -->
+<!--     } -->
+
+<!--     dat = dat2 -->
+<!--   } -->
+
+<!--   cache_mat = cluster_ot[[2]] -->
+<!--   numofmarkergenes = colSums(design_mat) -->
+<!--   numofhighexpmkgenes = sapply(1:nrow(cache_mat), function(x)cache_mat[x,cluster[x]]/numofmarkergenes[cluster[x]]) -->
+<!--   pks = numofhighexpmkgenes <= unknown_threshold1 -->
+
+<!--   cluster_ukn_helper = cluster[pks] -->
+<!--   cluster_ukn = cluster[pks] -->
+
+<!--   cluster_kn = cluster[!pks] -->
+
+<!--   dat_kn_add = dat[(lmk+1):ldt, !pks] -->
+<!--   dat_ukn_add = dat[(lmk+1):ldt, pks, drop = F] -->
+
+<!--   #detect unknown cells from a given cluster. -->
+<!--   #Now we need to determine whether to put those potential unknown cells back to the corresponding cluster. -->
+<!--   #The total cost of two groups of cells (cells of that cluster and unknown cells) should reach a minimum when true unknown cells are picked out while the rest are put back into the cluster. -->
+<!--   #Under chi-square distribution, a cutoff is set to pick out true unknown cells. Since unknown cells are expected to be far away from the samples of that cluster. The search starts from one standard deviation. -->
+<!--   #50 cutoffs are selected and the one leads to the minimum total cost are used as final cutoff. -->
+<!--   unknown_detector = function(dat_kn, dat_ukn){ -->
+<!--     pknz = rowSums(dat_kn != 0) != 0 -->
+<!--     df = sum(pknz) -->
+
+<!--     dat_kn = dat_kn[pknz,] -->
+<!--     dat_ukn = dat_ukn[pknz,] -->
+
+<!--     rm = rowMeans(dat_kn) -->
+<!--     sdr = apply(dat_kn, 1, sd) -->
+
+<!--     dat_kn2 = (dat_kn-rm)/sdr -->
+<!--     dat_ukn2 = (dat_ukn-rm)/sdr -->
+
+<!--     dsdat = colSums(dat_kn2^2) -->
+<!--     dsdatuk = colSums(dat_ukn2^2) -->
+
+<!--     cost_calc2 = function(x){ -->
+<!--       mx = rowMeans(x) -->
+<!--       return(sum((x-mx)^2)) -->
+<!--     } -->
+
+<!--     calc_target2 = function(p){ -->
+<!--       pk = pchisq(dsdatuk,df) <= p -->
+<!--       return(cost_calc2(cbind(dat_kn, dat_ukn[,pk]))+cost_calc2(dat_ukn[,!pk, drop = F])) -->
+<!--     } -->
+
+<!--     pl = c(seq(pchisq(df+sqrt(2*df),df),0.9,length.out = 10),seq(0.9, 0.95, length.out = 11)[2:11], seq(0.95, 0.99, length.out = 11)[2:11], seq(0.99, 1,length.out = 21)[2:21]) -->
+<!--     ot = sapply(pl, calc_target2) -->
+
+<!--     pl_chosen = pl[which.min(ot)[1]] -->
+
+<!--     pkfinal = pchisq(dsdatuk, df) <= pl_chosen -->
+<!--     return(pkfinal) -->
+<!--   } -->
+
+<!--   uni_clus_ukn = unique(cluster_ukn_helper) -->
+
+<!--   nc = ncol(design_mat) -->
+
+<!--   for(ucukn in uni_clus_ukn){ -->
+<!--     #this part could be further modified to account for bad quality clusters -->
+<!--     if(sum(cluster_kn==ucukn) <= max(1, round(unknown_threshold2*(sum(cluster_kn==ucukn)+sum(cluster_ukn_helper==ucukn))))){ -->
+<!--       cluster_ukn[cluster_ukn_helper==ucukn] = nc+ucukn -->
+<!--     }else if(sum(cluster_ukn_helper==ucukn)==1){ -->
+<!--       cluster_ukn[cluster_ukn_helper==ucukn] = nc+ucukn -->
+<!--     }else{ -->
+<!--       uknrt = unknown_detector(dat_kn_add[,cluster_kn == ucukn], dat_ukn_add[,cluster_ukn_helper == ucukn, drop = F]) -->
+<!--       cluster_ukn[cluster_ukn_helper==ucukn][!uknrt] = nc+ucukn -->
+<!--     } -->
+<!--   } -->
+
+<!--   cluster[pks] = cluster_ukn -->
+
+<!--   uniclus = unique(cluster) -->
+
+<!--   for(allclus in 1:max(uniclus)){ -->
+<!--     if(allclus>nc){ -->
+<!--       design_mat[, paste('Unknown_', allclus-nc, sep = '')] = 0 -->
+<!--       if(allclus %in% uniclus){ -->
+<!--         mu = cbind(mu, c(rep(0, lmk), rowMeans(dat_ukn_add[, cluster_ukn == allclus, drop = F]))) -->
+<!--       }else{ -->
+<!--         mu = cbind(mu, rep(0, nrow(mu))) -->
+<!--       } -->
+<!--     }else{ -->
+<!--       if(allclus %in% uniclus){ -->
+<!--         mu[(lmk+1):ldt,allclus] = rowMeans(dat[(lmk+1):ldt, cluster == allclus, drop = F]) -->
+<!--       }else{ -->
+<!--         mu[(lmk+1):ldt,allclus] = rep(0, ldt-lmk) -->
+<!--       } -->
+<!--     } -->
+<!--   } -->
+
+<!--   cost = cost_func(dat, cluster, mu, design_mat) -->
+<!--   return(list(mu, cluster, cost)) -->
+<!-- } -->
+<!-- ``` -->
+
+#scsorter:experiment -->
 <!-- ```{r} -->
 <!-- #Preprocess Data -->
 <!-- ## add drop = FALSE to correct matrix automatic to vector problem -->
@@ -554,7 +870,7 @@ system.time(gbm.list.res <- lapply(X = gbm.list, FUN = function(x)  {
 <!-- designmat -->
 <!-- ``` -->
 
-#scsort:continue
+#scsorter:continue
 ```{r}
 rts.list <- lapply(gbm.list.res, "[[", 1)
 

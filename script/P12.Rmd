@@ -1,0 +1,313 @@
+#calculation -->
+<!-- ```{r} -->
+<!-- library(data.table) -->
+<!-- library(Seurat) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm <- readRDS("output/seurat_gbm_qc") -->
+
+<!-- p12 <- fread("data/pi12.csv") -->
+<!-- p12 <- p12[,.(Genes,`Coefficients of Lasso-Cox Model`)] -->
+<!-- setnames(p12,"Coefficients of Lasso-Cox Model","Coefficients_of_Lasso_Cox_Model") -->
+<!-- p12[,Coefficients_of_Lasso_Cox_Model := as.numeric(Coefficients_of_Lasso_Cox_Model)] -->
+<!-- p12 <- p12[!Coefficients_of_Lasso_Cox_Model == 0,] -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- ggVennDiagram::ggVennDiagram(x= list(post_processed = rownames(gbm), -->
+<!--                                      p12 = p12$Genes)) -->
+<!-- setdiff(p12$Genes,rownames(gbm)) -->
+
+<!-- #so one gene is missing. I check and it was filtered from preprocessing process -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- common_gene <- intersect(p12$Genes,rownames(gbm)) -->
+<!-- p11 <- p12[Genes %in% common_gene] -->
+<!-- p12 -->
+<!-- p11 -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- gc() -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- gbm <- NormalizeData(gbm) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #gbm[["RNA"]]$data -->
+<!-- gem.lognorm.p11 <- (gbm[["RNA"]]$data)[rownames(gbm[["RNA"]]$data) %in% p11$Genes,] -->
+<!-- dim(gem.lognorm.p11) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- p11 <- p11[order(p11$Genes),] -->
+<!-- gem.lognorm.p11 <- gem.lognorm.p11[p11$Genes,] -->
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gem.lognorm.p11_score <- gem.lognorm.p11 * p11$Coefficients_of_Lasso_Cox_Model -->
+<!-- gem.lognorm.p11_score <- colSums(gem.lognorm.p11_score) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- gbm <- NormalizeData(gbm,normalization.method = "RC") -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- #gbm[["RNA"]]$data -->
+<!-- gem.norm.p11 <- (gbm[["RNA"]]$data)[rownames(gbm[["RNA"]]$data) %in% p11$Genes,] -->
+<!-- dim(gem.norm.p11) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- p11 <- p11[order(p11$Genes),] -->
+<!-- gem.norm.p11 <- gem.norm.p11[p11$Genes,] -->
+<!-- p11$Genes == rownames(gem.norm.p11) -->
+
+
+<!-- (p11$Coefficients_of_Lasso_Cox_Model) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- gem.norm.p11_score <- gem.norm.p11 * p11$Coefficients_of_Lasso_Cox_Model -->
+<!-- gem.norm.p11_score <- colSums(gem.norm.p11_score) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- p11_score_df <- data.frame(cell_id = names(gem.p11_score), -->
+<!--                            p11_rc_score = gem.norm.p11_score, -->
+<!--                            p11_lognorm_score = gem.lognorm.p11_score) -->
+<!-- fwrite(p11_score_df,"output/annotation/p11_score.csv",row.names = FALSE) -->
+<!-- ``` -->
+
+#compare RSI to P11
+```{r}
+library(data.table)
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+rsi <- fread("output/score/sen_RSI_cellstate.csv")
+p11 <- fread("output/score/p11_score.csv")
+
+```
+
+```{r}
+setnames(rsi,"cell_id_Yossawat","cell_id")
+```
+
+```{r}
+p11_rsi <- merge(rsi,p11,by = "cell_id")
+p11_rsi
+```
+
+
+```{r}
+p11_rsi <- p11_rsi[,.(cell_id,donor_id,radiation,runs,RSI,p11_rc_score,p11_lognorm_score)]
+p11_rsi
+```
+
+
+```{r}
+hist(p11_rsi$RSI)
+hist(p11_rsi$p11_rc_score)
+hist(p11_rsi$p11_lognorm_score)
+```
+```{r}
+p11_rsi %>% ggplot(aes(y=p11_rc_score,x=radiation)) + geom_violin() + facet_wrap(~donor_id)
+p11_rsi %>% ggplot(aes(y=p11_rc_score,x=radiation)) + geom_boxplot() + facet_wrap(~donor_id)
+```
+
+```{r}
+
+p11_rsi %>% ggplot(aes(y=p11_lognorm_score,x=radiation)) + geom_violin() + facet_wrap(~donor_id)
+p11_rsi %>% ggplot(aes(y=p11_lognorm_score,x=radiation)) + geom_boxplot() + facet_wrap(~donor_id)
+```
+```{r}
+p11_rsi %>% ggplot(aes(y=RSI,x=radiation)) + geom_violin() + facet_wrap(~donor_id)
+p11_rsi %>% ggplot(aes(y=RSI,x=radiation)) + geom_boxplot() + facet_wrap(~donor_id)
+```
+#do the violin
+```{r}
+score <- read.csv("output/score/sen_RSI_cellstate.csv")
+
+colnames(score)[1] <- "cell_id"
+
+score <- merge(p11_rsi,score,by = c("cell_id","donor_id","radiation","runs","RSI"))
+```
+
+
+
+#use
+
+
+```{r}
+anno.senesence.dt <- as.data.table(score,keep.rownames = TRUE)
+anno.senesence.dt[,consensus_donor := paste(consensus,donor_id,sep = "_")] 
+```
+
+
+
+
+
+```{r}
+library(data.table)
+library(rstatix)
+library(ggplot2)
+library(ggpubr)
+
+stat_test_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
+  # Convert anno.senesence to data.table
+  setDT(anno.senesence.dt)
+  anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold]
+  # Perform Wilcoxon test
+  anno.senesence.wide <- dcast(anno.senesence.filtered, consensus_donor
+ ~ radiation, value.var = "p11_lognorm_score")
+  
+  missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+  anno.senesence.filtered <- anno.senesence.filtered[!consensus_donor %in% missing,]
+  
+  stat.test <- anno.senesence.filtered %>%
+  group_by(consensus, donor_id) %>%
+  wilcox_test(p11_lognorm_score ~ radiation, paired = FALSE,ref.group = ref.group)
+
+  # Add XY position for dodge
+  stat.test <- stat.test %>%
+    add_xy_position(x = "consensus") %>%
+    add_significance()  
+  # Create box plots
+  
+  return(stat.test)
+}
+
+anno_filter_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
+  # Convert anno.senesence to data.table
+  setDT(anno.senesence.dt)
+  anno.senesence.filtered <- anno.senesence.dt[confidence >= confidence_threshold]
+  # Perform Wilcoxon test
+  anno.senesence.wide <- dcast(anno.senesence.filtered, consensus_donor
+ ~ radiation, value.var = "p11_lognorm_score")
+  
+  missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+  anno.senesence.filtered <- anno.senesence.filtered[!consensus_donor %in% missing,]
+
+  
+  return(anno.senesence.filtered)
+}
+
+```
+```{r}
+
+stat.test <- stat_test_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
+level <- unique(stat.test$consensus)
+anno.senesence.filtered <- anno_filter_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
+anno.senesence.filtered$consensus <- factor(anno.senesence.filtered$consensus,levels = level)
+
+
+bxp <- ggviolin(anno.senesence.filtered , 
+                 x = "consensus", y = "p11_lognorm_score", fill = "radiation", facet.by = "donor_id") 
+
+# Add p-values
+p1_0 <- bxp + 
+  stat_pvalue_manual(
+    stat.test, label = "p.signif", tip.length = 0.01, xmin = "xmin",xmax = "xmax",
+    hide.ns = TRUE
+  ) 
+
+#add labels
+p1_0 <- p1_0 +  labs(title = "P12 difference between pre-post radiation for each cellstate",subtitle = "per donor", caption = "Mann whitney u test (alpha error = 0.05) \n Not significant pairs are hidden.")
+
+p1_0 <- p1_0 + xlab("Cellstate")  + ylab("P12")
+p1_0 <- p1_0 + theme(text = element_text(family = "Helvetica"))
+```
+
+```{r}
+p1_0
+```
+
+
+```{r}
+ggsave(plot = p1_0, filename = "prepost_p11_lognorm_score_cellstate_perdonor.png",path = "figure/",width = 15,height = 15)
+```
+
+```{r}
+anno.senesence.wide <- dcast(anno.senesence.dt, consensus_donor
+ ~ radiation, value.var = "p11_lognorm_score")
+  
+missing <- anno.senesence.wide[control == 0 |radiated == 0,consensus_donor]
+
+anno.senesence.filtered <- anno.senesence.dt[!consensus_donor %in% missing,]
+
+stat.test <- anno.senesence.filtered %>%
+group_by(consensus, donor_id) %>%
+wilcox_test(p11_lognorm_score ~ radiation, paired = FALSE,ref.group = NULL)
+
+anno.senesence.filtered$p11_lognorm_score <- as.double(anno.senesence.filtered$p11_lognorm_score)
+anno.senesence.median <- dcast(anno.senesence.filtered, consensus + donor_id
+~ radiation, value.var = "p11_lognorm_score",fun.aggregate = median)
+
+anno.senesence.median$diff_median <- anno.senesence.median$radiated - anno.senesence.median$control
+
+
+stat.test_median <- merge(stat.test,anno.senesence.median,by = c("consensus","donor_id"))
+```
+
+
+```{r}
+sig.inc <- stat.test_median  %>% group_by(consensus) %>%
+  summarise(aggregate_p = (p <= 0.05 & diff_median > 0 )) %>% summarise(increase = sum(aggregate_p), n = n())
+
+sig.inc
+```
+
+
+```{r}
+sig.dec <- stat.test_median  %>% group_by(consensus) %>%
+  summarise(aggregate_p = (p <= 0.05 & diff_median < 0 )) %>% summarise(decrease = sum(aggregate_p), n = n())
+```
+```{r}
+sig.change <- merge(sig.inc,sig.dec,by = c("consensus","n"))
+
+colnames(sig.change)[1] <- "cellstate"
+
+sig.change <- sig.change %>% mutate(inc_per = increase*100/n) 
+sig.change$inc_per <- round(sig.change$inc_per,1)
+
+```
+
+```{r}
+library(gridExtra)
+library(gtable)
+```
+
+```{r}
+gp.prop <- ggplotGrob(p1_0)
+```
+
+```{r}
+tbl.gnob <- tableGrob(sig.change,rows = NULL,theme=ttheme_default(base_size = 20,padding = unit(c(1, 1), "mm")) )
+
+
+
+gp.prop.table <- gtable_add_grob(x = gp.prop,
+                       grobs = tbl.gnob,
+                       t = 25, 
+                       l = 15 )
+
+#plot(gp.prop.table)
+```
+
+```{r}
+ggsave(plot = gp.prop.table, filename = "prepost_p11_lognorm_score_cellstate_perdonor_withtable.png",path = "figure/",width =15,height = 15)
+```
+
+

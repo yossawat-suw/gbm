@@ -1,0 +1,55 @@
+
+
+```{r}
+#install.packages('BiocManager')
+# BiocManager::install("GenomicRanges")
+# BiocManager::install('glmGamPoi')
+```
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(glmGamPoi)
+future::plan(sequential)
+```
+
+```{r}
+getwd()
+```
+
+# gbm
+```{r}
+system.time(
+  gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
+)
+```
+
+```{r}
+gbm <- PercentageFeatureSet(gbm, pattern = "^MT-", col.name = "percent.mt")
+```
+
+```{r}
+gc()
+options(future.globals.maxSize = 18 *1000 * 1024^2)
+gbm <-  SCTransform(gbm, vars.to.regress = "percent.mt", verbose = TRUE)
+
+gc()
+```
+
+
+
+```{r}
+# These are now standard steps in the Seurat workflow for visualization and clustering
+gbm <- RunPCA(gbm, verbose = FALSE)
+set.seed(7)
+gbm <- RunUMAP(gbm, dims = 1:30, verbose = FALSE)
+set.seed(7)
+#gbm <- RunTSNE(gbm, dims = 1:30, verbose = FALSE)
+gbm <- FindNeighbors(gbm, dims = 1:30, verbose = FALSE)
+gbm <- FindClusters(gbm, verbose = FALSE)
+```
+
+```{r}
+saveRDS(gbm,file = "seurat_gbm_qc_sctransform_pca_umap_findneighbor_clusters.RDS")
+```
+

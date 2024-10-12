@@ -4,9 +4,14 @@ library(tibble)
 library(dplyr)
 library(data.table)
 library(tidyr)
-library(entropy)
-library(qualvar)
+# library(entropy)
+# library(qualvar)
 ```
+
+
+
+
+
 
 ```{r}
 #Set working directory
@@ -15,6 +20,7 @@ source("script/function.R")
 ```
 ```{r}
 # Parameter
+
 source("script/parameter.R")
 
 ```
@@ -30,7 +36,7 @@ run_each <- run_eachs[1]
 ```{r}
 #choose what to analyse
 
-pick <- 8
+pick <- 9
 sig <- sigs[pick]
 merge <- merges[pick]
 
@@ -47,14 +53,15 @@ possible_cellstate <- all_cellstates[
   chosing[[pick]]
   ]
 
+
 possible_cellstate_with_unknown <- c(possible_cellstate,"unknown")
 possible_cellstate_with_unassign <- c(possible_cellstate,"unassign")
 possible_cellstate_with_unassign_tie <- c(possible_cellstate,"unassign","tie")
 possible_cellstate_with_tie <- c(possible_cellstate,"tie")
-```
-```{r}
+
 sig
 merge
+possible_cellstate
 ```
 
 
@@ -69,10 +76,10 @@ scina <- read.csv(paste0("output/annotation_result_each_tool/SCINA_", object, "_
 scina <- scina[,paste0("SCINA",unknown) ,drop = FALSE]
 
 
-# add full option
-sc.sorter <- read.csv(paste0("output/annotation_result_each_tool/scsorter_", object, "_", sig, "_",run,".csv"), row.names = "cell_id")
-sc.sorter$scSorter_no_unknown <- sc.sorter$scSorter
-sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
+
+# sc.sorter <- read.csv(paste0("output/annotation_result_each_tool/scsorter_", object, "_", sig, "_",run,".csv"), row.names = "cell_id")
+# sc.sorter$scSorter_no_unknown <- sc.sorter$scSorter
+# sc.sorter <- sc.sorter[,paste0("scSorter",unknown) ,drop = FALSE]
 ```
 
 
@@ -131,6 +138,7 @@ sc.type;scina; clustify.r;scid;sc.sorter;sc.pred;scibet;chetah;single.r;scmap_cl
 #choose the tool to be used
 anno <- bind_cols(sc.type, scina, clustify.r,scid,sc.sorter) #first version
 #anno <- bind_cols(sc.type, scina ,sc.sorter) #marker based
+anno <- bind_cols(sc.type, scina ) #marker based no sc.sorter (for the one with only one group of cell)
 #anno <- bind_cols(sc.type, clustify.r,scid) # version Feb 1st 24
 ```
 
@@ -202,12 +210,9 @@ pl
 ```
 
 ```{r}
-ggsave(paste0("figure/sankey_tools_",merge,"_",run,"_",unknown,".png"))
+ggsave(paste0("figure/sankey_tools_",pick,"_",merge,"_",run,"_",unknown,".png"))
 ```
 
-```{r}
-
-```
 
 
 # agreement analysis
@@ -860,26 +865,24 @@ anno.agreement
 #convert wide to long
 anno_wide <- as.data.table(anno,keep.rownames = TRUE)
 anno_score_long <- melt(anno_wide, id.vars = "rn", variable.name = "tools", value.name = "cellstates")
-```
 
-```{r}
-anno_score_long
-```
-
-```{r}
 #count the calling from each tool into cellstate
 anno_score_long <- anno_score_long[,c(1,3)]
 anno_score_long[,binary := 1]
 anno_score <- dcast(anno_score_long,formula = rn ~cellstates ,value.var = "binary")
-```
 
+col_selected <- c(setdiff(colnames(anno_score),"unknown"),"unknown")
 
-```{r}
+anno_score <- anno_score[,..col_selected]
 #calculate proportion of unknown
 anno_score[,unknown := unknown/ncol(anno)]
 #calculate confidence score
 anno_score[, confidence := apply(.SD, 1, max)/ncol(anno), .SDcols = 2:(length(possible_cellstate)+1)]
+anno_score
+```
 
+
+```{r}
 #split unknown and confidence temporaly 
 anno_score_unknown <- anno_score[,.(rn,unknown,confidence)]
 anno_score <-  anno_score[,..possible_cellstate,with = FALSE]
@@ -888,10 +891,14 @@ anno_score <-  anno_score[,..possible_cellstate,with = FALSE]
 
 ```{r}
 #order the score and rank
-anno_score[, paste0("Rank_",possible_cellstate) :=
+if (ncol(anno_score) == 1) {
+  anno_score[,paste0("Rank_",possible_cellstate)] <- 1
+} else {
+ anno_score[, paste0("Rank_",possible_cellstate) :=
   as.data.table(t(apply(.SD, 1, function(x) frank(-x, ties.method = "dense")))),
   .SDcols = possible_cellstate]
-anno_score <- cbind(anno_score_unknown,anno_score)
+}
+anno_score <- cbind(anno_score_unknown,anno_score) 
 
 
 # Assign Tie condition
@@ -997,9 +1004,12 @@ fwrite(anno.all.short, file = paste("output/consensus/annotation_short",merge,ru
 ```
 
 ```{r}
-table(anno.all.short$confidence > 0.5)
+table(anno.all.short$confidence >= 0.5)
 table(anno.all.short$confidence)
 table(anno.all.short$known)
+
+
+table(anno.all.short$consensus)
 ```
 
 

@@ -72,7 +72,7 @@ sen_rsi_all$merge <- gsub("-1-1","-1",x = sen_rsi_all$donor_radiation_cell)
 ```
 
 ```{r}
-anno.all <- fread(file = paste("output/annotation/annotation",merge,run,unknown,".csv",sep = "_"))
+anno.all <- fread(file = paste("output/consensus/annotation",merge,run,unknown,".csv",sep = "_"))
 gbm.meta <- fread(file = "output/gbm_meta.csv",header = TRUE)
 gbm.meta$rn <- gbm.meta$V1
 anno.meta <- merge(anno.all,gbm.meta,by = "rn",all.x = TRUE,all.y = FALSE)
@@ -110,6 +110,7 @@ library(ggpubr)
 library(dplyr)
 library(rstatix)
 ```
+
 
 #dont use -->
 <!-- ```{r} -->
@@ -233,6 +234,12 @@ library(rstatix)
 
 #use
 
+```{r}
+library(data.table)
+library(rstatix)
+library(ggplot2)
+library(ggpubr)
+```
 
 ```{r}
 anno.senesence.dt <- as.data.table(all,keep.rownames = TRUE)
@@ -242,10 +249,7 @@ anno.senesence.dt[,consensus_donor := paste(consensus,donor_id,sep = "_")]
 
 
 ```{r}
-library(data.table)
-library(rstatix)
-library(ggplot2)
-library(ggpubr)
+
 
 stat_test_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidence_threshold = 0, ref.group = NULL) {
   # Convert anno.senesence to data.table
@@ -289,18 +293,18 @@ anno_filter_prepost_cellstate_per_donor <- function(anno.senesence.dt, confidenc
 }
 
 ```
-```{r}
-nrow(anno.senesence.filtered)
-```
+
+
 
 ```{r}
-
 stat.test <- stat_test_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
 level <- unique(stat.test$consensus)
 anno.senesence.filtered <- anno_filter_prepost_cellstate_per_donor(anno.senesence.dt, confidence_threshold = 0)
 anno.senesence.filtered$consensus <- factor(anno.senesence.filtered$consensus,levels = level)
+```
 
 
+```{r}
 bxp <- ggviolin(anno.senesence.filtered , 
                  x = "consensus", y = "RSI", fill = "radiation", facet.by = "donor_id") 
 
@@ -316,15 +320,13 @@ p1_0 <- p1_0 +  labs(title = "RSI difference between pre-post radiation for each
 
 p1_0 <- p1_0 + xlab("cellstate") 
 p1_0 <- p1_0 + theme(text = element_text(family = "Helvetica"))
-```
 
-```{r}
 p1_0
 ```
 
 
 ```{r}
-ggsave(plot = p1_0, filename = "prepost_rsi_cellstate_perdonor.png",path = "figure/",width = 15,height = 15)
+#ggsave(plot = p1_0, filename = "prepost_rsi_cellstate_perdonor.png",path = "figure/",width = 15,height = 15)
 ```
 
 ```{r}
@@ -392,11 +394,11 @@ gp.prop.table <- gtable_add_grob(x = gp.prop,
                        t = 25, 
                        l = 15 )
 
-#plot(gp.prop.table)
+plot(gp.prop.table)
 ```
 
 ```{r}
-ggsave(plot = gp.prop.table, filename = "prepost_rsi_cellstate_perdonor_withtable.png",path = "figure/",width =15,height = 15)
+#ggsave(plot = gp.prop.table, filename = "prepost_rsi_cellstate_perdonor_withtable.png",path = "figure/",width =15,height = 15)
 ```
 
 

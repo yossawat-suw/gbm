@@ -13,7 +13,9 @@ sigs <- c( "4metamodules_new_50_mes",
            "npcopc_ac_mes",
            "npcopc_acmes",
            "4pathways",
-           "neurodev_bulk")
+           "neurodev_bulk",
+           "vc_common")
+
 
 
 # For reference based
@@ -34,9 +36,18 @@ all_cellstates <- c("MESlike",
                    "NPC_OPClike",
                    "AC_MESlike",
                    "GPM","MTC","NEU","PPR",
-                   "Astro","Mesenchymal","Neuronal","Oligo","Progenitor","Unassigned")
+                   "Astro","Mesenchymal","Neuronal","Oligo","Progenitor","Unassigned",
+                   "vc_common")
 
-chosing <- list(c(1),c(2,5),c(2,3,4),c(1,2,3,4),c(1,2,5),c(5,6),c(7,8,9,10),c(11,12,13,14,15))
+chosing <- list(c(1),
+                c(2,5),
+                c(2,3,4),
+                c(1,2,3,4),
+                c(1,2,5),
+                c(5,6),
+                c(7,8,9,10),
+                c(11,12,13,14,15),
+                c(17))
 
 
 

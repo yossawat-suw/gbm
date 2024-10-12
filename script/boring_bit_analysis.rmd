@@ -1,0 +1,532 @@
+
+```{r}
+dim(enriched)
+```
+
+
+
+```{r}
+library(Seurat)
+library(parallel)
+library(future)
+library(future.apply)
+
+```
+
+```{r}
+system.time(
+  gbm <- readRDS("output/seurat_objects/seurat_gbm_qc")
+)
+all_genes <- rownames(gbm)
+gbm.list <- SplitObject(gbm, split.by = "donor_id")
+```
+```{r}
+write.csv(data.frame(all_gene = all_genes),"output/deg_gsea/all_genes.csv")
+```
+
+```{r}
+rm(gbm)
+gc()
+```
+
+```{r}
+
+# Set up parallel backend
+n.cores <- detectCores() - 3
+plan(multicore, workers = n.cores)
+
+# Perform parallel computation using future_lapply
+system.time({
+  gbm.list <- future_lapply(gbm.list, function(x) {
+    x <- NormalizeData(x, verbose = FALSE)
+    allgenes <- rownames(x)
+    x <- FindVariableFeatures(x, verbose = FALSE)
+    x <- ScaleData(x, features = allgenes, verbose = FALSE)
+    x <- RunPCA(x, verbose = FALSE)
+    # x <- FindNeighbors(x, reduction = "pca", dims = 1:20, verbose = FALSE)
+    # x <- FindClusters(x, resolution = 1, verbose = FALSE)
+    return(x)
+  }, 
+  future.seed=TRUE)
+})
+```
+```{r}
+gc()
+```
+
+```{r}
+system.time({
+  radiated.marker.list <- future_lapply(gbm.list, function(x) {
+    Idents(x) <- "radiation"
+    radiated.marker <- FindMarkers(x,
+                                ident.1  = "radiated",ident.2 = "control")
+    return(radiated.marker)
+  }, 
+  future.seed=TRUE)
+})
+```
+```{r}
+rm(gbm.list)
+gc()
+```
+
+
+```{r}
+#saveRDS(radiated.marker.list,"output/deg_gsea/deg_each.rds")
+```
+
+
+#DEG
+```{r}
+library(dplyr)
+library(future)
+library(future.apply)
+```
+```{r}
+radiated.marker.list <- readRDS("output/deg_gsea/deg_each.rds")
+```
+
+```{r}
+all_genes <- read.csv("output/deg_gsea/all_genes.csv")
+all_genes <- all_genes$all_gene
+```
+
+```{r}
+radiated.adjust.list <- list()
+for (i in names(radiated.marker.list)) {
+  x <- radiated.marker.list[[i]]
+  x <- tibble::rownames_to_column(x,var = "gene")
+  x$donor_id <- i
+  radiated.adjust.list[[i]] <- x
+}
+radiated.adjust.list
+radiated.marker.combined <- Reduce(rbind,radiated.adjust.list)
+
+radiated.marker.combined
+```
+
+```{r}
+#filter 
+radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val_adj < 0.05,abs(avg_log2FC) >= 0.5)
+
+#radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val < 0.01)
+
+#radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val_adj < 0.05)
+```
+
+```{r}
+library(dplyr)
+gene_summarise <- radiated.marker.combined.filtered %>% 
+  group_by(gene) %>% summarise(pos_ratio = sum(avg_log2FC > 0)/n(),
+                               neg_ratio = 1 - pos_ratio,
+                               major_proportion = max(pos_ratio,neg_ratio),
+                               direction = ifelse(pos_ratio > 0.5,"upregulated",
+                                                  ifelse(pos_ratio == 0.05, "neutral","downregulated")
+                                                  )
+  )
+
+```
+
+```{r}
+radiated.marker.combined.filtered <- merge(radiated.marker.combined.filtered,gene_summarise[,c("gene","major_proportion","direction")],by = "gene",all = TRUE)
+
+radiated.marker.combined.filtered <- radiated.marker.combined.filtered[radiated.marker.combined.filtered$major_proportion >= 0.8 ,]
+
+
+radiated.marker.combined.filtered
+```
+
+
+```{r}
+#radiated.marker.combined.filtered[radiated.marker.combined.filtered$count >= consistent_threshold,]
+
+radiated.marker.combined.filtered <- radiated.marker.combined.filtered  %>% group_by(gene) %>% mutate(count = n()) %>% ungroup()
+
+radiated.marker.combined.filtered.distinct <- radiated.marker.combined.filtered %>% arrange(desc(count),p_val) %>% distinct(gene, .keep_all = TRUE)
+
+table(radiated.marker.combined.filtered.distinct$count)
+```
+
+```{r}
+radiated.marker.filtered.list <- split(radiated.marker.combined.filtered,radiated.marker.combined.filtered$donor_id)
+
+radiated.marker.filtered.gene.list <- future_lapply(radiated.marker.filtered.list, function(x) {
+    gene <- x$gene
+    return(gene)
+  })
+```
+
+
+
+```{r}
+library(tidyr)
+radiated <- radiated.marker.combined.filtered[,c("gene","donor_id")]
+
+radiated$sig <- 1
+radiated <- radiated %>% complete(gene,donor_id)
+
+radiated$sig[is.na(radiated$sig)] <- 0
+
+radiated_wide <- radiated %>% spread(donor_id,sig)
+
+radiated_wide <- tibble::column_to_rownames(radiated_wide,var = "gene")
+
+radiated_wide
+```
+
+```{r}
+library(UpSetR)
+png( "figure/deg_gsea/upset_plot_deg.png",width=100,height=20,units="cm",res=300)
+upset(radiated_wide,
+      nintersects = 300,  
+      order.by = c("freq","degree"), 
+      decreasing = c(T,T),
+      nsets = 13)
+dev.off()
+```
+
+
+```{r}
+consistent_threshold <- 0.5*length(radiated.marker.list)
+
+radiated.marker.combined.filtered.distinct[radiated.marker.combined.filtered.distinct$count >= consistent_threshold,]                              
+```
+```{r}
+library(RobustRankAggreg)
+
+rank_agg_3 <- aggregateRanks(glist = radiated.marker.filtered.gene.list,
+                             full = FALSE,
+                             N = length(all_genes)
+                             )
+
+data.table::setnames(rank_agg_3,"Name","gene")
+```
+```{r}
+rank_agg_count <- merge(rank_agg_3,distinct(radiated.marker.combined.filtered[,c("gene","count","major_proportion","direction")]),by = "gene",all.x = TRUE,all.y = FALSE) %>% arrange(desc(count),Score)
+
+rank_agg_count
+```
+```{r}
+data.table::fwrite(rank_agg_count,"output/deg_gsea/deg_consistent.csv")
+```
+
+
+
+#GSEA with seurat
+```{r}
+# devtools::install_github("ncborcherding/escape",force = TRUE)
+library(escape)
+library(Seurat)
+
+```
+
+```{r}
+GS.hallmark <- getGeneSets(library = "H")
+
+data("escape.gene.sets", package="escape")
+gene.sets <- escape.gene.sets
+
+
+
+sen_lucy <- read.csv("data/lucy_senesence_genes.csv")
+sen_lucy <- colnames(sen_lucy)
+
+sen_mayo <- readxl::read_xlsx("data/gene_set/senmayo.xlsx")
+sen_mayo <- sen_mayo$`Gene(human)`
+
+
+gen.sets_manual <- list(sen_lucy = sen_lucy,
+                        sen_mayo = sen_mayo)
+
+# length(GS.hallmark)
+# length(gene.sets)
+# length(gen.sets_manual)
+
+
+gs_all <- c(GS.hallmark,gene.sets,gen.sets_manual)
+
+```
+
+```{r}
+# perform analysis using run_normalization.R
+gbm.combined <- readRDS(file = "output/deg_gsea/gbm_seurat_processed_normalized_combined.rds")
+```
+
+```{r}
+gsea_heatmap_plot_clutrow <- heatmapEnrichment_modified(gbm.combined,
+                  group.by = "radiation",
+                  gene.set.use = "all",
+                  assay = "escape.ssGSEA",facet.by = "donor_id",cluster.rows = TRUE)
+gsea_heatmap_plot_norm_clutrow <- heatmapEnrichment_modified(gbm.combined,
+                  group.by = "radiation",
+                  gene.set.use = "all",
+                  assay = "escape.ssGSEA_normalized",facet.by = "donor_id",cluster.rows = TRUE)
+gsea_heatmap_plot_clutrow
+gsea_heatmap_plot_norm_clutrow
+```
+
+
+```{r}
+gsea_heatmap_plot_clutcol <- heatmapEnrichment(gbm.combined,
+                  group.by = "radiation",
+                  gene.set.use = "all",
+                  assay = "escape.ssGSEA_normalized",facet.by = "donor_id",cluster.rows = FALSE,cluster.columns = TRUE)
+gsea_heatmap_plot_clutcol
+
+```
+
+
+
+
+```{r}
+ggsave(filename = "figure/deg_gsea/gsea_heatmap_each_donor_cluscol.png",gsea_heatmap_plot_clutcol,width = 20,height = 20)
+ggsave(filename = "figure/deg_gsea/gsea_heatmap_each_donor_clusrow.png",gsea_heatmap_plot_clutrow,width = 20,height = 20)
+ggsave(filename = "figure/deg_gsea/gsea_heatmap_each_donor_norm_clusrow.png",gsea_heatmap_plot_norm_clutrow,width = 20,height = 20)
+```
+
+#Differential GSEA
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(future)
+library(future.apply)
+
+library(UpSetR)
+
+```
+```{r}
+here
+```
+
+```{r}
+# Set the directory path
+directory_path <- "output/deg_gsea/all_marker/"
+
+# List all .rds files in the directory
+rds_files <- list.files(path = directory_path, pattern = "\\.rds$", full.names = TRUE)
+
+# Read each .rds file and store the objects in a list
+rds_objects <- lapply(rds_files, readRDS)
+
+# Optional: Name the list elements based on the file names without the .rds extension
+names(rds_objects) <- gsub("\\.rds$", "", basename(rds_files))
+
+# Print the list to check
+print(rds_objects)
+```
+
+```{r}
+all.markers.list <- readRDS("output/deg_gsea/gbm_gsea_findallmarker.rds")
+
+radiated.marker.list <- lapply(all.markers.list,function(x) {
+  x <- x[x$cluster == "radiated",]
+  rownames(x) <- NULL
+  x
+})
+
+radiated.marker.list
+```
+
+
+
+```{r}
+radiated.adjust.list <- list()
+for (i in names(radiated.marker.list)) {
+  x <- radiated.marker.list[[i]]
+  #x <- tibble::rownames_to_column(x,var = "gene")
+  x$donor_id <- i
+  radiated.adjust.list[[i]] <- x
+}
+radiated.marker.combined <- Reduce(rbind,radiated.adjust.list)
+
+radiated.marker.combined
+```
+
+```{r}
+#filter
+radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val_adj < 0.05,abs(avg_log2FC) >= 0.5)
+
+radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val < 0.01)
+
+#radiated.marker.combined.filtered <- radiated.marker.combined %>% filter(p_val_adj < 0.05)
+```
+
+```{r}
+radiated.marker.combined.filtered
+```
+
+```{r}
+gene_summarise <- radiated.marker.combined.filtered %>%
+  group_by(gene) %>% summarise(pos_ratio = sum(avg_log2FC > 0)/n(),
+                               neg_ratio = 1 - pos_ratio,
+                               major_proportion = max(pos_ratio,neg_ratio),
+                               direction = ifelse(pos_ratio > 0.5,"upregulated",
+                                                  ifelse(pos_ratio == 0.05, "neutral","downregulated")
+                                                  )
+                               )
+gene_summarise
+sort(table(gene_summarise$major_proportion))
+
+gene_summarise$major_proportion
+
+table(gene_summarise$major_proportion)
+```
+
+
+
+```{r}
+radiated.marker.combined.filtered <- merge(radiated.marker.combined.filtered,gene_summarise[,c("gene","major_proportion","direction")],by = "gene",all = TRUE)
+
+radiated.marker.combined.filtered <- radiated.marker.combined.filtered[radiated.marker.combined.filtered$major_proportion >= 0.8 ,]
+
+
+radiated.marker.combined.filtered
+```
+
+
+```{r}
+#how many time the gene in same direction is represented in all donor
+plot(table(table(radiated.marker.combined.filtered$gene)))
+
+
+```
+
+
+```{r}
+#radiated.marker.combined.filtered[radiated.marker.combined.filtered$count >= consistent_threshold,]
+
+radiated.marker.combined.filtered <- radiated.marker.combined.filtered  %>% group_by(gene) %>% mutate(count = n()) %>% ungroup()
+
+radiated.marker.combined.filtered.distinct <- radiated.marker.combined.filtered %>% arrange(desc(count),p_val) %>% distinct(gene, .keep_all = TRUE)
+
+
+radiated.marker.combined.filtered.distinct
+table(radiated.marker.combined.filtered.distinct$count)
+```
+```{r}
+radiated.marker.filtered.list <- split(radiated.marker.combined.filtered,radiated.marker.combined.filtered$donor_id)
+
+radiated.marker.filtered.gene.list <- future_lapply(radiated.marker.filtered.list, function(x) {
+    gene <- x$gene
+    return(gene)
+  })
+```
+
+```{r}
+radiated <- radiated.marker.combined.filtered[,c("gene","donor_id")]
+
+radiated$sig <- 1
+radiated <- radiated %>% complete(gene,donor_id)
+
+radiated$sig[is.na(radiated$sig)] <- 0
+
+radiated_wide <- radiated %>% spread(donor_id,sig)
+
+radiated_wide <- tibble::column_to_rownames(radiated_wide,var = "gene")
+
+radiated_wide
+```
+
+
+
+
+```{r}
+consistent_threshold <- 0.5*length(radiated.marker.list)
+
+radiated.marker.combined.filtered.distinct[radiated.marker.combined.filtered.distinct$count >= consistent_threshold,]
+```
+```{r}
+library(RobustRankAggreg)
+
+rank_agg_3 <- aggregateRanks(glist = radiated.marker.filtered.gene.list,
+                             full = FALSE,
+                             N = 71
+                             )
+
+data.table::setnames(rank_agg_3,"Name","gene")
+
+rank_agg_3
+```
+```{r}
+rank_agg_count <- merge(rank_agg_3,distinct(radiated.marker.combined.filtered[,c("gene","count","major_proportion","direction")]),by = "gene",all.x = TRUE,all.y = FALSE) %>% arrange(desc(count),Score)
+
+rank_agg_count
+```
+
+
+
+
+
+```{r}
+gs_all <- readRDS("output/deg_gsea/gs_all.rds")
+gs_subset_list <- gs_all[rank_agg_count$gene]
+
+
+```
+
+```{r}
+gs_subset_df
+```
+
+
+
+```{r}
+genes_df_list <- list()
+for (i in seq_along(gs_subset_list)) {
+  genes_df <- data.frame(sort(gs_subset_list[[i]]))
+  colnames(genes_df) <- names(gs_subset_list)[i] 
+  rownames(genes_df) <- NULL
+  genes_df_list[[names(gs_subset_list)[i] ]] <- genes_df
+}
+
+```
+
+```{r}
+# Find the maximum number of rows
+max_rows <- max(sapply(genes_df_list, nrow))
+
+# Function to pad data frames with NA to match the maximum number of rows
+pad_df <- function(df, max_rows) {
+  n_missing <- max_rows - nrow(df)
+  if (n_missing > 0) {
+    adding_df <- matrix(NA, nrow = n_missing, ncol = ncol(df))
+    colnames(adding_df) <- colnames(df)
+    df <- rbind(df, adding_df)
+  }
+  return(df)
+}
+
+# Apply the padding function to each data frame in the list
+padded_df_list <- lapply(genes_df_list, pad_df, max_rows = max_rows)
+
+# Combine the data frames using cbind
+gs_subset_df <- do.call(cbind, padded_df_list)
+
+
+```
+
+
+```{r}
+rank_agg_with_gs <- list(differential_gsea = rank_agg_count,gene_set = gs_subset_df)
+
+rank_agg_with_gs
+```
+
+
+```{r}
+writexl::write_xlsx(rank_agg_with_gs,"output/deg_gsea/differential_gsea_consistent.xlsx")
+```
+
+
+
+
+
+
+
+
+
+
+
+
